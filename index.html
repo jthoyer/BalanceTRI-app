@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balance Tri Club — Race commitments</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles-additions.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Balance Tri Club home"><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club" /></a>
+      <div class="header-actions"><button class="text-button" id="resetButton">Refresh</button></div>
+    </header>
+
+    <section class="hero" id="top">
+      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button></div>
+    </section>
+
+    <section class="toolbar" aria-label="Race filters">
+      <h2 class="race-count"><span id="allCount"></span> races on the calendar</h2>
+      <label class="athlete-filter" for="athleteFilter"><span>View an athlete's races</span><input id="athleteFilter" type="search" autocomplete="name" placeholder="Type a name, e.g. Priya" /></label>
+    </section>
+    <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
+      <form id="raceForm" class="add-form">
+        <div class="add-form-heading"><div><p class="eyebrow">SHARE A RACE</p><h2 id="addPanelTitle">Add to the calendar</h2></div><button type="button" class="icon-button" id="closeAddButton" aria-label="Close add race form">×</button></div>
+        <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="url" placeholder="https://" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label></div>
+        <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
+      </form>
+    </section>
+    <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
+    <section id="raceList" class="race-list" aria-live="polite"></section>
+  </main>
+
+  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><div class="race-people"></div><span class="chevron" aria-hidden="true">⌄</span></button><div class="race-link-wrap hidden"><a class="race-link" target="_blank" rel="noopener"></a></div><section class="race-details hidden"></section></article></template>
+  <script src="app.js"></script>
+</body>
+</html>
