@@ -24,7 +24,7 @@
 .old-races-toggle:hover{border-color:#aab5c6;color:var(--ink)}
 .old-races{display:flex;flex-direction:column;gap:12px}
 .club-focus-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 9px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
-.race-summary.club-focus{background:var(--green)}
+.race-summary.club-focus{background:var(--brand-blue)}
 .header-actions{display:flex;align-items:center;gap:14px}
 .hero-copy .view-toggle{display:flex;gap:4px;margin-top:22px;padding:3px;border:1px solid rgba(255,255,255,.35);border-radius:999px;background:rgba(255,255,255,.08);width:fit-content}
 .view-toggle-btn{min-height:38px;padding:7px 16px;border:0;border-radius:999px;background:transparent;color:rgba(255,255,255,.85);font:600 14px "DM Sans";cursor:pointer}
