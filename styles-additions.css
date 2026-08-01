@@ -1,12 +1,27 @@
-.add-panel{width:100%;margin:-3px 0 24px;padding:26px 28px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 2px 6px rgba(25,37,66,.05)}
-.add-form-heading{display:flex;align-items:start;justify-content:space-between}.add-form-heading h2{margin:0;font:700 28px Outfit}.add-form-fields{display:grid;grid-template-columns:2fr 1fr 2fr 2fr;gap:12px}.add-form-fields label{display:block;margin-top:18px;color:var(--ink);font-size:14px;font-weight:700}.add-form-fields input{display:block;margin-top:6px}.add-panel .dialog-footer{margin-top:22px}.race-link{color:inherit;text-decoration:none}.race-link:hover{text-decoration:underline;text-underline-offset:3px}
-.toolbar{gap:30px}.race-link-wrap{padding:18px 20px 16px}.race-link{display:inline-block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:bottom;font-size:14px;font-weight:700}
-.race-details{padding:12px 16px 16px}
-.details-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.add-panel{width:100%;margin:-3px 0 24px;padding:26px 28px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:0 2px 6px rgba(25,37,66,.05)}
+.add-form-heading{display:flex;align-items:start;justify-content:space-between}.add-form-heading .eyebrow{color:var(--brand-blue)}.add-form-heading h2{margin:0;font:700 28px Outfit}.add-form-fields{display:grid;grid-template-columns:2fr 1fr 2fr 2fr 1fr;gap:12px}.add-form-fields label{display:block;margin-top:18px;color:var(--ink);font-size:14px;font-weight:700}.add-form-fields input,.add-form-fields select{display:block;margin-top:6px;width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px "DM Sans"}.add-panel .dialog-footer{margin-top:22px}.race-link{color:inherit;text-decoration:none}.race-link:hover{text-decoration:underline;text-underline-offset:3px}
+.toolbar{gap:30px}.race-link{display:inline-block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:bottom;font-size:14px;font-weight:700}
+.race-details{padding:0}
+.details-card{border-top:1px solid var(--line)}
 .card-header{padding:14px 20px;color:var(--muted);background:#eef0f3;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--line)}
 .details-card .card-header:not(:first-child){border-top:1px solid var(--line)}
 .card-body{padding:18px 20px}
-.roster-body .roster-entry:last-child{border-bottom:0}
+.roster-group+.roster-group{margin-top:16px}
+.roster-group-label{margin:0 0 2px;color:var(--brand-blue);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.roster-who{display:flex;align-items:center;gap:10px;min-width:0}
+.roster-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.roster-level{flex-shrink:0;padding:3px 10px;border-radius:999px;background:var(--navy-bg);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.3px}
+.roster-level.level-locked{background:var(--green-bg);color:var(--green)}
+.roster-group .roster-entry:last-child{border-bottom:0}
 .card-body .helper-text{margin:0}
 .card-body .choices:first-child{margin-top:0}
+.name-row{margin:0 0 12px}
+.other-row{margin:-4px 0 12px}
+.name-row input,.other-row input{width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px "DM Sans"}
+.choice-label{margin:18px 0 8px;color:var(--brand-blue);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.choice-label:first-child{margin-top:0}
+.old-races-toggle{align-self:center;min-height:44px;padding:10px 18px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font:600 13px "DM Sans";cursor:pointer}
+.old-races-toggle:hover{border-color:#aab5c6;color:var(--ink)}
+.old-races{display:flex;flex-direction:column;gap:12px}
+.club-focus-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 9px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}

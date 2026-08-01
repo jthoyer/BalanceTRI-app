@@ -11,14 +11,17 @@
 //   6. Paste that URL into API_URL near the top of app.js.
 //
 // Data model: two sheet tabs, created automatically on first request if missing.
-//   Races:   id | name | date | location | url | events   (events is "|"-separated)
+//   Races:   id | name | date | location | url | events | clubFocus   (events is "|"-separated, clubFocus is "Y" or "N")
 //   Entries: raceId | name | event | level
+//
+// NOTE: if the Races tab already existed before this column was added, add a
+// "clubFocus" header to column G by hand — existing sheets aren't migrated automatically.
 
 const RACES_SHEET = 'Races';
 const ENTRIES_SHEET = 'Entries';
 
 function racesSheet_() {
-  return getOrCreateSheet_(RACES_SHEET, ['id', 'name', 'date', 'location', 'url', 'events']);
+  return getOrCreateSheet_(RACES_SHEET, ['id', 'name', 'date', 'location', 'url', 'events', 'clubFocus']);
 }
 
 function entriesSheet_() {
@@ -62,6 +65,7 @@ function doGet(e) {
     location: r.location,
     url: r.url,
     events: String(r.events || '').split('|').map((s) => s.trim()).filter(Boolean),
+    clubFocus: r.clubFocus === 'Y' ? 'Y' : 'N',
   }));
   races.forEach((r) => {
     r.entries = entries
@@ -94,8 +98,8 @@ function bulkReplace_(body) {
   if (rs.getLastRow() > 1) rs.getRange(2, 1, rs.getLastRow() - 1, rs.getLastColumn()).clearContent();
   if (es.getLastRow() > 1) es.getRange(2, 1, es.getLastRow() - 1, es.getLastColumn()).clearContent();
 
-  const raceRows = (body.races || []).map((r) => [r.id, r.name, r.date, r.location || '', r.url || '', (r.events || []).join('|')]);
-  if (raceRows.length) rs.getRange(2, 1, raceRows.length, 6).setValues(raceRows);
+  const raceRows = (body.races || []).map((r) => [r.id, r.name, r.date, r.location || '', r.url || '', (r.events || []).join('|'), r.clubFocus === 'Y' ? 'Y' : 'N']);
+  if (raceRows.length) rs.getRange(2, 1, raceRows.length, 7).setValues(raceRows);
 
   const entryRows = (body.entries || []).map((e) => [e.raceId, e.name, e.event, e.level]);
   if (entryRows.length) es.getRange(2, 1, entryRows.length, 4).setValues(entryRows);
@@ -113,6 +117,7 @@ function addRace_(body) {
     body.location || 'Location TBC',
     body.url || '',
     (body.events || []).join('|'),
+    body.clubFocus === 'Y' ? 'Y' : 'N',
   ]);
   return { id: id };
 }

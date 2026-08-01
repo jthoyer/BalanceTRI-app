@@ -28,7 +28,7 @@
     <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
       <form id="raceForm" class="add-form">
         <div class="add-form-heading"><div><p class="eyebrow">SHARE A RACE</p><h2 id="addPanelTitle">Add to the calendar</h2></div><button type="button" class="icon-button" id="closeAddButton" aria-label="Close add race form">×</button></div>
-        <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="url" placeholder="https://" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label></div>
+        <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="url" placeholder="https://" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label><label>Club focussed race<select name="clubFocus"><option value="N">No</option><option value="Y">Yes</option></select></label></div>
         <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
       </form>
     </section>
@@ -36,7 +36,7 @@
     <section id="raceList" class="race-list" aria-live="polite"></section>
   </main>
 
-  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><div class="race-people"></div><span class="chevron" aria-hidden="true">⌄</span></button><div class="race-link-wrap hidden"><a class="race-link" target="_blank" rel="noopener"></a></div><section class="race-details hidden"></section></article></template>
+  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><div class="race-people"></div><span class="chevron" aria-hidden="true">⌄</span></button><section class="race-details hidden"></section></article></template>
   <script src="app.js"></script>
 </body>
 </html>
