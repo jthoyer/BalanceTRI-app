@@ -18,12 +18,11 @@
     </header>
 
     <section class="hero" id="top">
-      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
+      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span id="clubCount"></span> club events on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
     </section>
 
     <section class="toolbar" aria-label="Race filters">
-      <div class="race-count-group"><h2 class="race-count"><span id="clubCount"></span> club events on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other events on the calendar</p></div>
-      <label class="athlete-filter" for="athleteFilter"><span>View an athlete's races</span><input id="athleteFilter" type="search" autocomplete="name" placeholder="Type a name, e.g. Priya" /></label>
+      <label class="athlete-filter" for="athleteFilter"><span>Filter by athlete</span><input id="athleteFilter" type="search" autocomplete="name" placeholder="Type a name, e.g. Priya" /></label>
     </section>
     <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
       <form id="raceForm" class="add-form">

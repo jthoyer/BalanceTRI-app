@@ -30,8 +30,8 @@
 .view-toggle-btn{min-height:38px;padding:7px 16px;border:0;border-radius:999px;background:transparent;color:rgba(255,255,255,.85);font:600 14px "DM Sans";cursor:pointer}
 .view-toggle-btn.selected{background:var(--yellow);color:var(--ink)}
 @media(max-width:700px){.header-actions{gap:8px}}
-.race-count-group{margin:0 auto 9px 0}
-.race-count-group .race-count{margin:0}
-.race-count-sub{margin:2px 0 0;color:var(--muted);font-size:15px;font-weight:600}
-@media(max-width:700px){.race-count-group{width:100%;margin:0}}
+.hero-copy .race-count-group{margin-top:22px}
+.hero-copy .race-count-group .race-count{margin:0;color:#fff}
+.hero-copy .race-count-sub{margin:2px 0 0;color:rgba(255,255,255,.75);font-size:15px;font-weight:600}
+.toolbar{justify-content:flex-end}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}
