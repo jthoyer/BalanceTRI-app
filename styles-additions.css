@@ -33,5 +33,6 @@
 .hero-copy .race-count-group{margin-top:22px}
 .hero-copy .race-count-group .race-count{margin:0;color:#fff}
 .hero-copy .race-count-sub{margin:2px 0 0;color:rgba(255,255,255,.75);font-size:15px;font-weight:600}
+#clubCount,#allCount{color:var(--brand-blue)}
 .toolbar{justify-content:flex-end}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}
