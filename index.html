@@ -14,21 +14,21 @@
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#top" aria-label="Balance Tri Club home"><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club" /></a>
-      <div class="header-actions"><button class="text-button" id="resetButton">Refresh</button></div>
+      <div class="header-actions"><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button><button class="text-button" id="resetButton">Refresh</button></div>
     </header>
 
     <section class="hero" id="top">
-      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button></div>
+      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
     </section>
 
     <section class="toolbar" aria-label="Race filters">
-      <h2 class="race-count"><span id="allCount"></span> races on the calendar</h2>
+      <div class="race-count-group"><h2 class="race-count"><span id="clubCount"></span> club events on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> all events on the calendar</p></div>
       <label class="athlete-filter" for="athleteFilter"><span>View an athlete's races</span><input id="athleteFilter" type="search" autocomplete="name" placeholder="Type a name, e.g. Priya" /></label>
     </section>
     <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
       <form id="raceForm" class="add-form">
         <div class="add-form-heading"><div><p class="eyebrow">SHARE A RACE</p><h2 id="addPanelTitle">Add to the calendar</h2></div><button type="button" class="icon-button" id="closeAddButton" aria-label="Close add race form">×</button></div>
-        <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="url" placeholder="https://" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label><label>Club focussed race<select name="clubFocus"><option value="N">No</option><option value="Y">Yes</option></select></label></div>
+        <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="url" placeholder="https://" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label></div>
         <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
       </form>
     </section>
