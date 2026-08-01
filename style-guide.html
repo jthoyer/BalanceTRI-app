@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Balance Tri Club — Style guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+<!-- The guide loads the app's real stylesheets so every example below reflects the live design system, not a copy of it. -->
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles-additions.css" />
+<style>
+  /* Style-guide-only chrome. Nothing here is part of the product's design system —
+     it exists to lay out and label the swatches/specimens pulled from styles.css. */
+  :root{--guide-border:#e2e6ec;--guide-code-bg:#f4f5f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--canvas);color:var(--ink);font:400 16px/1.5 "DM Sans",Arial,sans-serif}
+  .guide-shell{width:min(1100px,calc(100% - 40px));margin:0 auto;padding-bottom:80px}
+  .guide-header{padding:48px 0 28px;border-bottom:1px solid var(--guide-border)}
+  .guide-header .eyebrow{margin:0 0 9px}
+  .guide-header h1{margin:0 0 10px;font:700 44px Outfit;letter-spacing:-1px}
+  .guide-header p{max-width:640px;margin:0;color:var(--muted)}
+  .guide-nav{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px 18px;padding:14px 0;margin-bottom:8px;background:var(--canvas);border-bottom:1px solid var(--guide-border)}
+  .guide-nav a{color:var(--muted);font-size:13px;font-weight:700;text-decoration:none;letter-spacing:.2px}
+  .guide-nav a:hover{color:var(--ink)}
+  .guide-section{padding:44px 0;border-bottom:1px solid var(--guide-border)}
+  .guide-section:last-child{border-bottom:0}
+  .guide-section h2{margin:0 0 6px;font:700 26px Outfit;letter-spacing:-.4px}
+  .guide-section>.section-intro{margin:0 0 26px;max-width:680px;color:var(--muted)}
+  .guide-block{margin:28px 0}
+  .guide-block h3{margin:0 0 4px;font:700 15px "DM Sans"}
+  .guide-block .block-note{margin:0 0 14px;color:var(--muted);font-size:13.5px}
+  .specimen{padding:22px;border:1px solid var(--guide-border);border-radius:14px;background:#fff}
+  .specimen+.code{border-top:0;border-radius:0 0 10px 10px}
+  .specimen{border-radius:10px 10px 0 0}
+  .code{margin:0;padding:12px 16px;border:1px solid var(--guide-border);border-top:0;border-radius:0 0 10px 10px;background:var(--guide-code-bg);color:#3a4256;font:12.5px/1.6 "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;overflow-x:auto;white-space:pre}
+
+  /* Color swatches */
+  .swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+  .swatch{border:1px solid var(--guide-border);border-radius:12px;overflow:hidden;background:#fff}
+  .swatch-fill{height:72px}
+  .swatch-meta{padding:10px 12px}
+  .swatch-name{display:block;font:700 13px "SFMono-Regular",Menlo,monospace;color:var(--ink)}
+  .swatch-value{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
+  .swatch-role{display:block;margin-top:6px;font-size:12px;color:var(--muted);line-height:1.4}
+
+  /* Type specimens */
+  .type-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:16px;padding:16px 0;border-top:1px solid var(--guide-border)}
+  .type-row:first-child{border-top:0;padding-top:0}
+  .type-sample{flex:1;min-width:260px}
+  .type-label{width:190px;flex:none;color:var(--muted);font-size:12.5px}
+  .type-label code{display:block;margin-top:3px;font-size:11.5px;color:#8a93a6}
+
+  /* Token table */
+  .token-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .token-table th,.token-table td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--guide-border)}
+  .token-table th{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+  .token-table td:first-child{font:700 12.5px "SFMono-Regular",Menlo,monospace;white-space:nowrap}
+  .token-table .swatch-chip{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.1);vertical-align:-2px;margin-right:8px}
+
+  /* Component groups */
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+  .row+.row{margin-top:14px}
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .demo-card-width{max-width:520px}
+  .guide-section#components .race-card{max-width:520px}
+  .swatch-radius{border:2px solid var(--brand-blue);background:var(--navy-bg)}
+</style>
+</head>
+<body>
+<main class="guide-shell">
+
+  <header class="guide-header">
+    <p class="eyebrow">DESIGN SYSTEM REFERENCE</p>
+    <h1>Balance Tri Club style guide</h1>
+    <p>A living reference generated from <code>styles.css</code> and <code>styles-additions.css</code>. This page loads those stylesheets directly, so every color, type style, and component below renders exactly as it does in the app — update the CSS and this guide updates with it.</p>
+  </header>
+
+  <nav class="guide-nav" aria-label="Style guide sections">
+    <a href="#colors">Colors</a>
+    <a href="#typography">Typography</a>
+    <a href="#buttons">Buttons</a>
+    <a href="#pills">Choice pills</a>
+    <a href="#forms">Form fields</a>
+    <a href="#components">Components</a>
+    <a href="#feedback">Feedback &amp; states</a>
+    <a href="#spacing">Radius &amp; spacing</a>
+    <a href="#responsive">Responsive rules</a>
+  </nav>
+
+  <!-- COLORS ================================================================ -->
+  <section class="guide-section" id="colors">
+    <h2>Colors</h2>
+    <p class="section-intro">Every value below is read live from the CSS custom properties defined in <code>:root</code> of <code>styles.css</code> — the hex shown next to each name is the browser's computed value, not a hand-typed copy.</p>
+    <div class="swatch-grid" id="tokenSwatches"></div>
+
+    <div class="guide-block">
+      <h3>Non-tokenized colors in use</h3>
+      <p class="block-note">These are used consistently across the CSS but aren't promoted to a custom property. Worth doing if the palette grows.</p>
+      <table class="token-table">
+        <thead><tr><th>Swatch</th><th>Value</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td><span class="swatch-chip" style="background:#fff"></span>#ffffff</td><td>#fff</td><td>Card, dialog, and input backgrounds</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#eef0f3"></span>Card header bg</td><td>#eef0f3</td><td><code>.card-header</code> background</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#eef0f4"></span>Secondary button bg</td><td>#eef0f4</td><td><code>.secondary-button</code> background</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#e3a3a3"></span>Destructive hover border</td><td>#e3a3a3</td><td><code>.roster-remove:hover</code> border</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#fdecec"></span>Destructive hover bg</td><td>#fdecec</td><td><code>.roster-remove:hover</code> background</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#b3261e"></span>Destructive hover text</td><td>#b3261e</td><td><code>.roster-remove:hover</code> text</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#285ba8"></span>Focus ring</td><td>#285ba8</td><td><code>:focus-visible</code> outline</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#aab5c6"></span>Input border</td><td>#aab5c6</td><td>Text input borders</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#92a4c6"></span>Selected pill border</td><td>#92a4c6</td><td><code>.choice.selected</code> border</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#80c7a0"></span>Locked pill border</td><td>#80c7a0</td><td><code>.choice.level-locked.selected</code> border</td></tr>
+          <tr><td><span class="swatch-chip" style="background:#cbd1da"></span>Empty-state border</td><td>#cbd1da</td><td><code>.empty-state</code> dashed border</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TYPOGRAPHY ============================================================ -->
+  <section class="guide-section" id="typography">
+    <h2>Typography</h2>
+    <p class="section-intro">Two families: <strong>Outfit</strong> (600/700) for display headings, <strong>DM&nbsp;Sans</strong> (400–700) for everything else — UI text, body copy, buttons.</p>
+
+    <div class="specimen">
+      <div class="type-row">
+        <span class="type-label">Hero heading<code>.hero h1</code></span>
+        <div class="type-sample"><h1 style="margin:0;font:700 clamp(2.25rem,5vw,3.25rem)/1.08 Outfit;letter-spacing:-1.5px">Find your next <em style="color:var(--yellow);font-style:normal">start line.</em></h1></div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Race count heading<code>.race-count</code></span>
+        <div class="type-sample"><span style="font:700 30px Outfit;letter-spacing:-.5px">12 races on the calendar</span></div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Race title<code>.race-info h2</code></span>
+        <div class="type-sample"><span style="font:600 18px Outfit">Melbourne Marathon</span></div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Eyebrow label<code>.eyebrow</code></span>
+        <div class="type-sample"><p class="eyebrow" style="margin:0;color:#c9992f">CLUB RACE CALENDAR</p></div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Body copy<code>body</code></span>
+        <div class="type-sample">See what the crew is racing, make your commitment, and bring more friends along for the ride.</div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Meta / muted text<code>.race-meta, .muted</code></span>
+        <div class="type-sample" style="color:var(--muted)">Location TBC · 3 locked in of 5</div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Month label<code>.month-label</code></span>
+        <div class="type-sample"><span style="color:#5b6578;font-size:12px;font-weight:700;letter-spacing:1.15px">AUGUST 2026</span></div>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Card header<code>.card-header</code></span>
+        <div class="type-sample"><span style="color:var(--muted);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Club commitments</span></div>
+      </div>
+    </div>
+    <pre class="code">font-family: "DM Sans", Arial, sans-serif;          /* body / UI */
+font-family: Outfit, sans-serif;                    /* headings only, via .brand b, h1, h2 */</pre>
+  </section>
+
+  <!-- BUTTONS =============================================================== -->
+  <section class="guide-section" id="buttons">
+    <h2>Buttons</h2>
+    <p class="section-intro">All interactive controls keep a 44px minimum height/width for touch targets. Buttons are borderless with color and weight doing the differentiation.</p>
+
+    <div class="guide-block">
+      <h3>Primary &amp; secondary</h3>
+      <p class="block-note">Primary is the single highest-emphasis action per screen (e.g. add / save / create). Secondary is for the paired dismiss action.</p>
+      <div class="specimen row">
+        <button class="primary-button">Add a race <span>+</span></button>
+        <button class="secondary-button">Cancel</button>
+        <button class="text-button">Refresh</button>
+        <button class="icon-button" aria-label="Close">×</button>
+      </div>
+      <pre class="code">&lt;button class="primary-button"&gt;Add a race &lt;span&gt;+&lt;/span&gt;&lt;/button&gt;
+&lt;button class="secondary-button"&gt;Cancel&lt;/button&gt;
+&lt;button class="text-button"&gt;Refresh&lt;/button&gt;
+&lt;button class="icon-button" aria-label="Close"&gt;×&lt;/button&gt;</pre>
+    </div>
+
+    <div class="guide-block">
+      <h3>Save / utility buttons</h3>
+      <div class="specimen row">
+        <button class="save-button">Save commitment</button>
+        <button class="roster-remove">Remove</button>
+        <button class="old-races-toggle">Show 3 races more than 60 days old</button>
+      </div>
+      <pre class="code">&lt;button class="save-button"&gt;Save commitment&lt;/button&gt;
+&lt;button class="roster-remove"&gt;Remove&lt;/button&gt;                 &lt;!-- hover: red --&gt;
+&lt;button class="old-races-toggle"&gt;Show 3 races more than 60 days old&lt;/button&gt;</pre>
+    </div>
+  </section>
+
+  <!-- CHOICE PILLS =========================================================== -->
+  <section class="guide-section" id="pills">
+    <h2>Choice pills</h2>
+    <p class="section-intro">Used for event/distance selection and commitment level. Selected state has a neutral navy style by default; the <code>locked</code> level gets its own green treatment so a firm commitment reads as unmistakably "done."</p>
+
+    <div class="guide-block">
+      <h3>Commitment levels</h3>
+      <p class="block-note">There is no "not going" option — someone who isn't racing simply has no entry, so the roster only ever lists people who are actually in.</p>
+      <div class="specimen row">
+        <button class="choice">Considering (unselected style)</button>
+        <button class="choice selected">Planning (selected)</button>
+        <button class="choice level-locked selected">Locked in (selected)</button>
+      </div>
+      <pre class="code">&lt;button class="choice selected"&gt;Planning&lt;/button&gt;
+&lt;button class="choice level-locked selected"&gt;Locked in&lt;/button&gt;   &lt;!-- green --&gt;</pre>
+    </div>
+
+    <div class="guide-block">
+      <h3>Event / distance pills</h3>
+      <div class="specimen row">
+        <button class="choice">Sprint</button>
+        <button class="choice selected">Olympic</button>
+        <button class="choice">70.3</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORM FIELDS ============================================================ -->
+  <section class="guide-section" id="forms">
+    <h2>Form fields</h2>
+    <p class="section-intro">Inputs share one style across the app: 1px border, 9px radius, 44px min height, white fill — including "Race name" in the add-race form, which matches "View an athlete's races" exactly rather than falling back to browser defaults.</p>
+    <div class="specimen stack demo-card-width">
+      <label class="athlete-filter" style="display:grid;gap:4px;font-size:13px;font-weight:700">
+        <span>View an athlete's races</span>
+        <input type="search" placeholder="Type a name, e.g. Priya" />
+      </label>
+      <label style="display:block;font-size:14px;font-weight:700">Race name
+        <input style="margin-top:6px" placeholder="e.g. Melbourne Marathon" />
+      </label>
+      <label style="display:block;font-size:14px;font-weight:700">Date
+        <input style="margin-top:6px" type="date" />
+      </label>
+      <div class="input-add"><input placeholder="Add an event or distance"><button>+ Add</button></div>
+    </div>
+  </section>
+
+  <!-- COMPONENTS ============================================================= -->
+  <section class="guide-section" id="components">
+    <h2>Components</h2>
+    <p class="section-intro">Composite pieces built from the tokens and primitives above.</p>
+
+    <div class="guide-block">
+      <h3>Race card — collapsed</h3>
+      <p class="block-note"><code>.race-summary</code> uses <code>--brand-blue</code> as its own background, independent of the ink/navy used for the page header.</p>
+      <div class="specimen demo-card-width" style="padding:0;background:transparent;border:0">
+        <article class="race-card">
+          <button class="race-summary" aria-expanded="false">
+            <time class="date-tile"><strong>31</strong><span>AUG</span></time>
+            <div class="race-info"><h2>Future Race</h2><p class="race-meta">Location TBC · 2 locked in of 4</p></div>
+            <div class="race-people">2 going</div>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </button>
+        </article>
+      </div>
+    </div>
+
+    <div class="guide-block">
+      <h3>Race card — expanded, with race website</h3>
+      <p class="block-note">Details sections run the full width and height of the card — no nested panel, no inset margin — with grey <code>.card-header</code> labels as the only separators. Roster entries are grouped by distance (alpha), and names within each group are alpha-sorted too. Each distance label (<code>.roster-group-label</code>) uses <code>--brand-blue</code> — the same blue as the card's own summary bar — set at the same 12px size as <code>.card-header</code>. Commitment level is kept separate from distance: it shows as a small pill (<code>.roster-level</code>) next to each name, rather than being folded into the distance grouping. In "Your commitment," each group — commitment level, participation type, and the add-a-distance field — gets its own <code>.choice-label</code>: the same bold/uppercase/12px treatment as <code>.card-header</code>, but in <code>--brand-blue</code> rather than grey, so it reads as a sub-heading within the section instead of another top-level header.</p>
+      <div class="specimen demo-card-width" style="padding:0;background:transparent;border:0">
+        <article class="race-card open">
+          <button class="race-summary" aria-expanded="true">
+            <time class="date-tile"><strong>31</strong><span>AUG</span></time>
+            <div class="race-info"><h2>Future Race</h2><p class="race-meta">Location TBC · 1 locked in of 3</p></div>
+            <div class="race-people">1 going</div>
+            <span class="chevron" aria-hidden="true" style="transform:rotate(180deg)">⌄</span>
+          </button>
+          <section class="race-details">
+            <div class="details-card">
+              <div class="card-header">Race website</div>
+              <div class="card-body"><a class="race-link" href="#" onclick="return false">https://example.com/future-race</a></div>
+              <div class="card-header">Club commitments</div>
+              <div class="card-body roster-body">
+                <div class="roster-group">
+                  <p class="roster-group-label">Olympic</p>
+                  <div class="roster-entry"><div class="roster-who"><span class="roster-name">Nadia</span><span class="roster-level level-planning">Planning</span></div><button type="button" class="roster-remove">Remove</button></div>
+                  <div class="roster-entry"><div class="roster-who"><span class="roster-name">Priya</span><span class="roster-level level-considering">Considering</span></div><button type="button" class="roster-remove">Remove</button></div>
+                </div>
+                <div class="roster-group">
+                  <p class="roster-group-label">Sprint</p>
+                  <div class="roster-entry"><div class="roster-who"><span class="roster-name">Amy</span><span class="roster-level level-locked">Locked in</span></div><button type="button" class="roster-remove">Remove</button></div>
+                </div>
+              </div>
+              <div class="card-header">Your commitment</div>
+              <div class="card-body">
+                <p class="choice-label">Commitment level</p>
+                <div class="choices"><button class="choice">Considering</button><button class="choice selected">Planning</button><button class="choice level-locked">Locked in</button></div>
+                <p class="choice-label">Participation type</p>
+                <div class="choices"><button class="choice selected">Sprint</button><button class="choice">Olympic</button></div>
+                <p class="choice-label">Add an event or distance</p>
+                <div class="input-add"><input placeholder="Add an event or distance"><button>+ Add</button></div>
+              </div>
+            </div>
+          </section>
+        </article>
+      </div>
+      <pre class="code">&lt;div class="card-header"&gt;Race website&lt;/div&gt;
+&lt;div class="card-body"&gt;&lt;a class="race-link" href="…" target="_blank" rel="noopener"&gt;…&lt;/a&gt;&lt;/div&gt;
+
+&lt;div class="card-header"&gt;Club commitments&lt;/div&gt;
+&lt;div class="card-body roster-body"&gt;
+  &lt;div class="roster-group"&gt;
+    &lt;p class="roster-group-label"&gt;Olympic&lt;/p&gt;                          &lt;!-- distance: group header, alpha order --&gt;
+    &lt;div class="roster-entry"&gt;
+      &lt;div class="roster-who"&gt;
+        &lt;span class="roster-name"&gt;Nadia&lt;/span&gt;                        &lt;!-- name: alpha order within group --&gt;
+        &lt;span class="roster-level level-planning"&gt;Planning&lt;/span&gt;       &lt;!-- level: its own pill, not merged with distance --&gt;
+      &lt;/div&gt;
+      &lt;button class="roster-remove"&gt;Remove&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</pre>
+    </div>
+
+    <div class="guide-block">
+      <h3>Collapsed "older races" toggle</h3>
+      <p class="block-note">Races more than 60 days old (relative to today) are grouped behind this toggle instead of showing by default.</p>
+      <div class="specimen demo-card-width" style="text-align:center">
+        <button class="old-races-toggle">Show 2 races more than 60 days old</button>
+      </div>
+    </div>
+
+    <div class="guide-block">
+      <h3>Empty state</h3>
+      <div class="specimen demo-card-width" style="padding:0;background:transparent;border:0">
+        <p class="empty-state">No races here yet. Add a race to get started.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEEDBACK / STATES ======================================================= -->
+  <section class="guide-section" id="feedback">
+    <h2>Feedback &amp; states</h2>
+    <div class="guide-block">
+      <h3>Focus ring</h3>
+      <p class="block-note">Applied via <code>:focus-visible</code> to buttons, links, and inputs — tab to the field below to see it.</p>
+      <div class="specimen"><input placeholder="Tab to me…" style="width:260px" /></div>
+    </div>
+    <div class="guide-block">
+      <h3>Destructive hover</h3>
+      <div class="specimen row"><button class="roster-remove">Hover me: Remove</button></div>
+    </div>
+    <div class="guide-block">
+      <h3>Reduced motion</h3>
+      <p class="block-note">A global <code>@media (prefers-reduced-motion: reduce)</code> rule disables scroll-behavior, transitions, and animation site-wide — no per-component opt-out needed.</p>
+    </div>
+  </section>
+
+  <!-- SPACING / RADIUS ======================================================== -->
+  <section class="guide-section" id="spacing">
+    <h2>Radius &amp; spacing</h2>
+    <p class="section-intro">Every rectangular element in the app shares one corner radius. Pills are the one deliberate exception — they stay fully round (999px) as a distinct shape, not a point on the radius scale.</p>
+    <table class="token-table">
+      <thead><tr><th>Radius</th><th>Preview</th><th>Used on</th></tr></thead>
+      <tbody>
+        <tr><td>9px</td><td><span class="swatch-radius" style="display:inline-block;width:40px;height:24px;border-radius:9px"></span></td><td>Everything rectangular: <code>.hero</code>, <code>.race-card</code>, <code>.add-panel</code>, <code>dialog</code>, <code>.empty-state</code>, <code>.primary-button</code>/<code>.secondary-button</code>, <code>.roster-remove</code>, <code>.save-button</code>, text inputs</td></tr>
+        <tr><td>999px (pill)</td><td><span class="swatch-radius" style="display:inline-block;width:40px;height:24px;border-radius:999px"></span></td><td><code>.choice</code>, <code>.old-races-toggle</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="guide-block">
+      <h3>Touch targets</h3>
+      <p class="block-note">Every interactive element (<code>.text-button</code>, <code>.icon-button</code>, <code>.primary-button</code>, <code>.secondary-button</code>, inputs, <code>.choice</code>, <code>.save-button</code>) enforces <code>min-height: 44px</code> for accessible tap sizing.</p>
+    </div>
+  </section>
+
+  <!-- RESPONSIVE ============================================================== -->
+  <section class="guide-section" id="responsive">
+    <h2>Responsive rules</h2>
+    <p class="section-intro">Two breakpoints control layout collapse, resize this window (or the browser) to see them apply live to the page itself.</p>
+    <table class="token-table">
+      <thead><tr><th>Breakpoint</th><th>Changes</th></tr></thead>
+      <tbody>
+        <tr><td>≤ 900px</td><td>Add-race form grid drops from 4 columns to 2 (<code>.add-form-fields</code>)</td></tr>
+        <tr><td>≤ 700px</td><td>Shell margins tighten; <code>.text-button</code> (Refresh) hides; toolbar wraps; <code>.race-people</code> ("N going") hides on the race summary; dialog footer buttons stack full-width; add-form grid drops to 1 column</td></tr>
+        <tr><td>≤ 390px</td><td>Hero padding tightens further; date tile shrinks; race title drops to 16px; save/add rows stack vertically</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+  // Read the live CSS custom properties from :root so the swatches and hex
+  // labels above can never drift out of sync with styles.css.
+  const TOKEN_ROLES = {
+    '--ink': 'Primary text, headings, hero background',
+    '--muted': 'Secondary/meta text, placeholders',
+    '--line': 'Default borders and dividers',
+    '--canvas': 'Page background',
+    '--yellow': 'Accent — CTAs, hero emphasis, eyebrow text',
+    '--green': "Locked-in commitment text",
+    '--green-bg': "Locked-in commitment pill background",
+    '--navy-bg': 'Selected (non-locked) pill background',
+    '--brand-blue': 'Race card summary background'
+  };
+  const root = getComputedStyle(document.documentElement);
+  const grid = document.getElementById('tokenSwatches');
+  Object.keys(TOKEN_ROLES).forEach(name => {
+    const value = root.getPropertyValue(name).trim();
+    const card = document.createElement('div');
+    card.className = 'swatch';
+    card.innerHTML = `
+      <div class="swatch-fill" style="background:${value}"></div>
+      <div class="swatch-meta">
+        <span class="swatch-name">${name}</span>
+        <span class="swatch-value">${value}</span>
+        <span class="swatch-role">${TOKEN_ROLES[name]}</span>
+      </div>`;
+    grid.append(card);
+  });
+</script>
+</body>
+</html>
