@@ -18,7 +18,7 @@
     </header>
 
     <section class="hero" id="top">
-      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span id="clubCount"></span> <span class="club-label">club</span> events on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
+      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span class="race-count-highlight"><span id="clubCount"></span> upcoming club events</span> on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other upcoming events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
     </section>
 
     <section class="toolbar" aria-label="Race filters">
@@ -31,11 +31,12 @@
         <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
       </form>
     </section>
+    <div class="race-info upcoming-heading hidden" id="upcomingHeading"><h2>Upcoming races</h2></div>
     <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
     <section id="raceList" class="race-list" aria-live="polite"></section>
   </main>
 
-  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><div class="race-people"></div><span class="chevron" aria-hidden="true">⌄</span></button><section class="race-details hidden"></section></article></template>
+  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">⌄</span></button><section class="race-details hidden"></section></article></template>
   <script src="app.js"></script>
 </body>
 </html>

@@ -20,9 +20,6 @@
 .name-row input,.other-row input{width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px "DM Sans"}
 .choice-label{margin:18px 0 8px;color:var(--brand-blue);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .choice-label:first-child{margin-top:0}
-.old-races-toggle{align-self:center;min-height:44px;padding:10px 18px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font:600 13px "DM Sans";cursor:pointer}
-.old-races-toggle:hover{border-color:#aab5c6;color:var(--ink)}
-.old-races{display:flex;flex-direction:column;gap:12px}
 .club-focus-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 9px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
 .race-summary.club-focus{background:var(--brand-blue)}
 .header-actions{display:flex;align-items:center;gap:14px}
@@ -33,6 +30,7 @@
 .hero-copy .race-count-group{margin-top:22px}
 .hero-copy .race-count-group .race-count{margin:0;color:#fff}
 .hero-copy .race-count-sub{margin:2px 0 0;color:rgba(255,255,255,.75);font-size:15px;font-weight:600}
-#clubCount,.race-count .club-label{color:var(--brand-blue)}
+.race-count .race-count-highlight{color:var(--brand-blue)}
 .toolbar{justify-content:flex-end}
+.upcoming-heading{margin:8px 0 4px;text-align:left}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}
