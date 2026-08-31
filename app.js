@@ -5,15 +5,27 @@ const levels=[['considering','Considering'],['planning','Planning'],['locked','L
 let state=JSON.parse(localStorage.getItem('balance-race-ui')||'null')||{user:'',filter:'',open:null,form:{}};
 state.filter ||= '';
 state.viewFilter ||= 'club';
+state.pin ||= '';
 let races=[];
 let loadError=null;
 const $=s=>document.querySelector(s); const persist=()=>localStorage.setItem('balance-race-ui',JSON.stringify(state));
 function dateParts(date){const d=new Date(date+'T12:00:00');return {day:String(d.getDate()).padStart(2,'0'),month:d.toLocaleString('en-AU',{month:'short'}),group:d.toLocaleString('en-AU',{month:'long',year:'numeric'})}}
 function myEntry(race){return race.entries.find(e=>e.name===state.user)}
+function ensurePin(){
+  if(!state.pin){
+    const entered=prompt('Enter the club write PIN to save changes:');
+    if(entered){state.pin=entered.trim();persist()}
+  }
+  return state.pin;
+}
 async function api(action, payload){
-  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,...payload})});
+  const pin=ensurePin();
+  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,pin,...payload})});
   const data=await res.json();
-  if(data.error) throw new Error(data.error);
+  if(data.error){
+    if(data.error==='unauthorized'){state.pin='';persist()}
+    throw new Error(data.error);
+  }
   return data;
 }
 async function loadRaces(){

@@ -9,6 +9,11 @@
 //      - Who has access: Anyone
 //   5. Click Deploy, authorize when prompted, and copy the Web app URL (ends in /exec).
 //   6. Paste that URL into API_URL near the top of app.js.
+//   7. Project Settings (gear icon) > Script Properties > Add script property:
+//      name "WRITE_PIN", value = a shared PIN for club members (e.g. "1234").
+//      This gates writes (add/edit/remove race data); the race listing stays
+//      open to anyone with the URL. Share the PIN with members separately
+//      (see README.md) — never commit it to the repo.
 //
 // Data model: two sheet tabs, created automatically on first request if missing.
 //   Races:   id | name | date | location | url | events | clubFocus   (events is "|"-separated, clubFocus is "Y" or "N")
@@ -81,6 +86,10 @@ function doPost(e) {
     body = JSON.parse(e.postData.contents);
   } catch (err) {
     return jsonOut_({ error: 'invalid JSON body' });
+  }
+  const writePin = PropertiesService.getScriptProperties().getProperty('WRITE_PIN');
+  if (!writePin || body.pin !== writePin) {
+    return jsonOut_({ error: 'unauthorized' });
   }
   if (body.action === 'addRace') return jsonOut_(addRace_(body));
   if (body.action === 'saveEntry') return jsonOut_(saveEntry_(body));
