@@ -4,7 +4,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const levels=[['considering','Considering'],['planning','Planning'],['locked','Locked in']];
-const eventTypes=['Triathlon','Swim','Bike','Run','SwimRun','Balance Bolt'];
+const eventTypes=['Balance Bolt','Bike','Multi-sport','Run','Swim','Triathlon'];
 let state=JSON.parse(localStorage.getItem('balance-race-ui')||'null')||{user:'',filter:'',open:null,form:{}};
 state.filter ||= '';
 state.eventTypeFilter ||= '';
