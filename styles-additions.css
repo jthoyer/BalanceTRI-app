@@ -21,6 +21,7 @@
 .choice-label{margin:18px 0 8px;color:var(--brand-blue);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .choice-label:first-child{margin-top:0}
 .club-focus-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 9px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
+.event-type-badge{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 9px;border-radius:999px;background:var(--navy-bg);color:var(--brand-blue);font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
 .race-summary.club-focus{background:var(--brand-blue)}
 .header-actions{display:flex;align-items:center;gap:14px}
 .hero-copy .view-toggle{display:flex;gap:4px;margin-top:22px;padding:3px;border:1px solid rgba(255,255,255,.35);border-radius:999px;background:rgba(255,255,255,.08);width:fit-content}
@@ -31,7 +32,7 @@
 .hero-copy .race-count-group .race-count{margin:0;color:#fff}
 .hero-copy .race-count-sub{margin:2px 0 0;color:rgba(255,255,255,.75);font-size:15px;font-weight:600}
 .race-count .race-count-highlight{color:var(--brand-blue)}
-.toolbar{justify-content:flex-end}
+.toolbar{justify-content:flex-start}
 .upcoming-heading{margin:8px 0 4px;text-align:left}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}
 .commit-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -44,5 +45,7 @@
 .update-banner{display:flex;align-items:center;gap:9px;margin:0 0 16px;padding:12px 16px;border-radius:9px;background:var(--green-bg);color:var(--green);font-size:14px;font-weight:700}
 @media(max-width:700px){.edit-screen .add-panel{padding:22px 18px}}
 .event-type-filter select{appearance:none;-webkit-appearance:none;-moz-appearance:none;box-sizing:border-box;width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 34px 10px 12px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="%23566177" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 12px center;color:var(--ink);font:16px "DM Sans"}
-.add-form-fields select{appearance:auto}
+.add-form-fields select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:34px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="%23566177" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 12px center}
+#editScreen .add-form-fields{grid-template-columns:1fr;gap:22px}
+#editScreen .add-form-fields label{margin-top:0}
 .commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
