@@ -45,3 +45,4 @@
 @media(max-width:700px){.edit-screen .add-panel{padding:22px 18px}}
 .event-type-filter select{width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px "DM Sans"}
 .add-form-fields select{appearance:auto}
+.commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
