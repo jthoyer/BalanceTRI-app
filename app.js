@@ -81,6 +81,7 @@ function closeEditScreen(){
   $('#editScreen').classList.add('hidden');
   $('#top').classList.remove('hidden');
   document.querySelector('.toolbar').classList.remove('hidden');
+  $('#raceList').classList.remove('hidden');
   render();
 }
 async function loadRaces(){
