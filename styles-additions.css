@@ -43,3 +43,5 @@
 .back-link svg{flex-shrink:0}
 .update-banner{display:flex;align-items:center;gap:9px;margin:0 0 16px;padding:12px 16px;border-radius:9px;background:var(--green-bg);color:var(--green);font-size:14px;font-weight:700}
 @media(max-width:700px){.edit-screen .add-panel{padding:22px 18px}}
+.event-type-filter select{width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px "DM Sans"}
+.add-form-fields select{appearance:auto}
