@@ -31,6 +31,17 @@
         <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
       </form>
     </section>
+    <section id="editScreen" class="edit-screen hidden" aria-label="Edit race">
+      <button type="button" class="back-link" id="editBackButton"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg><span id="editBackLabel">Back to races</span></button>
+      <div class="add-panel">
+        <div class="add-form-heading"><div><p class="eyebrow">EDIT RACE</p><h2 id="editScreenTitle">Edit race</h2></div></div>
+        <form id="editForm" class="add-form">
+          <div class="add-form-fields"><label>Race name<input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label>Race website <span class="optional">optional</span><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label><label>Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label><label class="checkbox-field"><input name="clubFocus" type="checkbox" /> Club focus race</label></div>
+          <div class="dialog-footer"><button type="button" id="editCancelButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Save changes</button></div>
+        </form>
+      </div>
+    </section>
+    <p class="update-banner hidden" id="updateBanner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span id="updateBannerText"></span></p>
     <div class="race-info upcoming-heading hidden" id="upcomingHeading"><h2>Upcoming races</h2></div>
     <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
     <section id="raceList" class="race-list" aria-live="polite"></section>
