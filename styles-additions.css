@@ -46,6 +46,6 @@
 @media(max-width:700px){.edit-screen .add-panel{padding:22px 18px}}
 .event-type-filter select{appearance:none;-webkit-appearance:none;-moz-appearance:none;box-sizing:border-box;width:100%;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 34px 10px 12px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="%23566177" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 12px center;color:var(--ink);font:16px "DM Sans"}
 .add-form-fields select{appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:34px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="%23566177" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 12px center}
-#editScreen .add-form-fields{grid-template-columns:1fr;gap:22px}
-#editScreen .add-form-fields label{margin-top:0}
+#editScreen .add-form-fields,#addPanel .add-form-fields{grid-template-columns:1fr;gap:22px}
+#editScreen .add-form-fields label,#addPanel .add-form-fields label{margin-top:0}
 .commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
