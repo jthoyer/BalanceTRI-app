@@ -1,4 +1,5 @@
-.claude/
+.claude/*
+!.claude/agents/
 .DS_Store
 *.xlsx
 *.zip
