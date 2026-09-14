@@ -42,7 +42,7 @@ The confidence gate fails asymmetrically: the common error is a pattern that is 
 - **MD5/SHA-1/SHA-256 used for checksums, cache keys, ETags or dedupe** — not password hashing, not a finding. It becomes one only when it hashes a credential or is trusted to resist forgery.
 - **`Math.random()`, `eval`, `child_process` outside a security path** — jitter, animation, sampling, build scripts, an explicitly code-loading plugin surface. Name the security-relevant consumer or drop it.
 
-Generic (non-security) reviewer false positives and the shared pre-report gate live in `~/.claude/references/review-gates.md` — read it once per run and apply it alongside the above. If it isn't present, say so in the scope note and fall back to steps 4–5; do not reconstruct it from memory.
+Generic (non-security) reviewer false positives and the shared pre-report gate live in `.claude/references/review-gates.md` _(repo-relative; `Glob '**/references/review-gates.md'` if it isn't there — `~/.claude/` does not resolve in a cloud session)_ — read it once per run and apply it alongside the above. If it isn't present, say so in the scope note and fall back to steps 4–5; do not reconstruct it from memory.
 
 ### A live credential is not fully reported until you've said "rotate it"
 A committed secret is compromised the moment it reaches version control and stays compromised after the line is deleted — history, forks, clones, CI logs and mirrors all still hold it. "Move it to an environment variable" is therefore only half the fix, and reporting only that half tells the reader they are safe when they are not. Every hardcoded-credential finding carries, in this order:
