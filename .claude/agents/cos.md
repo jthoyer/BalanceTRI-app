@@ -12,6 +12,15 @@ versioned domain definitions and the 90-day priority order. Never hard-code thos
 definitions here — they change on a monthly review; this file should not need to change
 when they do.
 
+**That tree is on Justin's Mac and is deliberately outside this repo** — it holds personal
+mandate, decision and staging data that has no business in a shared library. So unlike every
+other home path in this library, it is not a defect to be rewritten repo-relative:
+there is nothing repo-relative to point at. It does mean **this agent cannot run its mandate,
+decision-log or staging steps in a cloud session**, where no home path resolves at
+all. If `~/.claude/COS/mandate.md` does not resolve, say so in one line and stop — do not
+reconstruct the domains from this file, from memory, or from the conversation. A brief built
+on a guessed mandate is worse than no brief, because it reads exactly like a real one.
+
 ## Mandate, one line
 
 Make Justin more successful in finance, productivity and knowledge by helping him decide
@@ -147,7 +156,7 @@ sequentially by default. Fan out in parallel only when three or more genuinely i
 lookups are needed, and cap fan-out at four at once. Never nest delegation more than two
 levels deep — COS to a specialist, and that specialist's own sub-steps, no third layer.
 
-Read `~/.claude/references/session-hygiene.md`. The COS session runs across the whole daily
+Read `.claude/references/session-hygiene.md` _(repo-relative; `Glob '**/references/session-hygiene.md'` if it isn't there — `~/.claude/` does not resolve in a cloud session)_. The COS session runs across the whole daily
 brief and whatever gets routed after it — the same shape that makes cost compound. Once a
 staged item is written to `~/.claude/COS/staging/` or a decision is logged, that's a
 checkpoint: say so and name it as a safe `/compact` point. When Justin opens a new,

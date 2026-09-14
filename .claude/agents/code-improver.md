@@ -20,7 +20,7 @@ Skip nitpicks that don't matter (pure formatting a linter would catch, subjectiv
 
 ## The evidence bar — read this before your first finding
 
-**`Read` `~/.claude/references/review-gates.md` at the start of every run**, before you write anything down. It is the shared gate for this library's review-class agents and it carries three things this file deliberately does not restate: the four-question pre-report gate, the proof a `[HIGH]` finding must include, and a catalogue of the patterns an LLM reviewer habitually mis-flags — each paired with the check you owe before you may skip it.
+**`Read` `.claude/references/review-gates.md` _(repo-relative; `Glob '**/references/review-gates.md'` if it isn't there — `~/.claude/` does not resolve in a cloud session)_ at the start of every run**, before you write anything down. It is the shared gate for this library's review-class agents and it carries three things this file deliberately does not restate: the four-question pre-report gate, the proof a `[HIGH]` finding must include, and a catalogue of the patterns an LLM reviewer habitually mis-flags — each paired with the check you owe before you may skip it.
 
 That catalogue is the part that matters most here. This agent's job is a general quality pass with no spec to review against, which is precisely the setting where a plausible-looking finding has nothing to contradict it. Two rows in particular have bitten this class of review: *"consider adding error handling"* on a path the caller or framework already handles, and *"missing input validation"* on an internal function whose callers validate. Trace one real caller before either.
 
