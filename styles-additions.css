@@ -36,8 +36,8 @@
 .upcoming-heading{margin:8px 0 4px;text-align:left}
 @media(max-width:900px){.add-form-fields{grid-template-columns:1fr 1fr}}@media(max-width:700px){.add-panel{padding:22px 18px}.add-form-fields{grid-template-columns:1fr}.add-form-heading h2{font-size:24px}}
 .commit-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.edit-race-button{flex-shrink:0;min-height:32px;padding:5px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font:600 13px "DM Sans";letter-spacing:normal;text-transform:none;cursor:pointer}
-.edit-race-button:hover{border-color:#92a4c6;color:var(--ink)}
+.edit-race-button,.roster-edit{flex-shrink:0;min-height:32px;padding:5px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font:600 13px "DM Sans";letter-spacing:normal;text-transform:none;cursor:pointer}
+.edit-race-button:hover,.roster-edit:hover{border-color:#92a4c6;color:var(--ink)}
 .edit-screen{margin:4px 0 40px}
 .back-link{display:inline-flex;align-items:center;gap:6px;margin:0 0 18px;border:0;background:transparent;padding:0;color:var(--muted);font:600 14px "DM Sans";cursor:pointer}
 .back-link:hover{color:var(--brand-blue)}
@@ -49,3 +49,5 @@
 #editScreen .add-form-fields,#addPanel .add-form-fields{grid-template-columns:1fr;gap:22px}
 #editScreen .add-form-fields label,#addPanel .add-form-fields label{margin-top:0}
 .commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
+.remove-commit-button{min-height:44px;padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font:700 14px "DM Sans";cursor:pointer}
+.remove-commit-button:hover{border-color:#e3a3a3;background:#fdecec;color:#b3261e}

@@ -42,13 +42,20 @@
         </form>
       </div>
     </section>
+    <section id="raceScreen" class="edit-screen hidden" aria-label="Race details">
+      <button type="button" class="back-link" id="raceScreenBackButton"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg><span>Back to races</span></button>
+      <div class="add-panel">
+        <div class="add-form-heading"><div><p class="eyebrow" id="raceScreenEyebrow"></p><h2 id="raceScreenTitle"></h2></div></div>
+        <div id="raceScreenBody"></div>
+      </div>
+    </section>
     <p class="update-banner hidden" id="updateBanner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span id="updateBannerText"></span></p>
     <div class="race-info upcoming-heading hidden" id="upcomingHeading"><h2>Upcoming races</h2></div>
     <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
     <section id="raceList" class="race-list" aria-live="polite"></section>
   </main>
 
-  <template id="raceTemplate"><article class="race-card"><button class="race-summary" aria-expanded="false"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">⌄</span></button><section class="race-details hidden"></section></article></template>
+  <template id="raceTemplate"><article class="race-card"><button class="race-summary"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">›</span></button></article></template>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="app.js"></script>
 </body>
