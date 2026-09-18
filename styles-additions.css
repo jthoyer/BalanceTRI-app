@@ -51,3 +51,5 @@
 .commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
 .remove-commit-button{min-height:44px;padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font:700 14px "DM Sans";cursor:pointer}
 .remove-commit-button:hover{border-color:#e3a3a3;background:#fdecec;color:#b3261e}
+.danger-button{margin-right:auto;color:#b3261e}
+.danger-button:hover{background:#fdecec}
