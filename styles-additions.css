@@ -51,6 +51,8 @@
 #editScreen .add-form-fields,#addPanel .add-form-fields{grid-template-columns:1fr;gap:22px}
 #editScreen .add-form-fields label,#addPanel .add-form-fields label{margin-top:0}
 #editScreen .add-form-heading,#addPanel .add-form-heading{margin-bottom:40px}
+/* Race screen only: doubles the gap under the race title. The card header below it supplies 14px of padding-top and nothing else separated them, so matching that 14px here takes the gap from 14px to 28px. */
+#raceScreen .add-form-heading{margin-bottom:14px}
 .commit-toggle-button{min-height:44px;padding:8px 13px;border:0;border-radius:9px;background:var(--ink);color:#fff;font:700 14px "DM Sans";cursor:pointer}
 .remove-commit-button{min-height:44px;padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font:700 14px "DM Sans";cursor:pointer}
 .remove-commit-button:hover{border-color:#e3a3a3;background:#fdecec;color:#b3261e}
