@@ -4,6 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Balance Tri Club — Race commitments</title>
+  <script>
+    // GitHub Pages has no server-side rewrites, so a direct hit on
+    // /race/<slug> is served by 404.html, which bounces back here as
+    // <base>?/race/<slug>. Put the real path back before app.js reads
+    // location.pathname. Must stay ahead of app.js in the document.
+    // The other half of this lives in 404.html.
+    (function(){
+      var l=window.location;
+      if(l.search.slice(0,2)!=='?/')return;
+      var parts=l.search.slice(1).split('&');
+      var route=parts.shift();
+      var query=parts.length?'?'+parts.join('&').replace(/~and~/g,'&'):'';
+      var base=l.pathname.replace(/index\.html$/,'').replace(/\/+$/,'');
+      window.history.replaceState(null,'',base+route+query+l.hash);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
@@ -55,7 +71,10 @@
     <section id="raceList" class="race-list" aria-live="polite"></section>
   </main>
 
-  <template id="raceTemplate"><article class="race-card"><button class="race-summary"><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">›</span></button></article></template>
+  <!-- A real <a href="…/race/<slug>"> rather than a button, so the card can be
+       opened in a new tab, copied as a link, and crawled. app.js sets the href
+       and intercepts only the plain left click. -->
+  <template id="raceTemplate"><article class="race-card"><a class="race-summary" href=""><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">›</span></a></article></template>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="app.js"></script>
 </body>
