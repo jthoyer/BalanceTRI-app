@@ -237,6 +237,22 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
       </label>
       <div class="input-add"><input placeholder="Add an event or distance"><button>+ Add</button></div>
     </div>
+
+    <div class="guide-block">
+      <h3>Add/Edit race — Balance Bolt field set</h3>
+      <p class="block-note">Selecting <strong>Balance Bolt</strong> in Event type reduces the add-race and edit-race forms to Event type, <strong>Race #</strong> and Date. Race website, Events or distances and the Club focus race checkbox are hidden with <code>.hidden</code>, and the <code>.field-name</code> label swaps to "Race #" with an <code>e.g. 3</code> placeholder. Any other type — including the blank "Select type…" — restores all six fields and the "Race name" label. Driven by <code>applyEventTypeFields(form)</code> in <code>app.js</code>, shared by <code>#raceForm</code> and <code>#editForm</code>; the hidden fields keep their values rather than being cleared, and the checkbox is not needed because every Balance Bolt race is saved with <code>club_focus</code> true.</p>
+      <div class="specimen stack demo-card-width">
+        <label style="display:block;font-size:14px;font-weight:700">Event type <span style="color:var(--muted);font-weight:400">optional</span>
+          <select style="margin-top:6px;min-height:44px;border:1px solid #aab5c6;border-radius:9px;padding:10px 12px;background:#fff;color:var(--ink);font:16px 'DM Sans'"><option>Balance Bolt</option></select>
+        </label>
+        <label style="display:block;font-size:14px;font-weight:700">Race #
+          <input style="margin-top:6px" placeholder="e.g. 3" />
+        </label>
+        <label style="display:block;font-size:14px;font-weight:700">Date
+          <input style="margin-top:6px" type="date" />
+        </label>
+      </div>
+    </div>
   </section>
 
   <!-- COMPONENTS ============================================================= -->

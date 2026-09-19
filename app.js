@@ -45,7 +45,7 @@ async function addRace(payload){
     url:payload.url||null,
     events:payload.events||[],
     event_type:payload.eventType||null,
-    club_focus:payload.clubFocus==='Y',
+    club_focus:payload.eventType==='Balance Bolt'||payload.clubFocus==='Y',
     balance_bolt:payload.eventType==='Balance Bolt',
   });
   if(error) throw new Error(error.message);
@@ -66,7 +66,7 @@ async function updateRace(raceId,payload){
     url:payload.url||null,
     events:payload.events||[],
     event_type:payload.eventType||null,
-    club_focus:payload.clubFocus==='Y',
+    club_focus:payload.eventType==='Balance Bolt'||payload.clubFocus==='Y',
     balance_bolt:payload.eventType==='Balance Bolt',
   }).eq('id',raceId);
   if(error) throw new Error(error.message);
@@ -96,6 +96,16 @@ function closeRaceScreen(){
   $('#raceList').classList.remove('hidden');
   render();
 }
+// Balance Bolt races only need a date and a race number, and they are always club
+// focus races — so the other fields are hidden and the name field is relabelled.
+// Shared by #raceForm and #editForm, whose field markup is identical.
+function applyEventTypeFields(form){
+  const bolt=form.eventType.value==='Balance Bolt';
+  form.querySelectorAll('.field-url,.field-events,.checkbox-field').forEach(el=>el.classList.toggle('hidden',bolt));
+  const nameField=form.querySelector('.field-name');
+  nameField.querySelector('.field-label').textContent=bolt?'Race #':'Race name';
+  nameField.querySelector('input').placeholder=bolt?'e.g. 3':'e.g. Melbourne Marathon';
+}
 function openEditScreen(raceId){
   const race=races.find(r=>r.id===raceId);
   if(!race)return;
@@ -109,6 +119,7 @@ function openEditScreen(raceId){
   f.events.value=race.events.join(', ');
   f.eventType.value=eventTypes.includes(race.eventType)?race.eventType:'';
   f.clubFocus.checked=race.clubFocus==='Y';
+  applyEventTypeFields(f);
   $('#top').classList.add('hidden');
   document.querySelector('.toolbar').classList.add('hidden');
   $('#addPanel').classList.add('hidden');
@@ -161,7 +172,8 @@ function participationOptions(){const merged=[...race.events];const ensure=(labe
 function update(){eventChoices.innerHTML='';participationOptions().forEach(event=>{const b=document.createElement('button');b.type='button';const active=state.form.events.includes(event);b.className='choice '+(active?'selected':'');b.setAttribute('aria-pressed',String(active));b.textContent=event;b.onclick=()=>{state.form.events=active?state.form.events.filter(x=>x!==event):[...state.form.events,event];persist();update()};eventChoices.append(b)});const otherBtn=document.createElement('button');otherBtn.type='button';otherBtn.className='choice '+(state.form.otherOpen?'selected':'');otherBtn.setAttribute('aria-pressed',String(!!state.form.otherOpen));otherBtn.textContent='Other';otherBtn.onclick=()=>{state.form.otherOpen=!state.form.otherOpen;persist();update();if(state.form.otherOpen)otherInput.focus()};eventChoices.append(otherBtn);otherRow.classList.toggle('hidden',!state.form.otherOpen);const lc=wrap.querySelector('.level-choices');lc.innerHTML='';levels.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.className=`choice level-${key} ${state.form.level===key?'selected':''}`;b.textContent=label;b.onclick=()=>{state.form.level=key;persist();update()};lc.append(b)});const btn=wrap.querySelector('.save-button');btn.onclick=async()=>{const name=nameInput.value.trim();if(!name){nameInput.focus();return}const extra=(state.form.otherText||'').trim();const events=[...new Set([...state.form.events,...(extra?[extra]:[])])];if(!events.length){(state.form.otherOpen?otherInput:eventChoices).focus?.();return}btn.disabled=true;btn.textContent='Saving…';try{for(const ev of events){if(!race.events.includes(ev))await addEvent(race.id,ev)}await saveEntry(race.id,name,events,state.form.level);if(state.form.editingName&&state.form.editingName!==name)await removeEntry(race.id,state.form.editingName);state.form.editingName=name;state.user=name;persist();await loadRaces()}catch(err){btn.disabled=false;btn.textContent='Save commitment';alert('Could not save: '+err.message)}}}update();return wrap}
 function toggleAdd(open){const panel=$('#addPanel');panel.classList.toggle('hidden',!open);if(open)panel.querySelector('input').focus()}
 document.querySelectorAll('.view-toggle-btn').forEach(b=>b.onclick=()=>{state.viewFilter=b.dataset.view;persist();render()});
-$('#athleteFilter').oninput=e=>{state.filter=e.target.value;persist();render()};$('#eventTypeFilter').onchange=e=>{state.eventTypeFilter=e.target.value;persist();render()};$('#heroAddButton').onclick=()=>{if(editingId)closeEditScreen();toggleAdd(true);$('#addPanel').scrollIntoView({behavior:'smooth',block:'start'})};$('#closeAddButton').onclick=()=>toggleAdd(false);$('#cancelAddButton').onclick=()=>toggleAdd(false);$('#raceForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;try{await addRace({name:f.get('name').trim(),date:f.get('date'),location:'Location TBC',url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});e.target.reset();toggleAdd(false);await loadRaces()}catch(err){alert('Could not add race: '+err.message)}finally{submitBtn.disabled=false}});
+document.querySelectorAll('#raceForm,#editForm').forEach(f=>{f.eventType.onchange=()=>applyEventTypeFields(f);applyEventTypeFields(f)});
+$('#athleteFilter').oninput=e=>{state.filter=e.target.value;persist();render()};$('#eventTypeFilter').onchange=e=>{state.eventTypeFilter=e.target.value;persist();render()};$('#heroAddButton').onclick=()=>{if(editingId)closeEditScreen();toggleAdd(true);$('#addPanel').scrollIntoView({behavior:'smooth',block:'start'})};$('#closeAddButton').onclick=()=>toggleAdd(false);$('#cancelAddButton').onclick=()=>toggleAdd(false);$('#raceForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;try{await addRace({name:f.get('name').trim(),date:f.get('date'),location:'Location TBC',url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});e.target.reset();applyEventTypeFields(e.target);toggleAdd(false);await loadRaces()}catch(err){alert('Could not add race: '+err.message)}finally{submitBtn.disabled=false}});
 $('#editCancelButton').onclick=closeEditScreen;$('#editBackButton').onclick=closeEditScreen;$('#raceScreenBackButton').onclick=closeRaceScreen;
 $('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);editingId=null;openId=null;$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
 $('#resetButton').onclick=()=>{loadRaces()};loadRaces();
