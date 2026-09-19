@@ -263,14 +263,15 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
     <div class="guide-block">
       <h3>Race card — collapsed</h3>
       <p class="block-note"><code>.race-summary</code> uses <code>--brand-blue</code> as its own background, independent of the ink/navy used for the page header.</p>
+      <p class="block-note"><strong>It is an <code>&lt;a&gt;</code>, not a <code>&lt;button&gt;</code>.</strong> Every race has its own shareable URL — <code>&lt;base&gt;race/&lt;slug&gt;</code>, e.g. <code>/BalanceTRI-app/race/berlin-marathon-2026</code> — so the card is real navigation and carries a real <code>href</code>. That is what makes "open in new tab" and "copy link address" work, and it also makes the markup valid (an <code>&lt;h2&gt;</code> is not allowed inside a <code>&lt;button&gt;</code>). <code>app.js</code> intercepts only the plain left click and calls <code>preventDefault()</code>; modified clicks are handed back to the browser. The only CSS the element change needs is <code>text-decoration:none</code> — colour, layout and focus ring are already element-agnostic.</p>
       <div class="specimen demo-card-width" style="padding:0;background:transparent;border:0">
         <article class="race-card">
-          <button class="race-summary" aria-expanded="false">
+          <a class="race-summary" href="#race-card-specimen" onclick="return false">
             <time class="date-tile"><strong>31</strong><span>AUG</span></time>
             <div class="race-info"><h2>Future Race</h2><p class="race-meta">Location TBC · 2 locked in of 4</p></div>
             <div class="race-people">2 going</div>
             <span class="chevron" aria-hidden="true">⌄</span>
-          </button>
+          </a>
         </article>
       </div>
     </div>
@@ -280,12 +281,12 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
       <p class="block-note">Details sections run the full width and height of the card — no nested panel, no inset margin — with grey <code>.card-header</code> labels as the only separators. Roster entries are grouped by distance (alpha), and names within each group are alpha-sorted too. Each distance label (<code>.roster-group-label</code>) uses <code>--brand-blue</code> — the same blue as the card's own summary bar — set at the same 12px size as <code>.card-header</code>. Commitment level is kept separate from distance: it shows as a small pill (<code>.roster-level</code>) next to each name, rather than being folded into the distance grouping. In "Your commitment," each group — commitment level, participation type, and the add-a-distance field — gets its own <code>.choice-label</code>: the same bold/uppercase/12px treatment as <code>.card-header</code>, but in <code>--brand-blue</code> rather than grey, so it reads as a sub-heading within the section instead of another top-level header.</p>
       <div class="specimen demo-card-width" style="padding:0;background:transparent;border:0">
         <article class="race-card open">
-          <button class="race-summary" aria-expanded="true">
+          <a class="race-summary" href="#race-card-specimen" onclick="return false">
             <time class="date-tile"><strong>31</strong><span>AUG</span></time>
             <div class="race-info"><h2>Future Race</h2><p class="race-meta">Location TBC · 1 locked in of 3</p></div>
             <div class="race-people">1 going</div>
             <span class="chevron" aria-hidden="true" style="transform:rotate(180deg)">⌄</span>
-          </button>
+          </a>
           <section class="race-details">
             <div class="details-card">
               <div class="card-header">Race website</div>
