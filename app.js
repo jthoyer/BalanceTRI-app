@@ -60,7 +60,11 @@ async function deleteRace(raceId){
   if(!data||!data.length) throw new Error('the race was not removed. The database rejected the delete — check that a delete policy exists on the races table.');
 }
 async function updateRace(raceId,payload){
-  const {error}=await db.from('races').update({
+  // Same zero-row trap as deleteRace above: an update blocked by row-level
+  // security, or aimed at a race someone else has already removed, comes back
+  // as success with no error and nothing changed. Without .select() the app
+  // would show "… updated" and drop the edit on the next refresh.
+  const {data,error}=await db.from('races').update({
     name:payload.name,
     date:payload.date,
     url:payload.url||null,
@@ -68,8 +72,9 @@ async function updateRace(raceId,payload){
     event_type:payload.eventType||null,
     club_focus:payload.eventType==='Balance Bolt'||payload.clubFocus==='Y',
     balance_bolt:payload.eventType==='Balance Bolt',
-  }).eq('id',raceId);
+  }).eq('id',raceId).select('id');
   if(error) throw new Error(error.message);
+  if(!data||!data.length) throw new Error('the changes were not saved. The race may have been removed by someone else, or the database rejected the update — refresh and try again.');
 }
 // ---------------------------------------------------------------------------
 // Routing. Every race is shareable at <base>race/<slug>.
