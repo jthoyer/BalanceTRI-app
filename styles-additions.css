@@ -530,7 +530,9 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(24, 37, 66, 0.4);
+  /* Opaque white, not a translucent scrim: the sheet is a destination, not a
+     layer over the calendar. Nothing behind it should read through. */
+  background: #fff;
 }
 .auth-sheet-backdrop.hidden {
   display: none;
@@ -544,7 +546,7 @@
   color: #fff;
   border-radius: 16px 16px 0 0;
   padding: 16px 20px 22px;
-  box-shadow: 0 -8px 24px rgba(24, 37, 66, 0.25);
+  box-shadow: 0 8px 32px rgba(24, 37, 66, 0.18);
 }
 .auth-sheet-handle {
   width: 32px;
