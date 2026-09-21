@@ -18,6 +18,41 @@ function boltEmbedUrl(race) {
   const n = (race.name || '').match(/\d+/);
   return n ? `${BALANCE_BOLT_URL}?race=${n[0]}` : null;
 }
+// A race URL is typed by a member and stored in a row anyone signed in can
+// edit, so it is untrusted input by the time it reaches the DOM. Two separate
+// questions have to be asked of it.
+//
+// safeLinkUrl: may this be an href at all? Only http(s). A `javascript:` URL
+// in an href is script execution one click away, and `data:` can carry a
+// document of its own.
+function safeLinkUrl(url) {
+  try {
+    const u = new URL(url, location.href);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+// isEmbeddableBoltUrl: may this be framed? Only BalanceBolt itself.
+//
+// This app and BalanceBolt are both served from jthoyer.github.io, so they
+// share an origin. A frame is therefore not a boundary here: any other page
+// on that host, framed, can reach this document, its localStorage and the
+// signed-in Supabase session. The resize and chrome-hiding code below relies
+// on exactly that same-origin access, which is why `sandbox` is the wrong
+// fix — without allow-same-origin it breaks the embed, and with it the
+// attribute buys nothing. An allowlist is the boundary instead.
+function isEmbeddableBoltUrl(url) {
+  const safe = safeLinkUrl(url);
+  if (!safe) return false;
+  try {
+    const u = new URL(safe);
+    const base = new URL(BALANCE_BOLT_URL);
+    return u.origin === base.origin && u.pathname.startsWith(base.pathname);
+  } catch {
+    return false;
+  }
+}
 let state = JSON.parse(localStorage.getItem('balance-race-ui') || 'null') || {
   user: '',
   filter: '',
@@ -90,8 +125,20 @@ async function loadProfile() {
 }
 function renderAuth() {
   const widget = $('#authWidget');
+  widget.textContent = '';
   if (session) {
-    widget.innerHTML = `<span class="auth-name">${profile?.display_name || session.user.email}</span><button type="button" class="text-button" id="signOutButton">Sign out</button>`;
+    // profiles is readable only by its owner, so this name is the viewer's
+    // own — self-XSS rather than one member reaching another. Same mistake
+    // either way, and textContent costs nothing.
+    const name = document.createElement('span');
+    name.className = 'auth-name';
+    name.textContent = profile?.display_name || session.user.email;
+    const signOut = document.createElement('button');
+    signOut.type = 'button';
+    signOut.className = 'text-button';
+    signOut.id = 'signOutButton';
+    signOut.textContent = 'Sign out';
+    widget.append(name, signOut);
     $('#signOutButton').onclick = () => db.auth.signOut();
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
@@ -105,7 +152,24 @@ function renderAuth() {
 // heading: an <h2> to show above the email field. cancel: a handler for a
 // "Cancel" button shown below the form. Always targets the auth sheet now.
 function openSignInForm(host, { heading, cancel } = {}) {
-  host.innerHTML = `${heading ? `<h2>${heading}</h2>` : ''}<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>${cancel ? '<button type="button" class="auth-sheet-cancel">Cancel</button>' : ''}`;
+  // Every `heading` passed in today is one of this file's own literals, so
+  // this was never the live hole the roster was. It is written as DOM anyway
+  // so that no innerHTML sink in this file takes an argument at all — which
+  // is what lets the lint rule run with no suppressions, and makes the next
+  // one somebody adds fail the build.
+  host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
+  if (heading) {
+    const h2 = document.createElement('h2');
+    h2.textContent = heading;
+    host.prepend(h2);
+  }
+  if (cancel) {
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'auth-sheet-cancel';
+    cancelButton.textContent = 'Cancel';
+    host.append(cancelButton);
+  }
   const form = host.querySelector('form');
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -636,12 +700,68 @@ function render() {
     }
   }
 }
+// Builds the club-commitments roster as DOM nodes. Every member-supplied
+// string — the event-group label and the entry name — goes in via textContent
+// or setAttribute, never as markup. See the shell comment in makeDetails.
+function buildRoster(host, eventKeys, eventGroups, levelLabel) {
+  if (!eventKeys.length) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-text';
+    empty.textContent = 'No commitments yet — be the first.';
+    host.append(empty);
+    return;
+  }
+  eventKeys.forEach(key => {
+    const group = document.createElement('div');
+    group.className = 'roster-group';
+    const label = document.createElement('p');
+    label.className = 'roster-group-label';
+    label.textContent = key;
+    group.append(label);
+    eventGroups[key].forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'roster-entry';
+      const who = document.createElement('div');
+      who.className = 'roster-who';
+      const name = document.createElement('span');
+      name.className = 'roster-name';
+      name.textContent = entry.name;
+      const level = document.createElement('span');
+      // The level comes from the database too. It only ever reaches a class
+      // name, so it cannot inject markup, but an unrecognised value would
+      // still put an arbitrary string in the class list — so it is checked
+      // against the levels this app actually knows about.
+      const known = levels.some(([levelKey]) => levelKey === entry.level);
+      level.className = known ? `roster-level level-${entry.level}` : 'roster-level';
+      level.textContent = levelLabel[entry.level] || entry.level;
+      who.append(name, level);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'roster-edit';
+      edit.textContent = 'Edit';
+      edit.setAttribute('aria-label', `Edit ${entry.name}'s commitment for this race`);
+      row.append(who, edit);
+      group.append(row);
+    });
+    host.append(group);
+  });
+}
 function makeDetails(race) {
   const wrap = document.createElement('div');
   wrap.className = 'details-card';
   if (race.balanceBolt === 'Y') {
-    const embedUrl = boltEmbedUrl(race);
-    wrap.innerHTML = `${embedUrl ? '<div class="card-header">Race website</div><div class="card-body race-website-body"></div>' : ''}<div class="card-header">Race details</div><div class="card-body race-embed-body"></div>`;
+    const embedUrl = safeLinkUrl(boltEmbedUrl(race) || '');
+    const canEmbed = embedUrl !== null && isEmbeddableBoltUrl(embedUrl);
+    wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div><div class="card-header race-embed-header">Race details</div><div class="card-body race-embed-body"></div>`;
+    if (!embedUrl) {
+      wrap.querySelector('.race-website-header').remove();
+      wrap.querySelector('.race-website-body').remove();
+    }
+    // Nothing to show under "Race details" unless we are willing to frame it.
+    if (!canEmbed) {
+      wrap.querySelector('.race-embed-header').remove();
+      wrap.querySelector('.race-embed-body').remove();
+    }
     if (embedUrl) {
       const a = document.createElement('a');
       a.className = 'race-link';
@@ -651,6 +771,8 @@ function makeDetails(race) {
       a.rel = 'noopener';
       a.setAttribute('aria-label', `${race.name} sign-up: ${embedUrl}`);
       wrap.querySelector('.race-website-body').append(a);
+    }
+    if (canEmbed) {
       const iframe = document.createElement('iframe');
       iframe.className = 'race-embed';
       iframe.src = embedUrl;
@@ -658,7 +780,9 @@ function makeDetails(race) {
       iframe.title = `${race.name} embedded website`;
       // Same origin as this app (both under jthoyer.github.io), so the frame's
       // own scroll height is readable — resize to it instead of clipping at a
-      // fixed height or leaving a scrollbar inside a scrollbar.
+      // fixed height or leaving a scrollbar inside a scrollbar. That access is
+      // only safe because isEmbeddableBoltUrl has already established this is
+      // BalanceBolt and not some other page on the same host.
       const resize = () => {
         try {
           iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
@@ -707,18 +831,24 @@ function makeDetails(race) {
   eventKeys.forEach(k => eventGroups[k].sort((a, b) => a.name.localeCompare(b.name)));
   const orderedEntries = eventKeys.flatMap(k => eventGroups[k]);
   const levelLabel = Object.fromEntries(levels);
-  const rosterBody = orderedEntries.length
-    ? eventKeys
-        .map(
-          key =>
-            `<div class="roster-group"><p class="roster-group-label">${key}</p>${eventGroups[key].map(e => `<div class="roster-entry"><div class="roster-who"><span class="roster-name">${e.name}</span><span class="roster-level level-${e.level}">${levelLabel[e.level] || e.level}</span></div><button type="button" class="roster-edit" aria-label="Edit ${e.name}'s commitment for this race">Edit</button></div>`).join('')}</div>`,
-        )
-        .join('')
-    : '<p class="helper-text">No commitments yet — be the first.</p>';
   const editingEntry = state.form.editingName
     ? race.entries.find(e => e.name === state.form.editingName)
     : null;
-  wrap.innerHTML = `${race.url ? '<div class="card-header">Race website</div><div class="card-body race-website-body"></div>' : ''}<div class="card-header">Club commitments</div><div class="card-body roster-body">${rosterBody}</div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button ${state.form.commitOpen ? 'hidden' : ''}">Add your commitment</button><div class="commitment-fields ${state.form.commitOpen ? '' : 'hidden'}"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button>${editingEntry ? '<button type="button" class="remove-commit-button">Remove commitment</button>' : ''}</div></div></div>`;
+  // Static shell, no interpolation. Everything that varies is a class toggle
+  // or a node removed below, and everything carrying member-supplied text is
+  // built with textContent. Entry names and event labels are typed by members
+  // and stored in a row any signed-in member can write, so putting them
+  // through innerHTML let one member run script in every other member's
+  // browser — with the Supabase session sitting in localStorage.
+  wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div><div class="card-header">Club commitments</div><div class="card-body roster-body"></div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button">Add your commitment</button><div class="commitment-fields"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button><button type="button" class="remove-commit-button">Remove commitment</button></div></div></div>`;
+  if (!(race.url && safeLinkUrl(race.url))) {
+    wrap.querySelector('.race-website-header').remove();
+    wrap.querySelector('.race-website-body').remove();
+  }
+  wrap.querySelector('.commit-toggle-button').classList.toggle('hidden', !!state.form.commitOpen);
+  wrap.querySelector('.commitment-fields').classList.toggle('hidden', !state.form.commitOpen);
+  if (!editingEntry) wrap.querySelector('.remove-commit-button').remove();
+  buildRoster(wrap.querySelector('.roster-body'), eventKeys, eventGroups, levelLabel);
   const commitToggle = wrap.querySelector('.commit-toggle-button'),
     commitFields = wrap.querySelector('.commitment-fields');
   commitToggle.onclick = () => {
@@ -729,15 +859,16 @@ function makeDetails(race) {
     commitFields.classList.remove('hidden');
     nameInput.focus();
   };
-  if (race.url) {
+  const websiteUrl = race.url ? safeLinkUrl(race.url) : null;
+  if (websiteUrl) {
     const a = document.createElement('a');
     a.className = 'race-link';
-    a.href = race.url;
-    a.textContent = race.url;
-    a.title = race.url;
+    a.href = websiteUrl;
+    a.textContent = websiteUrl;
+    a.title = websiteUrl;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.setAttribute('aria-label', `${race.name} website: ${race.url}`);
+    a.setAttribute('aria-label', `${race.name} website: ${websiteUrl}`);
     wrap.querySelector('.race-website-body').append(a);
   }
   wrap.querySelectorAll('.roster-edit').forEach((btn, i) => {
