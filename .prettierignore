@@ -1,0 +1,11 @@
+node_modules
+package-lock.json
+
+# Prettier has no SQL parser; migrations are hand-formatted and heavily
+# commented, and reflowing them would lose that.
+supabase
+
+# Prose, hand-wrapped on purpose. Reflowing it would churn the diff of every
+# future documentation change for no gain.
+*.md
+.claude

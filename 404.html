@@ -1,64 +1,113 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Page not found — Balance Tri Club</title>
-  <script>
-    // GitHub Pages serves this file for any path it has no file for, which is
-    // how a shared /race/<slug> link arrives. Bounce those to index.html as
-    // <base>?/race/<slug>; the restore script in index.html <head> puts the
-    // path back before app.js routes on it.
-    //
-    // Only /race/<slug> is redirected. A missing stylesheet, image or typo'd
-    // path must still 404 normally rather than being swallowed by the app —
-    // that is the difference between this and the generic spa-github-pages
-    // script, which redirects everything.
-    //
-    // The base is taken from whatever precedes /race/, so nothing here has to
-    // know the repository name.
-    (function(){
-      var l=window.location;
-      var m=l.pathname.match(/^(.*?)\/race\/([^\/]+)\/?$/);
-      if(!m)return;
-      var query=l.search?'&'+l.search.slice(1).replace(/&/g,'~and~'):'';
-      l.replace(l.origin+m[1]+'/?/race/'+m[2]+query+l.hash);
-    })();
-  </script>
-  <!-- Styles are inlined: a relative stylesheet href on this page would resolve
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page not found — Balance Tri Club</title>
+    <script>
+      // GitHub Pages serves this file for any path it has no file for, which is
+      // how a shared /race/<slug> link arrives. Bounce those to index.html as
+      // <base>?/race/<slug>; the restore script in index.html <head> puts the
+      // path back before app.js routes on it.
+      //
+      // Only /race/<slug> is redirected. A missing stylesheet, image or typo'd
+      // path must still 404 normally rather than being swallowed by the app —
+      // that is the difference between this and the generic spa-github-pages
+      // script, which redirects everything.
+      //
+      // The base is taken from whatever precedes /race/, so nothing here has to
+      // know the repository name.
+      (function () {
+        var l = window.location;
+        var m = l.pathname.match(/^(.*?)\/race\/([^\/]+)\/?$/);
+        if (!m) return;
+        var query = l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '';
+        l.replace(l.origin + m[1] + '/?/race/' + m[2] + query + l.hash);
+      })();
+    </script>
+    <!-- Styles are inlined: a relative stylesheet href on this page would resolve
        against the requested (missing) path, not against the site root. -->
-  <style>
-    :root{--ink:#182542;--muted:#566177;--line:#d9dfe8;--canvas:#f7f8fa;--yellow:#f8c44f}
-    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-         background:var(--canvas);color:var(--ink);
-         font:400 16px/1.5 "DM Sans",Helvetica,Arial,sans-serif}
-    .panel{width:min(520px,calc(100% - 40px));padding:40px 34px;border:1px solid var(--line);
-           border-radius:9px;background:#fff;text-align:center}
-    /* #8a6600 rather than the hero's lighter amber: at 12px bold this is small
+    <style>
+      :root {
+        --ink: #182542;
+        --muted: #566177;
+        --line: #d9dfe8;
+        --canvas: #f7f8fa;
+        --yellow: #f8c44f;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--canvas);
+        color: var(--ink);
+        font:
+          400 16px/1.5 'DM Sans',
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      .panel {
+        width: min(520px, calc(100% - 40px));
+        padding: 40px 34px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        text-align: center;
+      }
+      /* #8a6600 rather than the hero's lighter amber: at 12px bold this is small
        text, so it needs 4.5:1 on white. Measured 5.27:1. */
-    .eyebrow{margin:0 0 9px;color:#8a6600;font-size:12px;font-weight:700;letter-spacing:1.2px}
-    h1{margin:0 0 12px;font-size:30px;line-height:1.15;letter-spacing:-.5px}
-    p{margin:0 0 24px;color:var(--muted)}
-    a.home{display:inline-block;min-height:44px;padding:11px 18px;border-radius:9px;
-           background:var(--yellow);color:var(--ink);font-weight:700;text-decoration:none}
-    a.home:focus-visible{outline:3px solid #285ba8;outline-offset:3px}
-  </style>
-</head>
-<body>
-  <main class="panel">
-    <p class="eyebrow">PAGE NOT FOUND</p>
-    <h1>We couldn't find that page.</h1>
-    <p>The link may be out of date, or the race may have been removed from the calendar.</p>
-    <a class="home" id="homeLink" href="/">Back to the race calendar</a>
-  </main>
-  <script>
-    // Best-effort home link. On a GitHub Pages project site the first path
-    // segment is the repository; anywhere else the site lives at the root.
-    (function(){
-      var l=window.location, seg=l.pathname.split('/')[1];
-      var base=(/\.github\.io$/i.test(l.hostname)&&seg)?'/'+seg+'/':'/';
-      document.getElementById('homeLink').setAttribute('href',base);
-    })();
-  </script>
-</body>
+      .eyebrow {
+        margin: 0 0 9px;
+        color: #8a6600;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.15;
+        letter-spacing: -0.5px;
+      }
+      p {
+        margin: 0 0 24px;
+        color: var(--muted);
+      }
+      a.home {
+        display: inline-block;
+        min-height: 44px;
+        padding: 11px 18px;
+        border-radius: 9px;
+        background: var(--yellow);
+        color: var(--ink);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a.home:focus-visible {
+        outline: 3px solid #285ba8;
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <p class="eyebrow">PAGE NOT FOUND</p>
+      <h1>We couldn't find that page.</h1>
+      <p>The link may be out of date, or the race may have been removed from the calendar.</p>
+      <a class="home" id="homeLink" href="/">Back to the race calendar</a>
+    </main>
+    <script>
+      // Best-effort home link. On a GitHub Pages project site the first path
+      // segment is the repository; anywhere else the site lives at the root.
+      (function () {
+        var l = window.location,
+          seg = l.pathname.split('/')[1];
+        var base = /\.github\.io$/i.test(l.hostname) && seg ? '/' + seg + '/' : '/';
+        document.getElementById('homeLink').setAttribute('href', base);
+      })();
+    </script>
+  </body>
 </html>

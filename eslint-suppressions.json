@@ -1,0 +1,13 @@
+{
+  "app.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    },
+    "no-unused-vars": {
+      "count": 4
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  }
+}
