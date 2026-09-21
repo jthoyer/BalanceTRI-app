@@ -33,8 +33,6 @@
       <div class="header-actions"><div class="auth-widget" id="authWidget"></div><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button><button class="text-button" id="resetButton">Refresh</button></div>
     </header>
 
-    <p class="sign-in-banner hidden" id="signInBanner"><span>Sign in to link races to your name.</span><span class="sign-in-banner-actions"><button type="button" class="text-button" id="signInBannerButton">Sign in</button><button type="button" class="text-button" id="signInBannerDismiss">Not now</button></span></p>
-
     <section class="hero" id="top">
       <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span class="race-count-highlight"><span id="clubCount"></span> upcoming club events</span> on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other upcoming events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
     </section>
@@ -72,6 +70,13 @@
     <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
     <section id="raceList" class="race-list" aria-live="polite"></section>
   </main>
+
+  <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
+    <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
+      <div class="auth-sheet-handle" aria-hidden="true"></div>
+      <div id="authSheetBody"></div>
+    </div>
+  </div>
 
   <!-- A real <a href="…/race/<slug>"> rather than a button, so the card can be
        opened in a new tab, copied as a link, and crawled. app.js sets the href
