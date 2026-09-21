@@ -30,8 +30,10 @@
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#top" aria-label="Balance Tri Club home"><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club" /></a>
-      <div class="header-actions"><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button><button class="text-button" id="resetButton">Refresh</button></div>
+      <div class="header-actions"><div class="auth-widget" id="authWidget"></div><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button><button class="text-button" id="resetButton">Refresh</button></div>
     </header>
+
+    <p class="sign-in-banner hidden" id="signInBanner"><span>Sign in to link races to your name.</span><span class="sign-in-banner-actions"><button type="button" class="text-button" id="signInBannerButton">Sign in</button><button type="button" class="text-button" id="signInBannerDismiss">Not now</button></span></p>
 
     <section class="hero" id="top">
       <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span class="race-count-highlight"><span id="clubCount"></span> upcoming club events</span> on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other upcoming events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
