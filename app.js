@@ -34,11 +34,14 @@ const $=s=>document.querySelector(s); const persist=()=>localStorage.setItem('ba
 function dateParts(date){const d=new Date(date+'T12:00:00');return {day:String(d.getDate()).padStart(2,'0'),month:d.toLocaleString('en-AU',{month:'short'}),group:d.toLocaleString('en-AU',{month:'long',year:'numeric'})}}
 function myEntry(race){return race.entries.find(e=>e.name===state.user)}
 // ---------------------------------------------------------------------------
-// Auth. Magic-link sign-in via Supabase Auth. Signing in is optional — entries
-// still save by typed name either way (see saveEntry) — this just remembers
-// who you are so the name field and "my entry" matching don't reset every
-// visit. A signed-in profile's display_name seeds state.user once, but never
-// overwrites a name someone's already typed in this browser.
+// Auth. Magic-link sign-in via Supabase Auth. Browsing the calendar and every
+// roster stays open to everyone signed out — but saving, editing or removing
+// a commitment requires being signed in (requireSignIn, below, and the
+// matching RLS policies on entries). It's still the same honour system once
+// signed in: any authenticated member can add or edit any entry by typed
+// name (see saveEntry) — sign-in isn't tied to ownership, only to being
+// someone. A signed-in profile's display_name seeds state.user once, but
+// never overwrites a name someone's already typed in this browser.
 // ---------------------------------------------------------------------------
 let session=null;
 let profile=null;
@@ -56,28 +59,76 @@ function renderAuth(){
     widget.innerHTML=`<button type="button" class="text-button" id="signInButton">Sign in</button>`;
     $('#signInButton').onclick=()=>openSignInForm(widget);
   }
-  $('#signInBanner').classList.toggle('hidden',!!session||Date.now()<state.authDismissedUntil);
 }
-function openSignInForm(host){
-  host.innerHTML=`<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="text-button">Send link</button></form>`;
-  host.querySelector('form').addEventListener('submit',async e=>{
+// heading: an <h2> to show above the email field (the auth sheet uses this;
+// the header widget doesn't need one). cancel: a handler for a "Cancel"
+// button shown below the form (the auth sheet's; the header widget has none).
+function openSignInForm(host,{heading,cancel}={}){
+  host.innerHTML=`${heading?`<h2>${heading}</h2>`:''}<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>${cancel?'<button type="button" class="auth-sheet-cancel">Cancel</button>':''}`;
+  const form=host.querySelector('form');
+  form.addEventListener('submit',async e=>{
     e.preventDefault();
     const email=new FormData(e.target).get('email').trim();
     const btn=e.target.querySelector('button');
     btn.disabled=true;btn.textContent='Sending…';
     const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.href}});
-    if(error){alert('Could not send sign-in link: '+error.message);renderAuth();return}
-    host.innerHTML='<span class="auth-name">Check your email for a sign-in link.</span>';
+    if(error){alert('Could not send sign-in link: '+error.message);btn.disabled=false;btn.textContent='Send link';return}
+    form.outerHTML='<span class="auth-name">Check your email for a sign-in link.</span>';
   });
+  if(cancel)host.querySelector('.auth-sheet-cancel').onclick=cancel;
+}
+// ---------------------------------------------------------------------------
+// The auth sheet: a bottom sheet with two jobs. As a "nudge" it appears once
+// per visit for a signed-out browser (unless snoozed) offering Sign in or
+// Just browsing; tapping outside it, scrolling, or Just browsing all close it
+// the same way "just browsing" — self-dismissing, never blocking. As a "gate"
+// requireSignIn() opens it to require sign-in before a write goes through
+// (saving, editing or removing a commitment); Cancel there just backs out.
+// ---------------------------------------------------------------------------
+let authSheetDismissed=false; // this pageview only, independent of the snooze
+let authSheetMode=null; // 'nudge' | 'gate' | null
+// Tracks the nudge's checkbox live (via onchange, below) rather than reading
+// it at dismiss time, because clicking "Sign in" swaps the checkbox out for
+// the email form — so a box checked before that swap must still be honoured
+// if the visitor then cancels out of the email step instead of finishing it.
+let authSheetSnoozeWanted=false;
+function closeAuthSheet(){
+  if(authSheetMode==='nudge'){
+    if(authSheetSnoozeWanted){state.authDismissedUntil=Date.now()+10*24*60*60*1000;persist()}
+    authSheetDismissed=true;
+  }
+  authSheetMode=null;
+  authSheetSnoozeWanted=false;
+  $('#authSheetBackdrop').classList.add('hidden');
+}
+function showAuthSheetNudge(){
+  if(session||authSheetDismissed||Date.now()<state.authDismissedUntil)return;
+  authSheetMode='nudge';
+  authSheetSnoozeWanted=false;
+  $('#authSheetBody').innerHTML=`<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint auth-sheet-hint-muted">Tap outside or keep scrolling — this closes on its own.</p>`;
+  $('#authSheetSnooze').onchange=e=>{authSheetSnoozeWanted=e.target.checked};
+  $('#authSheetSignInButton').onclick=()=>openSignInForm($('#authSheetBody'),{heading:'Sign in',cancel:closeAuthSheet});
+  $('#authSheetBrowseButton').onclick=closeAuthSheet;
+  $('#authSheetBackdrop').classList.remove('hidden');
+}
+// Called before a write; opens the gate and returns false if signed out
+// (callers must return immediately), or returns true if already signed in.
+function requireSignIn(title){
+  if(session)return true;
+  authSheetMode='gate';
+  openSignInForm($('#authSheetBody'),{heading:title,cancel:closeAuthSheet});
+  $('#authSheetBackdrop').classList.remove('hidden');
+  return false;
 }
 async function initAuth(){
   const {data:{session:s}}=await db.auth.getSession();
   session=s;
   if(session)await loadProfile();
   renderAuth();
+  showAuthSheetNudge();
   db.auth.onAuthStateChange(async(_event,s)=>{
     session=s;
-    if(session)await loadProfile();else profile=null;
+    if(session){await loadProfile();closeAuthSheet()}else profile=null;
     renderAuth();
   });
 }
@@ -346,9 +397,14 @@ function makeDetails(race){const wrap=document.createElement('div');wrap.classNa
     // a page inside our page instead of part of it.
     style.textContent='.topbar{display:none}.shell{width:100%;margin:0}';doc.head.append(style)}}catch(e){}};
     iframe.addEventListener('load',()=>{hideChrome();resize();try{new ResizeObserver(resize).observe(iframe.contentDocument.documentElement)}catch(e){}});
-    wrap.querySelector('.race-embed-body').append(iframe)}return wrap}if(state.form.commitOpen===undefined){state.form.commitOpen=!!myEntry(race);state.form.editingName=myEntry(race)?.name||''}const entries=race.entries.filter(e=>e.level!=='not');const eventGroups={};entries.forEach(e=>{const key=e.events.length?e.events.join(', '):'Event TBC';(eventGroups[key]||=[]).push(e)});const eventKeys=Object.keys(eventGroups).sort((a,b)=>a.localeCompare(b));eventKeys.forEach(k=>eventGroups[k].sort((a,b)=>a.name.localeCompare(b.name)));const orderedEntries=eventKeys.flatMap(k=>eventGroups[k]);const levelLabel=Object.fromEntries(levels);const rosterBody=orderedEntries.length?eventKeys.map(key=>`<div class="roster-group"><p class="roster-group-label">${key}</p>${eventGroups[key].map(e=>`<div class="roster-entry"><div class="roster-who"><span class="roster-name">${e.name}</span><span class="roster-level level-${e.level}">${levelLabel[e.level]||e.level}</span></div><button type="button" class="roster-edit" aria-label="Edit ${e.name}'s commitment for this race">Edit</button></div>`).join('')}</div>`).join(''):'<p class="helper-text">No commitments yet — be the first.</p>';const editingEntry=state.form.editingName?race.entries.find(e=>e.name===state.form.editingName):null;wrap.innerHTML=`${race.url?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Club commitments</div><div class="card-body roster-body">${rosterBody}</div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button ${state.form.commitOpen?'hidden':''}">Add your commitment</button><div class="commitment-fields ${state.form.commitOpen?'':'hidden'}"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button>${editingEntry?'<button type="button" class="remove-commit-button">Remove commitment</button>':''}</div></div></div>`;const commitToggle=wrap.querySelector('.commit-toggle-button'),commitFields=wrap.querySelector('.commitment-fields');commitToggle.onclick=()=>{state.form.commitOpen=true;persist();commitToggle.classList.add('hidden');commitFields.classList.remove('hidden');nameInput.focus()};if(race.url){const a=document.createElement('a');a.className='race-link';a.href=race.url;a.textContent=race.url;a.title=race.url;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} website: ${race.url}`);wrap.querySelector('.race-website-body').append(a)}wrap.querySelectorAll('.roster-edit').forEach((btn,i)=>{btn.onclick=()=>{const entry=orderedEntries[i];const opts=participationOptions();const known=[],extra=[];entry.events.forEach(ev=>{const k=ev.trim().toLowerCase();const hit=opts.find(o=>o.toLowerCase()===k)||(k==='to'?'TO (Technical official)':k==='team'?'Team':null);if(hit)known.includes(hit)||known.push(hit);else extra.push(ev)});state.form={events:known,otherText:extra.join(', '),otherOpen:!!extra.length,level:entry.level,commitOpen:true,editingName:entry.name};persist();render();const fields=$('.commitment-fields');if(fields){fields.querySelector('.name-input').focus({preventScroll:true});fields.scrollIntoView({behavior:'smooth',block:'center'})}}});const removeCommitButton=wrap.querySelector('.remove-commit-button');if(removeCommitButton)removeCommitButton.onclick=async()=>{if(!confirm(`Remove ${editingEntry.name} from this race?`))return;removeCommitButton.disabled=true;removeCommitButton.textContent='Removing…';try{await removeEntry(race.id,editingEntry.name);state.form={events:[],otherText:'',otherOpen:false,level:'considering',commitOpen:false,editingName:''};persist();await loadRaces()}catch(err){removeCommitButton.disabled=false;removeCommitButton.textContent='Remove commitment';alert('Could not remove: '+err.message)}};const nameInput=wrap.querySelector('.name-input');nameInput.value=state.form.editingName||'';const eventChoices=wrap.querySelector('.event-choices');const otherRow=wrap.querySelector('.other-row');const otherInput=wrap.querySelector('.other-input');otherInput.value=state.form.otherText||'';otherInput.oninput=()=>{state.form.otherText=otherInput.value;persist()};
+    wrap.querySelector('.race-embed-body').append(iframe)}return wrap}if(state.form.commitOpen===undefined){state.form.commitOpen=!!myEntry(race);state.form.editingName=myEntry(race)?.name||''}const entries=race.entries.filter(e=>e.level!=='not');const eventGroups={};entries.forEach(e=>{const key=e.events.length?e.events.join(', '):'Event TBC';(eventGroups[key]||=[]).push(e)});const eventKeys=Object.keys(eventGroups).sort((a,b)=>a.localeCompare(b));eventKeys.forEach(k=>eventGroups[k].sort((a,b)=>a.name.localeCompare(b.name)));const orderedEntries=eventKeys.flatMap(k=>eventGroups[k]);const levelLabel=Object.fromEntries(levels);const rosterBody=orderedEntries.length?eventKeys.map(key=>`<div class="roster-group"><p class="roster-group-label">${key}</p>${eventGroups[key].map(e=>`<div class="roster-entry"><div class="roster-who"><span class="roster-name">${e.name}</span><span class="roster-level level-${e.level}">${levelLabel[e.level]||e.level}</span></div><button type="button" class="roster-edit" aria-label="Edit ${e.name}'s commitment for this race">Edit</button></div>`).join('')}</div>`).join(''):'<p class="helper-text">No commitments yet — be the first.</p>';const editingEntry=state.form.editingName?race.entries.find(e=>e.name===state.form.editingName):null;wrap.innerHTML=`${race.url?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Club commitments</div><div class="card-body roster-body">${rosterBody}</div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button ${state.form.commitOpen?'hidden':''}">Add your commitment</button><div class="commitment-fields ${state.form.commitOpen?'':'hidden'}"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button>${editingEntry?'<button type="button" class="remove-commit-button">Remove commitment</button>':''}</div></div></div>`;const commitToggle=wrap.querySelector('.commit-toggle-button'),commitFields=wrap.querySelector('.commitment-fields');commitToggle.onclick=()=>{if(!requireSignIn('Sign in to add your commitment'))return;state.form.commitOpen=true;persist();commitToggle.classList.add('hidden');commitFields.classList.remove('hidden');nameInput.focus()};if(race.url){const a=document.createElement('a');a.className='race-link';a.href=race.url;a.textContent=race.url;a.title=race.url;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} website: ${race.url}`);wrap.querySelector('.race-website-body').append(a)}wrap.querySelectorAll('.roster-edit').forEach((btn,i)=>{btn.onclick=()=>{if(!requireSignIn('Sign in to edit this entry'))return;const entry=orderedEntries[i];const opts=participationOptions();const known=[],extra=[];entry.events.forEach(ev=>{const k=ev.trim().toLowerCase();const hit=opts.find(o=>o.toLowerCase()===k)||(k==='to'?'TO (Technical official)':k==='team'?'Team':null);if(hit)known.includes(hit)||known.push(hit);else extra.push(ev)});state.form={events:known,otherText:extra.join(', '),otherOpen:!!extra.length,level:entry.level,commitOpen:true,editingName:entry.name};persist();render();const fields=$('.commitment-fields');if(fields){fields.querySelector('.name-input').focus({preventScroll:true});fields.scrollIntoView({behavior:'smooth',block:'center'})}}});const removeCommitButton=wrap.querySelector('.remove-commit-button');if(removeCommitButton)removeCommitButton.onclick=async()=>{if(!requireSignIn('Sign in to remove this entry'))return;if(!confirm(`Remove ${editingEntry.name} from this race?`))return;removeCommitButton.disabled=true;removeCommitButton.textContent='Removing…';try{await removeEntry(race.id,editingEntry.name);state.form={events:[],otherText:'',otherOpen:false,level:'considering',commitOpen:false,editingName:''};persist();await loadRaces()}catch(err){removeCommitButton.disabled=false;removeCommitButton.textContent='Remove commitment';alert('Could not remove: '+err.message)}};const nameInput=wrap.querySelector('.name-input');nameInput.value=state.form.editingName||'';const eventChoices=wrap.querySelector('.event-choices');const otherRow=wrap.querySelector('.other-row');const otherInput=wrap.querySelector('.other-input');otherInput.value=state.form.otherText||'';otherInput.oninput=()=>{state.form.otherText=otherInput.value;persist()};
 function participationOptions(){const merged=[...race.events];const ensure=(label,aliases)=>{const idx=merged.findIndex(e=>aliases.includes(e.trim().toLowerCase()));if(idx>=0)merged[idx]=label;else merged.push(label)};ensure('TO (Technical official)',['to','to (technical official)']);ensure('Team',['team']);return merged}
-function update(){eventChoices.innerHTML='';participationOptions().forEach(event=>{const b=document.createElement('button');b.type='button';const active=state.form.events.includes(event);b.className='choice '+(active?'selected':'');b.setAttribute('aria-pressed',String(active));b.textContent=event;b.onclick=()=>{state.form.events=active?state.form.events.filter(x=>x!==event):[...state.form.events,event];persist();update()};eventChoices.append(b)});const otherBtn=document.createElement('button');otherBtn.type='button';otherBtn.className='choice '+(state.form.otherOpen?'selected':'');otherBtn.setAttribute('aria-pressed',String(!!state.form.otherOpen));otherBtn.textContent='Other';otherBtn.onclick=()=>{state.form.otherOpen=!state.form.otherOpen;persist();update();if(state.form.otherOpen)otherInput.focus()};eventChoices.append(otherBtn);otherRow.classList.toggle('hidden',!state.form.otherOpen);const lc=wrap.querySelector('.level-choices');lc.innerHTML='';levels.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.className=`choice level-${key} ${state.form.level===key?'selected':''}`;b.textContent=label;b.onclick=()=>{state.form.level=key;persist();update()};lc.append(b)});const btn=wrap.querySelector('.save-button');btn.onclick=async()=>{const name=nameInput.value.trim();if(!name){nameInput.focus();return}const extra=(state.form.otherText||'').trim();const events=[...new Set([...state.form.events,...(extra?[extra]:[])])];if(!events.length){(state.form.otherOpen?otherInput:eventChoices).focus?.();return}btn.disabled=true;btn.textContent='Saving…';try{for(const ev of events){if(!race.events.includes(ev))await addEvent(race.id,ev)}await saveEntry(race.id,name,events,state.form.level);if(state.form.editingName&&state.form.editingName!==name)await removeEntry(race.id,state.form.editingName);state.form.editingName=name;state.user=name;persist();await loadRaces()}catch(err){btn.disabled=false;btn.textContent='Save commitment';alert('Could not save: '+err.message)}}}update();return wrap}
+function update(){eventChoices.innerHTML='';participationOptions().forEach(event=>{const b=document.createElement('button');b.type='button';const active=state.form.events.includes(event);b.className='choice '+(active?'selected':'');b.setAttribute('aria-pressed',String(active));b.textContent=event;b.onclick=()=>{state.form.events=active?state.form.events.filter(x=>x!==event):[...state.form.events,event];persist();update()};eventChoices.append(b)});const otherBtn=document.createElement('button');otherBtn.type='button';otherBtn.className='choice '+(state.form.otherOpen?'selected':'');otherBtn.setAttribute('aria-pressed',String(!!state.form.otherOpen));otherBtn.textContent='Other';otherBtn.onclick=()=>{state.form.otherOpen=!state.form.otherOpen;persist();update();if(state.form.otherOpen)otherInput.focus()};eventChoices.append(otherBtn);otherRow.classList.toggle('hidden',!state.form.otherOpen);const lc=wrap.querySelector('.level-choices');lc.innerHTML='';levels.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.className=`choice level-${key} ${state.form.level===key?'selected':''}`;b.textContent=label;b.onclick=()=>{state.form.level=key;persist();update()};lc.append(b)});const btn=wrap.querySelector('.save-button');btn.onclick=async()=>{const name=nameInput.value.trim();if(!name){nameInput.focus();return}
+    // Snapshot the typed name before the gate, so a signed-out save attempt
+    // doesn't lose it if the magic-link round trip reloads the page.
+    const previousEditingName=state.form.editingName;if(name!==previousEditingName){state.form.editingName=name;persist()}
+    if(!requireSignIn('Sign in to save your commitment'))return;
+    const extra=(state.form.otherText||'').trim();const events=[...new Set([...state.form.events,...(extra?[extra]:[])])];if(!events.length){(state.form.otherOpen?otherInput:eventChoices).focus?.();return}btn.disabled=true;btn.textContent='Saving…';try{for(const ev of events){if(!race.events.includes(ev))await addEvent(race.id,ev)}await saveEntry(race.id,name,events,state.form.level);if(previousEditingName&&previousEditingName!==name)await removeEntry(race.id,previousEditingName);state.form.editingName=name;state.user=name;persist();await loadRaces()}catch(err){btn.disabled=false;btn.textContent='Save commitment';alert('Could not save: '+err.message)}}}update();return wrap}
 function toggleAdd(open){const panel=$('#addPanel');panel.classList.toggle('hidden',!open);if(open)panel.querySelector('input').focus()}
 document.querySelectorAll('.view-toggle-btn').forEach(b=>b.onclick=()=>{state.viewFilter=b.dataset.view;persist();render()});
 document.querySelectorAll('#raceForm,#editForm').forEach(f=>{f.eventType.onchange=()=>applyEventTypeFields(f);applyEventTypeFields(f)});
@@ -359,6 +415,6 @@ $('#editCancelButton').onclick=closeEditScreen;$('#editBackButton').onclick=clos
 window.addEventListener('popstate',()=>{if(bootstrapped)routeFromUrl()});
 $('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);const wasOpen=openId===raceId;editingId=null;openId=null;if(wasOpen)navigate(BASE_PATH,{replace:true});$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
 $('#resetButton').onclick=()=>{loadRaces()};loadRaces();
-$('#signInBannerButton').onclick=()=>openSignInForm($('#signInBanner'));
-$('#signInBannerDismiss').onclick=()=>{state.authDismissedUntil=Date.now()+30*24*60*60*1000;persist();renderAuth()};
+$('#authSheetBackdrop').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAuthSheet()});
+window.addEventListener('scroll',()=>{if(!$('#authSheetBackdrop').classList.contains('hidden'))closeAuthSheet()},{passive:true});
 initAuth();
