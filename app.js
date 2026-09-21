@@ -1,3 +1,23 @@
+// GitHub Pages has no server-side rewrites, so a direct hit on /race/<slug> —
+// a shared link, or a refresh on a race screen — is served by 404.html, which
+// bounces back here as <base>?/race/<slug>. Put the real path back before
+// anything below reads location.pathname. The other half lives in 404.html.
+//
+// This runs from app.js rather than an inline script in <head> on purpose.
+// Rewriting the URL mid-parse moves the document's base URL to <base>/race/,
+// and every relative URL in the document parsed after that point — styles.css,
+// the logo, app.js itself — resolves against it and 404s, leaving an unstyled
+// page with no script. By the time app.js runs, the document has already
+// resolved those, so the rewrite is safe here.
+(function restoreDeepLinkPath() {
+  const l = window.location;
+  if (l.search.slice(0, 2) !== '?/') return;
+  const parts = l.search.slice(1).split('&');
+  const route = parts.shift();
+  const query = parts.length ? '?' + parts.join('&').replace(/~and~/g, '&') : '';
+  const base = l.pathname.replace(/index\.html$/, '').replace(/\/+$/, '');
+  window.history.replaceState(null, '', base + route + query + l.hash);
+})();
 // Backed by Supabase — see README.md for the project and schema.
 const SUPABASE_URL = 'https://shkfwuogrldbqldpipxd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV';
