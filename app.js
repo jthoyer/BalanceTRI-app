@@ -207,9 +207,60 @@ function openSignInForm(host, { heading, cancel } = {}) {
       btn.textContent = 'Send link';
       return;
     }
-    form.outerHTML = '<span class="auth-name">Check your email for a sign-in link.</span>';
+    showCodeStep(host, email, cancel);
   });
   if (cancel) host.querySelector('.auth-sheet-cancel').onclick = cancel;
+}
+// Step two: the email carries both a link and a 6-digit code, and this is the
+// box for the code. It exists because of how magic links fail on a phone —
+// tapping the link inside the Gmail or Outlook app opens an in-app browser,
+// which signs *that* browser in and leaves the tab they started in signed
+// out, form and all. Typing the code signs them in where they already are.
+// Supabase issues one token per request, so the link and the code are the
+// same credential: whichever they use, the other stops working.
+function showCodeStep(host, email, cancel) {
+  // A bare literal, like the form above it: nothing interpolated reaches
+  // innerHTML, which is what keeps no-unsanitized/property passing here with
+  // no suppression. The typed address and the Cancel button go in as DOM.
+  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
+  host.querySelector('.sent-to-address').textContent = email;
+  if (cancel) {
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'auth-sheet-cancel';
+    cancelButton.textContent = 'Cancel';
+    cancelButton.onclick = cancel;
+    host.append(cancelButton);
+  }
+  const form = host.querySelector('form');
+  const input = form.querySelector('.code-input');
+  // Phones paste the code with whatever spacing the mail app rendered, so
+  // strip anything that isn't a digit as they type rather than rejecting it.
+  // This is also why there's no maxlength: the attribute truncates a pasted
+  // "48 29 15" to "48 29 " before this handler ever sees it, and the strip
+  // then leaves four digits. Length is enforced here instead.
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+  });
+  input.focus();
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const token = input.value.trim();
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    // type:'email' covers both halves of signInWithOtp — a brand-new address
+    // (signup) and a returning one (magiclink) — so one call handles both.
+    const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
+    // On success onAuthStateChange closes the sheet and re-renders; there's
+    // no page reload here, unlike the link, so nothing else to do.
+    if (error) {
+      alert("That code didn't work: " + error.message);
+      btn.disabled = false;
+      btn.textContent = 'Sign me in';
+      input.select();
+    }
+  });
 }
 // ---------------------------------------------------------------------------
 // The auth sheet: every sign-in entry point (the header button, the nudge,
@@ -280,6 +331,10 @@ async function initAuth() {
       closeAuthSheet();
     } else profile = null;
     renderAuth();
+    // Signing in with the code never reloads the page, so the name loadProfile
+    // just seeded into state.user would sit unrendered until the next redraw.
+    // The link path got this free from the reload.
+    render();
   });
 }
 async function removeEntry(raceId, name) {

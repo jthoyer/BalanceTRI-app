@@ -247,6 +247,20 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Branded sign-in emails. `confirmation` goes to a brand-new email address,
+# `magic_link` to one that has signed in before — both are reachable from the
+# app's single signInWithOtp() call, so both are branded. These paths only
+# apply to a local `supabase start` stack; the hosted project reads its
+# templates from the dashboard, so any edit here has to be pasted across.
+# See README.md ("Sign-in emails").
+[auth.email.template.confirmation]
+subject = "Confirm your email — Balance Tri Club"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Your Balance Tri Club sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true

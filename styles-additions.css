@@ -672,6 +672,30 @@
   background: var(--yellow);
   color: var(--ink);
 }
+/* The 6-digit code box. Wide-tracked and centred so a typed code reads back
+   the way it looks in the email, and 18px so iOS doesn't zoom the sheet on
+   focus (anything under 16px triggers it). */
+.auth-sheet .code-input {
+  text-align: center;
+  font:
+    700 18px/1 'DM Sans',
+    monospace;
+  letter-spacing: 8px;
+  text-indent: 8px;
+}
+.auth-sheet .code-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 10px;
+}
+/* .sign-in-form is a row and sets flex:1 on its input to eat the space beside
+   the button. Stacked, that same rule stretches the input vertically, so the
+   code form opts out of it. */
+.auth-sheet .code-form input {
+  flex: none;
+}
 .auth-sheet .auth-sheet-cancel {
   display: block;
   margin-top: 8px;
