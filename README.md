@@ -16,7 +16,7 @@ Row Level Security is enabled on all three tables. `races` keeps policies that a
 
 ## Sign-in
 
-`app.js` uses Supabase Auth's email magic-link flow (`signInWithOtp`): entering an email sends a link, and opening it signs the browser in. The `handle_new_user` trigger (in the `add_profiles_table` migration) creates a matching `profiles` row the first time someone signs in, seeding `display_name` from the email's local part. Once signed in, that `display_name` fills the "Your name" field automatically (but never overwrites a name already typed in this browser).
+`app.js` uses Supabase Auth's email magic-link flow (`signInWithOtp`): entering an email sends a link, and opening it signs the browser in. The same email also carries a **6-digit code**, and the sheet shows a box for it (`showCodeStep` in `app.js`, calling `verifyOtp` with `type: 'email'`, which covers both a brand-new address and a returning one). The code is there because of the usual way a magic link fails on a phone: tapping the link inside the Gmail or Outlook app opens an in-app browser, which signs *that* browser in and leaves the tab the member started in signed out. Typing the code signs them in where they already are. Supabase issues one token per request, so the link and the code are the same credential — using either retires the other. The `handle_new_user` trigger (in the `add_profiles_table` migration) creates a matching `profiles` row the first time someone signs in, seeding `display_name` from the email's local part. Once signed in, that `display_name` fills the "Your name" field automatically (but never overwrites a name already typed in this browser).
 
 Browsing is always open — the calendar and every race's roster are visible whether or not you're signed in. Saving, editing or removing a commitment is not: a signed-out attempt opens a bottom sheet asking you to sign in first (`requireSignIn` in `app.js`), and the click that started it resumes once you are.
 
@@ -31,11 +31,13 @@ The sign-in email is the whole funnel — nobody who doesn't open it ever signs 
 
 The app makes one `signInWithOtp()` call; Supabase picks the template based on whether the address is new. Both need to be branded or half the members see the default.
 
-They're table-based HTML with every style inline, because email clients strip `<style>` blocks and external CSS — keep it that way when editing. Each carries a hidden **preheader**: the grey preview line the inbox shows next to the subject, which is the second thing a member reads and a bigger lever on opens than anything in the body.
+Both carry the link (`{{ .ConfirmationURL }}`) and the code (`{{ .Token }}`), side by side and with similar weight — the code is the way out of the in-app-browser trap above, not a curiosity.
+
+They're styled to match the app (`styles.css`): the `#f7f8fa` canvas, a white card with a `#d9dfe8` hairline and 9px corners, `#182542` headings, `#566177` body, the app's yellow primary button, and `#116b43` for links and the accent word. They're table-based HTML with every style inline, because email clients strip `<style>` blocks and external CSS — keep it that way when editing. Each carries a hidden **preheader**: the grey preview line the inbox shows next to the subject, which is the second thing a member reads and a bigger lever on opens than anything in the body.
 
 **Two places, one source.** `[auth.email.template.*]` in `supabase/config.toml` points at these files, but that only drives a local `supabase start` stack. The hosted project reads its templates from the dashboard, so after editing a file here, paste it into [Authentication → Emails](https://supabase.com/dashboard/project/shkfwuogrldbqldpipxd/auth/templates) (subject line included) or the two drift apart.
 
-The mark at the top is set in text, not the club logo: `assets/balance-logo.png` is a black wordmark on white, so it vanishes against the navy canvas, and most clients block remote images by default anyway. A white-on-dark logo asset would let that become a real `<img>`.
+The logo is loaded from the live site (`https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png`) rather than embedded, so it only appears once a member allows images — which most clients don't by default. Everything the email needs to work is text, and the `alt` carries the club name when the image is blocked.
 
 **The sender still says Supabase.** Emails go out as `Supabase Auth <noreply@mail.app.supabase.io>`, which no member recognises and which spam filters treat accordingly — and the shared sender is capped at a handful of emails per hour, so a club-wide push would silently hit the limit. The template can't fix any of that. Configuring custom SMTP (Resend, Postmark, SendGrid) under Authentication → Settings, with a verified `balancetriclub.com.au` sender and SPF/DKIM records, is the single biggest remaining lever on sign-in rates.
 

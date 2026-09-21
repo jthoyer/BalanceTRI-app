@@ -5,81 +5,83 @@
   Available variables: {{ .ConfirmationURL }} {{ .Token }} {{ .TokenHash }}
   {{ .SiteURL }} {{ .Email }} {{ .RedirectTo }}
 
+  Both a link and a code, deliberately. Tapping the link inside the Gmail or
+  Outlook app opens an in-app browser, which signs that browser in and leaves
+  the tab they started in signed out; the code gets them in where they already
+  are. Supabase issues one token per request, so whichever they use, the other
+  stops working — that's expected.
+
   Email clients strip <style> blocks and external CSS, so every rule here is
-  inline and the layout is tables, not flex/grid. Keep it that way.
+  inline and the layout is tables, not flex/grid. Keep it that way. Colours
+  match the app (styles.css): canvas #f7f8fa, ink #182542, muted #566177,
+  rule #d9dfe8, yellow #f8c44f, green #116b43.
 -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark light" />
+  <meta name="color-scheme" content="light" />
   <title>Your Balance Tri Club sign-in link</title>
 </head>
-<body style="margin:0;padding:0;background:#0D1B2A;">
-  <!-- Preheader: the grey preview line next to the subject in the inbox. It
-       is the second thing a member reads, so it repeats the promise rather
-       than leaking the first line of body copy. -->
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0D1B2A;font-size:1px;line-height:1px;">
-    One tap and you're back on the race calendar. This link lasts an hour.
+<body style="margin:0;padding:0;background:#f7f8fa;">
+  <!-- Preheader: the grey preview line the inbox shows next to the subject.
+       It is read before anything in the body, so it repeats the promise
+       rather than leaking the first line of copy. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f7f8fa;font-size:1px;line-height:1px;">
+    One tap and you're back on the race calendar. Or use the code inside.
   </div>
 
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0D1B2A" style="background:#0D1B2A;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f7f8fa" style="background:#f7f8fa;">
     <tr>
       <td align="center" style="padding:32px 16px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
 
-          <!-- Typographic wordmark, not the logo PNG. The club's logo is a
-               black wordmark on white, so it disappears on navy — and most
-               clients block remote images by default anyway. Text always
-               renders. Swap this for an <img> once a white-on-dark logo
-               asset exists (see README, "Sign-in emails"). -->
+          <!-- Card, matching the app's white panels: 1px #d9dfe8, 9px radius. -->
           <tr>
-            <td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;">
-              <span style="color:#FFFFFF;font-size:20px;font-weight:800;letter-spacing:3px;">BALANCE</span>
-              <span style="color:#F5C518;font-size:20px;font-weight:800;letter-spacing:3px;">&nbsp;TRI CLUB</span>
-            </td>
-          </tr>
+            <td bgcolor="#ffffff" style="background:#ffffff;border:1px solid #d9dfe8;border-radius:9px;padding:32px 28px;">
 
-          <tr>
-            <td style="padding:0 0 14px;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;font-size:32px;font-weight:800;line-height:1.1;letter-spacing:-0.5px;text-transform:uppercase;">
-              You're one tap<br />from the start line
-            </td>
-          </tr>
+              <img src="https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png" width="150" alt="Balance Tri Club" style="display:block;height:auto;border:0;max-width:150px;margin:0 0 24px;" />
 
-          <tr>
-            <td style="padding:0 0 28px;color:#E8E8E8;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;">
-              Hit the button and we'll sign you in — no password to remember, ever.
-            </td>
-          </tr>
+              <h1 style="margin:0 0 14px;color:#182542;font-family:Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;line-height:1.15;letter-spacing:-0.8px;">You're one tap from the <span style="color:#116b43;">start line</span></h1>
 
-          <tr>
-            <td style="padding:0 0 24px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <p style="margin:0 0 26px;color:#566177;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;">Hit the button and we'll sign you in — no password to remember, ever.</p>
+
+              <!-- CTA in the app's primary-button colours: yellow, ink text. -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px;">
                 <tr>
-                  <td bgcolor="#3DAF4E" style="border-radius:9px;">
-                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 32px;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;line-height:1;text-decoration:none;border-radius:9px;">Sign me in &rarr;</a>
+                  <td bgcolor="#f8c44f" style="border-radius:9px;">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 30px;color:#182542;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;line-height:1;text-decoration:none;border-radius:9px;">Sign me in &rarr;</a>
                   </td>
                 </tr>
               </table>
+
+              <!-- The code. Reading the link in one app and the calendar in
+                   another is the usual way a magic link fails, so this is the
+                   way out, not a curiosity: give it the same weight as the
+                   button. -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+                <tr>
+                  <td bgcolor="#eef2fb" align="center" style="background:#eef2fb;border:1px solid #d9dfe8;border-radius:9px;padding:18px 16px;">
+                    <p style="margin:0 0 8px;color:#566177;font-family:Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;line-height:1.4;">Already got the calendar open? Type this in instead:</p>
+                    <p style="margin:0;color:#182542;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:30px;font-weight:700;line-height:1.2;letter-spacing:6px;">{{ .Token }}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 4px;color:#566177;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
+                The link and the code both expire in an hour, and using one retires the other. Button not playing along? Paste this into your browser:
+              </p>
+              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
+                <a href="{{ .ConfirmationURL }}" style="color:#116b43;text-decoration:underline;word-break:break-all;">{{ .ConfirmationURL }}</a>
+              </p>
+
             </td>
           </tr>
 
           <tr>
-            <td style="padding:0 0 28px;color:#8E9BAC;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
-              The link works once and expires in an hour. Button not playing along? Paste this into your browser:<br />
-              <a href="{{ .ConfirmationURL }}" style="color:#3A8FD5;text-decoration:underline;word-break:break-all;">{{ .ConfirmationURL }}</a>
-            </td>
-          </tr>
-
-          <tr>
-            <td style="padding:0 0 20px;border-top:1px solid rgba(255,255,255,0.2);"></td>
-          </tr>
-
-          <tr>
-            <td style="color:#8E9BAC;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
+            <td style="padding:20px 8px 0;color:#566177;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;">
               Sent to {{ .Email }} because someone asked for a sign-in link to the Balance Tri Club race calendar. Wasn't you? Ignore this — nothing happens without the tap.<br /><br />
-              <strong style="color:#E8E8E8;">Balance Triathlon Club</strong> &middot; Sydney<br />
-              <a href="{{ .SiteURL }}" style="color:#3A8FD5;text-decoration:underline;">Race calendar</a>
+              <strong style="color:#182542;">Balance Triathlon Club</strong> &middot; Sydney &middot; <a href="{{ .SiteURL }}" style="color:#116b43;text-decoration:underline;">Race calendar</a>
             </td>
           </tr>
 
