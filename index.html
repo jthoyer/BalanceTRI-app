@@ -4,22 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Balance Tri Club — Race commitments</title>
-    <script>
-      // GitHub Pages has no server-side rewrites, so a direct hit on
-      // /race/<slug> is served by 404.html, which bounces back here as
-      // <base>?/race/<slug>. Put the real path back before app.js reads
-      // location.pathname. Must stay ahead of app.js in the document.
-      // The other half of this lives in 404.html.
-      (function () {
-        var l = window.location;
-        if (l.search.slice(0, 2) !== '?/') return;
-        var parts = l.search.slice(1).split('&');
-        var route = parts.shift();
-        var query = parts.length ? '?' + parts.join('&').replace(/~and~/g, '&') : '';
-        var base = l.pathname.replace(/index\.html$/, '').replace(/\/+$/, '');
-        window.history.replaceState(null, '', base + route + query + l.hash);
-      })();
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
