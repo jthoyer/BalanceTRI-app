@@ -1,0 +1,10 @@
+{
+  "app.js": {
+    "no-unused-vars": {
+      "count": 4
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  }
+}

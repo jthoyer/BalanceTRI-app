@@ -2,17 +2,50 @@
 
 Open `index.html` in any modern browser. The prototype supports member selection, race filtering, commitments, custom event distances, and adding new races.
 
+## Working on the code
+
+There is **no build step**. GitHub Pages serves the files in this repository exactly as they are, and `index.html` loads `app.js` directly. The tooling below only formats and checks the source in place — it never produces an artefact to deploy.
+
+```sh
+npm install      # once
+npm run format   # Prettier, writes in place
+npm run lint     # ESLint
+npm run check    # both, as CI runs them
+```
+
+Prettier owns the formatting of `*.html`, `*.css` and `*.js`. Markdown and the SQL migrations are left alone: the prose is hand-wrapped, and Prettier has no SQL parser.
+
+ESLint carries two rules that exist because of specific bugs this codebase shipped:
+
+- `no-unsanitized/property` — flags `innerHTML` written from anything that isn't a literal. The stored XSS in the race roster sat at column 1278 of a 2,500-character line, where no human reading a diff would find it.
+- `no-unused-vars` with `caughtErrors: 'all'` — flags a caught error that is bound and then discarded, which is how a Supabase fetch failure became undiagnosable in the field.
+
+`eslint-suppressions.json` is a **baseline, not an exemption**. It records the nine findings that already existed when linting was introduced, so CI is green today while any *new* violation fails. Fixing one of those bugs means deleting its entry — regenerate with `npx eslint --suppress-all .` only when you mean to accept something new, which should be rare.
+
 ## Backend
 
 Data is stored in Supabase (project **Balance Tri Club**, `shkfwuogrldbqldpipxd`). `app.js` connects directly with the project's public URL and anon/publishable key — both are safe to expose client-side.
 
 Schema (`public` schema):
 
-- **races** — `id`, `name`, `date`, `location`, `url`, `slug` (text, unique, not null — see *Shareable race URLs* below), `events` (text array), `event_type` (text — Triathlon, Swim, Bike, Run, Multi-sport, or Balance Bolt), `club_focus` (boolean — set from the "Club focus race" checkbox, except for Balance Bolt races, which the app always saves as `true`; the checkbox is hidden in the form while Balance Bolt is the selected event type), `balance_bolt` (boolean — hides the club commitments/your commitment sections on the race card, since sign-up happens on the separate Balance Bolt site; the app sets this automatically from `event_type === 'Balance Bolt'` rather than exposing a separate form field), `created_at`
+- **races** — `id`, `name`, `date`, `location`, `url`, `deleted_at` (timestamptz — set when a race is removed; see *Removing a race* below), `updated_at`, `created_by` / `updated_by` (reference `auth.users`, stamped by the `races_audit_biu` trigger; null for rows predating the change or edited from the dashboard), `slug` (text, unique, not null — see *Shareable race URLs* below), `events` (text array), `event_type` (text — Triathlon, Swim, Bike, Run, Multi-sport, or Balance Bolt), `club_focus` (boolean — set from the "Club focus race" checkbox, except for Balance Bolt races, which the app always saves as `true`; the checkbox is hidden in the form while Balance Bolt is the selected event type), `balance_bolt` (boolean — hides the club commitments/your commitment sections on the race card, since sign-up happens on the separate Balance Bolt site; the app sets this automatically from `event_type === 'Balance Bolt'` rather than exposing a separate form field), `created_at`
 - **entries** — `id`, `race_id` (references `races`), `name`, `event`, `level`, `created_at`, unique on `(race_id, name)`
 - **profiles** — `id` (references `auth.users`), `display_name`, `justgo_status` (`unverified` / `verified` / `not_found` — reserved for a future JustGo membership check, unused for now), `justgo_member_number`, `justgo_checked_at`, `created_at`
 
-Row Level Security is enabled on all three tables. `races` keeps policies that allow anonymous read/write, matching this app's no-login, honour-system trust model for races (there's no account or password required to add or edit a race). `entries` allows anonymous **read** the same way — every roster stays visible to anyone — but insert/update/delete are restricted to the `authenticated` role (`require_auth_for_entries_writes` migration): saving, editing or removing a commitment requires being signed in. Sign-in still isn't tied to ownership — any signed-in member can add or edit any entry by typed name, so the honour system continues once you're past the door. `profiles` is different again: each row is readable and writable only by the signed-in user it belongs to (`auth.uid() = id`).
+Row Level Security is enabled on all three tables. `races` is **read open, write authenticated** (`races_auth_writes_and_soft_delete` migration): anyone can browse the calendar, but adding, editing or removing a race requires being signed in. Before that change anonymous visitors could delete every race on the calendar, which sat oddly next to the rule that you must sign in to commit to one. Sign-in still isn't tied to ownership — any signed-in member can edit or remove any race, exactly as with entries — so the honour system continues once you're past the door. `entries` allows anonymous **read** the same way — every roster stays visible to anyone — but insert/update/delete are restricted to the `authenticated` role (`require_auth_for_entries_writes` migration): saving, editing or removing a commitment requires being signed in. Sign-in still isn't tied to ownership — any signed-in member can add or edit any entry by typed name, so the honour system continues once you're past the door. `profiles` is different again: each row is readable and writable only by the signed-in user it belongs to (`auth.uid() = id`).
+
+`public.handle_new_user()` has no `EXECUTE` grant on it at all (`revoke_handle_new_user_execute` migration). It is `SECURITY DEFINER`, and Supabase's linter flagged that `anon` and `authenticated` could call it directly over `/rest/v1/rpc/`. Its only legitimate caller is the `on_auth_user_created` trigger, and that still works: PostgreSQL checks `EXECUTE` on a trigger function when the trigger is *created*, not each time it fires. Don't "fix" a future permission error by granting it back to `supabase_auth_admin` — the trigger does not need it.
+
+## Removing a race
+
+Removing a race is a **soft delete**: `deleted_at` is stamped and the row stays. A race carries its roster, so a hard delete would destroy other people's commitments as well. `app.js` never issues a `DELETE` against `races`, and there is no delete policy on the table.
+
+Two consequences worth knowing:
+
+- **Restoring a race is a deliberate act** in the dashboard or via the service role (`update races set deleted_at = null`). The update policy only matches live rows, so the app itself cannot bring one back.
+- **The select policy is split by role on purpose.** Anonymous visitors see live races only; signed-in members can read every row. A single `using (deleted_at is null)` policy looks correct and silently makes the soft delete impossible — on `UPDATE`, Postgres checks the *new* row against the SELECT policies too, so the statement that sets `deleted_at` produces a row the updater may no longer see and is rejected. `loadRaces` therefore filters `deleted_at` itself, so a removed race doesn't reappear just because you signed in.
+
+The unique index on `slug` is partial (`where deleted_at is null`), so removing a race frees its slug. Without that, re-adding the same race next season would silently become `berlin-marathon-2026-2`. The `races_assign_slug` de-duplication also skips removed races, stated explicitly rather than left resting on the select policy.
 
 ## Sign-in
 

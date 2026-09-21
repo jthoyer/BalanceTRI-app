@@ -1,0 +1,35 @@
+-- ---------------------------------------------------------------------------
+-- Close public.handle_new_user() to callers.
+--
+-- Flagged by Supabase's database linter (0028 and 0029): the function is
+-- SECURITY DEFINER and was executable by `anon` and `authenticated`, which
+-- means anyone — signed in or not — could POST to
+-- /rest/v1/rpc/handle_new_user and run it with the definer's privileges.
+--
+-- It is a trigger function. Its only legitimate caller is the
+-- `on_auth_user_created` trigger on auth.users, which seeds a profiles row
+-- when someone completes magic-link sign-in for the first time. Nothing
+-- should ever invoke it directly.
+--
+-- Revoking EXECUTE does not disturb the trigger. PostgreSQL checks EXECUTE on
+-- a trigger function when the trigger is CREATED, not each time it fires, so
+-- the function still runs on insert with no grant left on it. Verified on
+-- PostgreSQL 16 by replaying this schema, revoking, and confirming that a
+-- row inserted into auth.users still produces its profiles row — see the
+-- pull request for the transcript. No compensating grant to
+-- supabase_auth_admin is needed, and adding one would only re-open part of
+-- what this closes.
+--
+-- PUBLIC is revoked as well as the named roles: EXECUTE is granted to PUBLIC
+-- by default at creation, and that is where `=X/postgres` in the ACL comes
+-- from. Revoking only anon and authenticated would leave the function
+-- reachable by any other role that inherits PUBLIC.
+--
+-- The other three functions in this schema (slugify, races_assign_slug,
+-- races_set_audit) are deliberately left alone. All are SECURITY INVOKER, so
+-- they carry no privileges of their own: the two trigger functions raise
+-- "can only be called as a trigger" if called directly, and slugify is a
+-- pure text helper. None is a privilege boundary, so revoking them would be
+-- tidiness rather than a fix.
+-- ---------------------------------------------------------------------------
+revoke execute on function public.handle_new_user() from public, anon, authenticated, service_role;

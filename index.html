@@ -1,89 +1,267 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Balance Tri Club — Race commitments</title>
-  <script>
-    // GitHub Pages has no server-side rewrites, so a direct hit on
-    // /race/<slug> is served by 404.html, which bounces back here as
-    // <base>?/race/<slug>. Put the real path back before app.js reads
-    // location.pathname. Must stay ahead of app.js in the document.
-    // The other half of this lives in 404.html.
-    (function(){
-      var l=window.location;
-      if(l.search.slice(0,2)!=='?/')return;
-      var parts=l.search.slice(1).split('&');
-      var route=parts.shift();
-      var query=parts.length?'?'+parts.join('&').replace(/~and~/g,'&'):'';
-      var base=l.pathname.replace(/index\.html$/,'').replace(/\/+$/,'');
-      window.history.replaceState(null,'',base+route+query+l.hash);
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="styles-additions.css" />
-</head>
-<body>
-  <main class="shell">
-    <header class="topbar">
-      <a class="brand" href="#top" aria-label="Balance Tri Club home"><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club" /></a>
-      <div class="header-actions"><div class="auth-widget" id="authWidget"></div><button class="primary-button" id="heroAddButton">Add a race <span>+</span></button><button class="text-button" id="resetButton">Refresh</button></div>
-    </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Balance Tri Club — Race commitments</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles-additions.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="Balance Tri Club home"
+          ><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club"
+        /></a>
+        <div class="header-actions">
+          <div class="auth-widget" id="authWidget"></div>
+          <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button
+          ><button class="text-button" id="resetButton">Refresh</button>
+        </div>
+      </header>
 
-    <section class="hero" id="top">
-      <div class="hero-copy"><p class="eyebrow">CLUB RACE CALENDAR</p><h1>Find your next <em>start line.</em></h1><p>See what the crew is racing, make your commitment, and bring more friends along for the ride.</p><div class="race-count-group"><h2 class="race-count"><span class="race-count-highlight"><span id="clubCount"></span> upcoming club events</span> on the calendar</h2><p class="race-count-sub"><span id="allCount"></span> other upcoming events on the calendar</p></div><div class="view-toggle" role="group" aria-label="Race view"><button type="button" class="view-toggle-btn" data-view="club">Club races</button><button type="button" class="view-toggle-btn" data-view="all">View all</button></div></div>
-    </section>
+      <section class="hero" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow">CLUB RACE CALENDAR</p>
+          <h1>Find your next <em>start line.</em></h1>
+          <p>
+            See what the crew is racing, make your commitment, and bring more friends along for the
+            ride.
+          </p>
+          <div class="race-count-group">
+            <h2 class="race-count">
+              <span class="race-count-highlight"
+                ><span id="clubCount"></span> upcoming club events</span
+              >
+              on the calendar
+            </h2>
+            <p class="race-count-sub">
+              <span id="allCount"></span> other upcoming events on the calendar
+            </p>
+          </div>
+          <div class="view-toggle" role="group" aria-label="Race view">
+            <button type="button" class="view-toggle-btn" data-view="club">Club races</button
+            ><button type="button" class="view-toggle-btn" data-view="all">View all</button>
+          </div>
+        </div>
+      </section>
 
-    <section class="toolbar" aria-label="Race filters">
-      <label class="athlete-filter event-type-filter" for="eventTypeFilter"><span>Filter by event type</span><select id="eventTypeFilter"><option value="">All types</option><option value="Balance Bolt">Balance Bolt</option><option value="Bike">Bike</option><option value="Multi-sport">Multi-sport</option><option value="Run">Run</option><option value="Swim">Swim</option><option value="Triathlon">Triathlon</option></select></label>
-      <label class="athlete-filter" for="athleteFilter"><span>Filter by athlete</span><input id="athleteFilter" type="search" autocomplete="name" placeholder="Type a name, e.g. Priya" /></label>
-    </section>
-    <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
-      <form id="raceForm" class="add-form">
-        <div class="add-form-heading"><div><p class="eyebrow">SHARE A RACE</p><h2 id="addPanelTitle">Add to the calendar</h2></div><button type="button" class="icon-button" id="closeAddButton" aria-label="Close add race form">×</button></div>
-        <div class="add-form-fields"><label>Event type <span class="optional">optional</span><select name="eventType"><option value="">Select type…</option><option value="Balance Bolt">Balance Bolt</option><option value="Bike">Bike</option><option value="Multi-sport">Multi-sport</option><option value="Run">Run</option><option value="Swim">Swim</option><option value="Triathlon">Triathlon</option></select></label><label class="field-name"><span class="field-label">Race name</span><input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label class="field-url">Race website <span class="optional">optional</span><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label><label class="field-events">Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label><label class="checkbox-field"><input name="clubFocus" type="checkbox" /> Club focus race</label></div>
-        <div class="dialog-footer"><button type="button" id="cancelAddButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Create race</button></div>
-      </form>
-    </section>
-    <section id="editScreen" class="edit-screen hidden" aria-label="Edit race">
-      <button type="button" class="back-link" id="editBackButton"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg><span id="editBackLabel">Back to races</span></button>
-      <div class="add-panel">
-        <div class="add-form-heading"><div><p class="eyebrow">EDIT RACE</p><h2 id="editScreenTitle">Edit race</h2></div></div>
-        <form id="editForm" class="add-form">
-          <div class="add-form-fields"><label>Event type <span class="optional">optional</span><select name="eventType"><option value="">Select type…</option><option value="Balance Bolt">Balance Bolt</option><option value="Bike">Bike</option><option value="Multi-sport">Multi-sport</option><option value="Run">Run</option><option value="Swim">Swim</option><option value="Triathlon">Triathlon</option></select></label><label class="field-name"><span class="field-label">Race name</span><input name="name" required placeholder="e.g. Melbourne Marathon" /></label><label>Date<input name="date" type="date" required /></label><label class="field-url">Race website <span class="optional">optional</span><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label><label class="field-events">Events or distances <span class="optional">optional</span><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label><label class="checkbox-field"><input name="clubFocus" type="checkbox" /> Club focus race</label></div>
-          <div class="dialog-footer"><button type="button" id="removeRaceButton" class="secondary-button danger-button">Remove race</button><button type="button" id="editCancelButton" class="secondary-button">Cancel</button><button class="primary-button" value="default">Save changes</button></div>
+      <section class="toolbar" aria-label="Race filters">
+        <label class="athlete-filter event-type-filter" for="eventTypeFilter"
+          ><span>Filter by event type</span
+          ><select id="eventTypeFilter">
+            <option value="">All types</option>
+            <option value="Balance Bolt">Balance Bolt</option>
+            <option value="Bike">Bike</option>
+            <option value="Multi-sport">Multi-sport</option>
+            <option value="Run">Run</option>
+            <option value="Swim">Swim</option>
+            <option value="Triathlon">Triathlon</option>
+          </select></label
+        >
+        <label class="athlete-filter" for="athleteFilter"
+          ><span>Filter by athlete</span
+          ><input
+            id="athleteFilter"
+            type="search"
+            autocomplete="name"
+            placeholder="Type a name, e.g. Priya"
+        /></label>
+      </section>
+      <section id="addPanel" class="add-panel hidden" aria-labelledby="addPanelTitle">
+        <form id="raceForm" class="add-form">
+          <div class="add-form-heading">
+            <div>
+              <p class="eyebrow">SHARE A RACE</p>
+              <h2 id="addPanelTitle">Add to the calendar</h2>
+            </div>
+            <button
+              type="button"
+              class="icon-button"
+              id="closeAddButton"
+              aria-label="Close add race form"
+            >
+              ×
+            </button>
+          </div>
+          <div class="add-form-fields">
+            <label
+              >Event type <span class="optional">optional</span
+              ><select name="eventType">
+                <option value="">Select type…</option>
+                <option value="Balance Bolt">Balance Bolt</option>
+                <option value="Bike">Bike</option>
+                <option value="Multi-sport">Multi-sport</option>
+                <option value="Run">Run</option>
+                <option value="Swim">Swim</option>
+                <option value="Triathlon">Triathlon</option>
+              </select></label
+            ><label class="field-name"
+              ><span class="field-label">Race name</span
+              ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
+            ><label>Date<input name="date" type="date" required /></label
+            ><label class="field-url"
+              >Race website <span class="optional">optional</span
+              ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
+            ><label class="field-events"
+              >Events or distances <span class="optional">optional</span
+              ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
+            ><label class="checkbox-field"
+              ><input name="clubFocus" type="checkbox" /> Club focus race</label
+            >
+          </div>
+          <div class="dialog-footer">
+            <button type="button" id="cancelAddButton" class="secondary-button">Cancel</button
+            ><button class="primary-button" value="default">Create race</button>
+          </div>
         </form>
+      </section>
+      <section id="editScreen" class="edit-screen hidden" aria-label="Edit race">
+        <button type="button" class="back-link" id="editBackButton">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M15 18 9 12l6-6" /></svg
+          ><span id="editBackLabel">Back to races</span>
+        </button>
+        <div class="add-panel">
+          <div class="add-form-heading">
+            <div>
+              <p class="eyebrow">EDIT RACE</p>
+              <h2 id="editScreenTitle">Edit race</h2>
+            </div>
+          </div>
+          <form id="editForm" class="add-form">
+            <div class="add-form-fields">
+              <label
+                >Event type <span class="optional">optional</span
+                ><select name="eventType">
+                  <option value="">Select type…</option>
+                  <option value="Balance Bolt">Balance Bolt</option>
+                  <option value="Bike">Bike</option>
+                  <option value="Multi-sport">Multi-sport</option>
+                  <option value="Run">Run</option>
+                  <option value="Swim">Swim</option>
+                  <option value="Triathlon">Triathlon</option>
+                </select></label
+              ><label class="field-name"
+                ><span class="field-label">Race name</span
+                ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
+              ><label>Date<input name="date" type="date" required /></label
+              ><label class="field-url"
+                >Race website <span class="optional">optional</span
+                ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
+              ><label class="field-events"
+                >Events or distances <span class="optional">optional</span
+                ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
+              ><label class="checkbox-field"
+                ><input name="clubFocus" type="checkbox" /> Club focus race</label
+              >
+            </div>
+            <div class="dialog-footer">
+              <button type="button" id="removeRaceButton" class="secondary-button danger-button">
+                Remove race</button
+              ><button type="button" id="editCancelButton" class="secondary-button">Cancel</button
+              ><button class="primary-button" value="default">Save changes</button>
+            </div>
+          </form>
+        </div>
+      </section>
+      <section id="raceScreen" class="edit-screen hidden" aria-label="Race details">
+        <button type="button" class="back-link" id="raceScreenBackButton">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M15 18 9 12l6-6" /></svg
+          ><span>Back to races</span>
+        </button>
+        <div class="add-panel">
+          <div class="add-form-heading">
+            <div>
+              <p class="eyebrow" id="raceScreenEyebrow"></p>
+              <h2 id="raceScreenTitle"></h2>
+            </div>
+            <button type="button" class="edit-race-button" id="raceScreenEditButton">
+              Edit race
+            </button>
+          </div>
+          <div id="raceScreenBody"></div>
+        </div>
+      </section>
+      <p class="update-banner hidden" id="updateBanner">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M20 6 9 17l-5-5" /></svg
+        ><span id="updateBannerText"></span>
+      </p>
+      <div class="race-info upcoming-heading hidden" id="upcomingHeading">
+        <h2>Upcoming races</h2>
       </div>
-    </section>
-    <section id="raceScreen" class="edit-screen hidden" aria-label="Race details">
-      <button type="button" class="back-link" id="raceScreenBackButton"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg><span>Back to races</span></button>
-      <div class="add-panel">
-        <div class="add-form-heading"><div><p class="eyebrow" id="raceScreenEyebrow"></p><h2 id="raceScreenTitle"></h2></div><button type="button" class="edit-race-button" id="raceScreenEditButton">Edit race</button></div>
-        <div id="raceScreenBody"></div>
-      </div>
-    </section>
-    <p class="update-banner hidden" id="updateBanner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span id="updateBannerText"></span></p>
-    <div class="race-info upcoming-heading hidden" id="upcomingHeading"><h2>Upcoming races</h2></div>
-    <p class="empty-state hidden" id="emptyState">No races here yet. Add a race or switch back to all races.</p>
-    <section id="raceList" class="race-list" aria-live="polite"></section>
-  </main>
+      <p class="empty-state hidden" id="emptyState">
+        No races here yet. Add a race or switch back to all races.
+      </p>
+      <section id="raceList" class="race-list" aria-live="polite"></section>
+    </main>
 
-  <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
-    <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
-      <div class="auth-sheet-handle" aria-hidden="true"></div>
-      <button type="button" class="icon-button auth-sheet-close" id="authSheetClose" aria-label="Close">×</button>
-      <div id="authSheetBody"></div>
+    <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
+      <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
+        <div class="auth-sheet-handle" aria-hidden="true"></div>
+        <button
+          type="button"
+          class="icon-button auth-sheet-close"
+          id="authSheetClose"
+          aria-label="Close"
+        >
+          ×
+        </button>
+        <div id="authSheetBody"></div>
+      </div>
     </div>
-  </div>
 
-  <!-- A real <a href="…/race/<slug>"> rather than a button, so the card can be
+    <!-- A real <a href="…/race/<slug>"> rather than a button, so the card can be
        opened in a new tab, copied as a link, and crawled. app.js sets the href
        and intercepts only the plain left click. -->
-  <template id="raceTemplate"><article class="race-card"><a class="race-summary" href=""><time class="date-tile"><strong></strong><span></span></time><div class="race-info"><h2></h2><p class="race-meta"></p></div><span class="chevron" aria-hidden="true">›</span></a></article></template>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="app.js"></script>
-</body>
+    <template id="raceTemplate"
+      ><article class="race-card">
+        <a class="race-summary" href=""
+          ><time class="date-tile"><strong></strong><span></span></time>
+          <div class="race-info">
+            <h2></h2>
+            <p class="race-meta"></p>
+          </div>
+          <span class="chevron" aria-hidden="true">›</span></a
+        >
+      </article></template
+    >
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>
