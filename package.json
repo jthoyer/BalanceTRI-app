@@ -1,0 +1,18 @@
+{
+  "name": "balancetri-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Balance Tri Club race calendar. No build step: GitHub Pages serves these files as they are. These dev tools format and lint the source in place.",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "check": "npm run format:check && npm run lint"
+  },
+  "devDependencies": {
+    "eslint": "^10.11.0",
+    "eslint-plugin-no-unsanitized": "^4.1.2",
+    "globals": "^15.15.0",
+    "prettier": "^3.6.2"
+  }
+}

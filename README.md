@@ -2,6 +2,26 @@
 
 Open `index.html` in any modern browser. The prototype supports member selection, race filtering, commitments, custom event distances, and adding new races.
 
+## Working on the code
+
+There is **no build step**. GitHub Pages serves the files in this repository exactly as they are, and `index.html` loads `app.js` directly. The tooling below only formats and checks the source in place — it never produces an artefact to deploy.
+
+```sh
+npm install      # once
+npm run format   # Prettier, writes in place
+npm run lint     # ESLint
+npm run check    # both, as CI runs them
+```
+
+Prettier owns the formatting of `*.html`, `*.css` and `*.js`. Markdown and the SQL migrations are left alone: the prose is hand-wrapped, and Prettier has no SQL parser.
+
+ESLint carries two rules that exist because of specific bugs this codebase shipped:
+
+- `no-unsanitized/property` — flags `innerHTML` written from anything that isn't a literal. The stored XSS in the race roster sat at column 1278 of a 2,500-character line, where no human reading a diff would find it.
+- `no-unused-vars` with `caughtErrors: 'all'` — flags a caught error that is bound and then discarded, which is how a Supabase fetch failure became undiagnosable in the field.
+
+`eslint-suppressions.json` is a **baseline, not an exemption**. It records the nine findings that already existed when linting was introduced, so CI is green today while any *new* violation fails. Fixing one of those bugs means deleting its entry — regenerate with `npx eslint --suppress-all .` only when you mean to accept something new, which should be rare.
+
 ## Backend
 
 Data is stored in Supabase (project **Balance Tri Club**, `shkfwuogrldbqldpipxd`). `app.js` connects directly with the project's public URL and anon/publishable key — both are safe to expose client-side.
