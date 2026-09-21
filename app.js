@@ -18,6 +18,7 @@ let state=JSON.parse(localStorage.getItem('balance-race-ui')||'null')||{user:'',
 state.filter ||= '';
 state.eventTypeFilter ||= '';
 state.viewFilter ||= 'club';
+state.authDismissedUntil ||= 0;
 if(!Array.isArray(state.form?.events)){
   const legacyEvent=state.form?.event;
   state.form={events:legacyEvent?[legacyEvent]:[],otherText:'',otherOpen:false,level:state.form?.level||'considering'};
@@ -32,6 +33,54 @@ function showToast(msg){toast=msg;render();clearTimeout(toastTimer);toastTimer=s
 const $=s=>document.querySelector(s); const persist=()=>localStorage.setItem('balance-race-ui',JSON.stringify(state));
 function dateParts(date){const d=new Date(date+'T12:00:00');return {day:String(d.getDate()).padStart(2,'0'),month:d.toLocaleString('en-AU',{month:'short'}),group:d.toLocaleString('en-AU',{month:'long',year:'numeric'})}}
 function myEntry(race){return race.entries.find(e=>e.name===state.user)}
+// ---------------------------------------------------------------------------
+// Auth. Magic-link sign-in via Supabase Auth. Signing in is optional — entries
+// still save by typed name either way (see saveEntry) — this just remembers
+// who you are so the name field and "my entry" matching don't reset every
+// visit. A signed-in profile's display_name seeds state.user once, but never
+// overwrites a name someone's already typed in this browser.
+// ---------------------------------------------------------------------------
+let session=null;
+let profile=null;
+async function loadProfile(){
+  const {data,error}=await db.from('profiles').select('display_name').eq('id',session.user.id).single();
+  profile=error?null:data;
+  if(profile?.display_name&&!state.user){state.user=profile.display_name;persist()}
+}
+function renderAuth(){
+  const widget=$('#authWidget');
+  if(session){
+    widget.innerHTML=`<span class="auth-name">${profile?.display_name||session.user.email}</span><button type="button" class="text-button" id="signOutButton">Sign out</button>`;
+    $('#signOutButton').onclick=()=>db.auth.signOut();
+  }else{
+    widget.innerHTML=`<button type="button" class="text-button" id="signInButton">Sign in</button>`;
+    $('#signInButton').onclick=()=>openSignInForm(widget);
+  }
+  $('#signInBanner').classList.toggle('hidden',!!session||Date.now()<state.authDismissedUntil);
+}
+function openSignInForm(host){
+  host.innerHTML=`<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="text-button">Send link</button></form>`;
+  host.querySelector('form').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const email=new FormData(e.target).get('email').trim();
+    const btn=e.target.querySelector('button');
+    btn.disabled=true;btn.textContent='Sending…';
+    const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.href}});
+    if(error){alert('Could not send sign-in link: '+error.message);renderAuth();return}
+    host.innerHTML='<span class="auth-name">Check your email for a sign-in link.</span>';
+  });
+}
+async function initAuth(){
+  const {data:{session:s}}=await db.auth.getSession();
+  session=s;
+  if(session)await loadProfile();
+  renderAuth();
+  db.auth.onAuthStateChange(async(_event,s)=>{
+    session=s;
+    if(session)await loadProfile();else profile=null;
+    renderAuth();
+  });
+}
 async function removeEntry(raceId,name){
   const {error}=await db.from('entries').delete().eq('race_id',raceId).eq('name',name);
   if(error) throw new Error(error.message);
@@ -305,3 +354,6 @@ $('#editCancelButton').onclick=closeEditScreen;$('#editBackButton').onclick=clos
 window.addEventListener('popstate',()=>{if(bootstrapped)routeFromUrl()});
 $('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);const wasOpen=openId===raceId;editingId=null;openId=null;if(wasOpen)navigate(BASE_PATH,{replace:true});$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
 $('#resetButton').onclick=()=>{loadRaces()};loadRaces();
+$('#signInBannerButton').onclick=()=>openSignInForm($('#signInBanner'));
+$('#signInBannerDismiss').onclick=()=>{state.authDismissedUntil=Date.now()+30*24*60*60*1000;persist();renderAuth()};
+initAuth();
