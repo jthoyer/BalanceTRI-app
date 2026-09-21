@@ -57,12 +57,15 @@ function renderAuth(){
     $('#signOutButton').onclick=()=>db.auth.signOut();
   }else{
     widget.innerHTML=`<button type="button" class="text-button" id="signInButton">Sign in</button>`;
-    $('#signInButton').onclick=()=>openSignInForm(widget);
+    // Opens the same auth sheet the nudge/gate use, rather than expanding a
+    // form inline into the header — that used to squeeze the topbar's other
+    // buttons on narrow phones (the "condensing" bug: real document flow,
+    // not an overlay, competing for space in .header-actions).
+    $('#signInButton').onclick=()=>requireSignIn('Sign in');
   }
 }
-// heading: an <h2> to show above the email field (the auth sheet uses this;
-// the header widget doesn't need one). cancel: a handler for a "Cancel"
-// button shown below the form (the auth sheet's; the header widget has none).
+// heading: an <h2> to show above the email field. cancel: a handler for a
+// "Cancel" button shown below the form. Always targets the auth sheet now.
 function openSignInForm(host,{heading,cancel}={}){
   host.innerHTML=`${heading?`<h2>${heading}</h2>`:''}<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>${cancel?'<button type="button" class="auth-sheet-cancel">Cancel</button>':''}`;
   const form=host.querySelector('form');
@@ -78,12 +81,16 @@ function openSignInForm(host,{heading,cancel}={}){
   if(cancel)host.querySelector('.auth-sheet-cancel').onclick=cancel;
 }
 // ---------------------------------------------------------------------------
-// The auth sheet: a bottom sheet with two jobs. As a "nudge" it appears once
-// per visit for a signed-out browser (unless snoozed) offering Sign in or
-// Just browsing; tapping outside it, scrolling, or Just browsing all close it
-// the same way "just browsing" — self-dismissing, never blocking. As a "gate"
+// The auth sheet: every sign-in entry point (the header button, the nudge,
+// and the write gate) opens this one overlay — a bottom sheet on desktop,
+// full screen on mobile (styles-additions.css), never document flow that
+// could squeeze other layout. As a "nudge" it appears once per visit for a
+// signed-out browser (unless snoozed) offering Sign in or Just browsing;
+// tapping outside it (desktop), the close button, or Just browsing all
+// dismiss it the same way — self-dismissing, never blocking. As a "gate"
 // requireSignIn() opens it to require sign-in before a write goes through
-// (saving, editing or removing a commitment); Cancel there just backs out.
+// (saving, editing or removing a commitment); the close button there just
+// backs out.
 // ---------------------------------------------------------------------------
 let authSheetDismissed=false; // this pageview only, independent of the snooze
 let authSheetMode=null; // 'nudge' | 'gate' | null
@@ -105,7 +112,7 @@ function showAuthSheetNudge(){
   if(session||authSheetDismissed||Date.now()<state.authDismissedUntil)return;
   authSheetMode='nudge';
   authSheetSnoozeWanted=false;
-  $('#authSheetBody').innerHTML=`<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint auth-sheet-hint-muted">Tap outside or keep scrolling — this closes on its own.</p>`;
+  $('#authSheetBody').innerHTML=`<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint auth-sheet-hint-muted">You can close this and come back to it later.</p>`;
   $('#authSheetSnooze').onchange=e=>{authSheetSnoozeWanted=e.target.checked};
   $('#authSheetSignInButton').onclick=()=>openSignInForm($('#authSheetBody'),{heading:'Sign in',cancel:closeAuthSheet});
   $('#authSheetBrowseButton').onclick=closeAuthSheet;
@@ -416,5 +423,6 @@ window.addEventListener('popstate',()=>{if(bootstrapped)routeFromUrl()});
 $('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);const wasOpen=openId===raceId;editingId=null;openId=null;if(wasOpen)navigate(BASE_PATH,{replace:true});$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
 $('#resetButton').onclick=()=>{loadRaces()};loadRaces();
 $('#authSheetBackdrop').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAuthSheet()});
+$('#authSheetClose').onclick=closeAuthSheet;
 window.addEventListener('scroll',()=>{if(!$('#authSheetBackdrop').classList.contains('hidden'))closeAuthSheet()},{passive:true});
 initAuth();

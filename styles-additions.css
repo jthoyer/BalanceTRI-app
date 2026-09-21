@@ -76,13 +76,24 @@
      using .send-link-button instead of .text-button. */
   #authWidget .text-button{display:inline-flex}}
 
-/* The bottom-sheet sign-in prompt: the front door (shown once per visit,
-   unless snoozed) and the gate shown when a signed-out visitor tries to
-   save, edit or remove a commitment. Both reuse #authSheetBody/openSignInForm. */
+/* The sign-in overlay: the front door (shown once per visit, unless
+   snoozed), the gate shown when a signed-out visitor tries to save, edit or
+   remove a commitment, and the header's own "Sign in" button all open this
+   same panel. A bottom sheet on desktop; full screen below 700px, since
+   docking it to the bottom on a phone left too little room and its own
+   .sign-in-form used to get inlined straight into the header instead
+   (the "condensing" bug — real layout, not an overlay, squeezing
+   .header-actions on narrow screens). Both reuse #authSheetBody/openSignInForm. */
 .auth-sheet-backdrop{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center;background:rgba(24,37,66,.4)}
 .auth-sheet-backdrop.hidden{display:none}
-.auth-sheet{width:min(420px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:var(--ink);color:#fff;border-radius:16px 16px 0 0;padding:16px 20px 22px;box-shadow:0 -8px 24px rgba(24,37,66,.25)}
+.auth-sheet{position:relative;width:min(420px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:var(--ink);color:#fff;border-radius:16px 16px 0 0;padding:16px 20px 22px;box-shadow:0 -8px 24px rgba(24,37,66,.25)}
 .auth-sheet-handle{width:32px;height:4px;background:rgba(255,255,255,.35);border-radius:999px;margin:0 auto 12px}
+.auth-sheet-close{position:absolute;top:8px;right:8px;color:#fff;font-size:26px;line-height:1}
+@media(max-width:700px){
+  .auth-sheet-backdrop{align-items:stretch}
+  .auth-sheet{width:100%;height:100%;max-height:none;border-radius:0;box-shadow:none;display:flex;flex-direction:column;justify-content:center;padding:56px 24px}
+  .auth-sheet-handle{display:none}
+}
 .auth-sheet h2{margin:0 0 8px;font:600 17px Outfit,sans-serif;color:#fff}
 .auth-sheet .auth-sheet-hint{margin:0 0 4px;font-size:12px;line-height:1.4;color:rgba(255,255,255,.72)}
 .auth-sheet .auth-sheet-hint-muted{text-align:center;color:rgba(255,255,255,.65);margin-top:10px}
