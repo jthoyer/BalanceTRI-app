@@ -14,10 +14,42 @@ function boltEmbedUrl(race){
   const n=(race.name||'').match(/\d+/);
   return n?`${BALANCE_BOLT_URL}?race=${n[0]}`:null;
 }
+// Standings always come from BalanceBolt's own computed URL, never race.url —
+// that field is the sign-up/registration link, not a standings page, so an
+// override there (a custom registration site, say) has nothing to do with this.
+function boltStandingsUrl(race){
+  const n=(race.name||'').match(/\d+/);
+  return n?`${BALANCE_BOLT_URL}boltresults.html?race=${n[0]}&view=series`:null;
+}
+// Every Balance Bolt race, in season order — the shared basis for "race N of
+// the season" numbering on both the calendar's grouped row and a leg's own
+// detail screen, and for the group's list of legs (open races only, per the
+// current filters, don't limit this: a past leg still needs to be numbered
+// and reachable as a child of the still-upcoming season).
+function boltSeasonLegs(){
+  return races.filter(r=>r.balanceBolt==='Y').sort((a,b)=>a.date.localeCompare(b.date));
+}
+function todayISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+// Shared by both Balance Bolt tabs (sign-up, standings) — was inline in
+// makeDetails() before there were two frames to build instead of one.
+function makeEmbedFrame(url,label){
+  const iframe=document.createElement('iframe');iframe.className='race-embed';iframe.src=url;iframe.loading='lazy';iframe.title=label;
+  // Same origin as this app (both under jthoyer.github.io), so the frame's
+  // own scroll height is readable — resize to it instead of clipping at a
+  // fixed height or leaving a scrollbar inside a scrollbar.
+  const resize=()=>{try{iframe.style.height=iframe.contentDocument.documentElement.scrollHeight+'px'}catch(e){}};
+  // BalanceBolt's own topbar and .shell gutter are chrome for when it's
+  // visited on its own — redundant, and this frame's own card already
+  // carries the padding (.race-embed-body is padding:0 for this reason).
+  const hideChrome=()=>{try{const doc=iframe.contentDocument;if(doc.querySelector('.topbar')&&!doc.getElementById('embed-chrome-hide')){const style=doc.createElement('style');style.id='embed-chrome-hide';style.textContent='.topbar{display:none}.shell{width:100%;margin:0}';doc.head.append(style)}}catch(e){}};
+  iframe.addEventListener('load',()=>{hideChrome();resize();try{new ResizeObserver(resize).observe(iframe.contentDocument.documentElement)}catch(e){}});
+  return iframe;
+}
 let state=JSON.parse(localStorage.getItem('balance-race-ui')||'null')||{user:'',filter:'',form:{}};
 state.filter ||= '';
 state.eventTypeFilter ||= '';
 state.viewFilter ||= 'club';
+if(state.boltSeriesOpen===undefined)state.boltSeriesOpen=true;
 if(!Array.isArray(state.form?.events)){
   const legacyEvent=state.form?.event;
   state.form={events:legacyEvent?[legacyEvent]:[],otherText:'',otherOpen:false,level:state.form?.level||'considering'};
@@ -281,23 +313,78 @@ function render(){const list=$('#raceList');list.innerHTML='';
     // left click that means "show me this race here".
     if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
     e.preventDefault();openRaceScreen(race.id);
-  };container.append(node)};shown.forEach(race=>appendRace(race,list));if(openId){const openRace=races.find(r=>r.id===openId);if(openRace){const p=dateParts(openRace.date);$('#raceScreenEyebrow').textContent=`${p.day} ${p.month.toUpperCase()} ${p.group.split(' ')[1]}`;$('#raceScreenTitle').textContent=openRace.name;$('#raceScreenEditButton').onclick=()=>openEditScreen(openRace.id);const body=$('#raceScreenBody');body.innerHTML='';body.append(makeDetails(openRace))}else{openId=null;$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden')}}}
-function makeDetails(race){const wrap=document.createElement('div');wrap.className='details-card';if(race.balanceBolt==='Y'){const embedUrl=boltEmbedUrl(race);wrap.innerHTML=`${embedUrl?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Race details</div><div class="card-body race-embed-body"></div>`;if(embedUrl){const a=document.createElement('a');a.className='race-link';a.href=embedUrl;a.textContent='Open sign-up in a new tab';a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} sign-up: ${embedUrl}`);wrap.querySelector('.race-website-body').append(a);const iframe=document.createElement('iframe');iframe.className='race-embed';iframe.src=embedUrl;iframe.loading='lazy';iframe.title=`${race.name} embedded website`;
-    // Same origin as this app (both under jthoyer.github.io), so the frame's
-    // own scroll height is readable — resize to it instead of clipping at a
-    // fixed height or leaving a scrollbar inside a scrollbar.
-    const resize=()=>{try{iframe.style.height=iframe.contentDocument.documentElement.scrollHeight+'px'}catch(e){}};
-    // BalanceBolt's own topbar (its logo, a "Club calendar" link back to this
-    // very app, sync status and refresh) is chrome for when it's visited on
-    // its own — all redundant once it's sitting inside our "Race details" card.
-    const hideChrome=()=>{try{const doc=iframe.contentDocument;if(doc.querySelector('.topbar')&&!doc.getElementById('embed-chrome-hide')){const style=doc.createElement('style');style.id='embed-chrome-hide';
-    // Its .shell gutter (16px each side, from BalanceBolt's own width:min(1100px, calc(100% - 32px)))
-    // is chrome too here — our own card already carries the padding (.race-embed-body is
-    // padding:0 for this reason), so left alone the two stack and the sign-up form reads as
-    // a page inside our page instead of part of it.
-    style.textContent='.topbar{display:none}.shell{width:100%;margin:0}';doc.head.append(style)}}catch(e){}};
-    iframe.addEventListener('load',()=>{hideChrome();resize();try{new ResizeObserver(resize).observe(iframe.contentDocument.documentElement)}catch(e){}});
-    wrap.querySelector('.race-embed-body').append(iframe)}return wrap}if(state.form.commitOpen===undefined){state.form.commitOpen=!!myEntry(race);state.form.editingName=myEntry(race)?.name||''}const entries=race.entries.filter(e=>e.level!=='not');const eventGroups={};entries.forEach(e=>{const key=e.events.length?e.events.join(', '):'Event TBC';(eventGroups[key]||=[]).push(e)});const eventKeys=Object.keys(eventGroups).sort((a,b)=>a.localeCompare(b));eventKeys.forEach(k=>eventGroups[k].sort((a,b)=>a.name.localeCompare(b.name)));const orderedEntries=eventKeys.flatMap(k=>eventGroups[k]);const levelLabel=Object.fromEntries(levels);const rosterBody=orderedEntries.length?eventKeys.map(key=>`<div class="roster-group"><p class="roster-group-label">${key}</p>${eventGroups[key].map(e=>`<div class="roster-entry"><div class="roster-who"><span class="roster-name">${e.name}</span><span class="roster-level level-${e.level}">${levelLabel[e.level]||e.level}</span></div><button type="button" class="roster-edit" aria-label="Edit ${e.name}'s commitment for this race">Edit</button></div>`).join('')}</div>`).join(''):'<p class="helper-text">No commitments yet — be the first.</p>';const editingEntry=state.form.editingName?race.entries.find(e=>e.name===state.form.editingName):null;wrap.innerHTML=`${race.url?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Club commitments</div><div class="card-body roster-body">${rosterBody}</div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button ${state.form.commitOpen?'hidden':''}">Add your commitment</button><div class="commitment-fields ${state.form.commitOpen?'':'hidden'}"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button>${editingEntry?'<button type="button" class="remove-commit-button">Remove commitment</button>':''}</div></div></div>`;const commitToggle=wrap.querySelector('.commit-toggle-button'),commitFields=wrap.querySelector('.commitment-fields');commitToggle.onclick=()=>{state.form.commitOpen=true;persist();commitToggle.classList.add('hidden');commitFields.classList.remove('hidden');nameInput.focus()};if(race.url){const a=document.createElement('a');a.className='race-link';a.href=race.url;a.textContent=race.url;a.title=race.url;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} website: ${race.url}`);wrap.querySelector('.race-website-body').append(a)}wrap.querySelectorAll('.roster-edit').forEach((btn,i)=>{btn.onclick=()=>{const entry=orderedEntries[i];const opts=participationOptions();const known=[],extra=[];entry.events.forEach(ev=>{const k=ev.trim().toLowerCase();const hit=opts.find(o=>o.toLowerCase()===k)||(k==='to'?'TO (Technical official)':k==='team'?'Team':null);if(hit)known.includes(hit)||known.push(hit);else extra.push(ev)});state.form={events:known,otherText:extra.join(', '),otherOpen:!!extra.length,level:entry.level,commitOpen:true,editingName:entry.name};persist();render();const fields=$('.commitment-fields');if(fields){fields.querySelector('.name-input').focus({preventScroll:true});fields.scrollIntoView({behavior:'smooth',block:'center'})}}});const removeCommitButton=wrap.querySelector('.remove-commit-button');if(removeCommitButton)removeCommitButton.onclick=async()=>{if(!confirm(`Remove ${editingEntry.name} from this race?`))return;removeCommitButton.disabled=true;removeCommitButton.textContent='Removing…';try{await removeEntry(race.id,editingEntry.name);state.form={events:[],otherText:'',otherOpen:false,level:'considering',commitOpen:false,editingName:''};persist();await loadRaces()}catch(err){removeCommitButton.disabled=false;removeCommitButton.textContent='Remove commitment';alert('Could not remove: '+err.message)}};const nameInput=wrap.querySelector('.name-input');nameInput.value=state.form.editingName||'';const eventChoices=wrap.querySelector('.event-choices');const otherRow=wrap.querySelector('.other-row');const otherInput=wrap.querySelector('.other-input');otherInput.value=state.form.otherText||'';otherInput.oninput=()=>{state.form.otherText=otherInput.value;persist()};
+  };container.append(node)};
+  // The whole Balance Bolt season collapses into one row (only worth it once
+  // there are at least two legs to collapse, and at least one still upcoming
+  // to anchor the row's place in the date-sorted list) — a past leg stays
+  // reachable as a child even after it drops out of `shown`'s future-only
+  // filter, which is the point: it's the only way today to reach a finished
+  // leg's results at all.
+  const allBoltLegs=boltSeasonLegs();
+  const shownBoltIds=new Set(shown.filter(r=>r.balanceBolt==='Y').map(r=>r.id));
+  const groupBolt=allBoltLegs.length>=2&&shownBoltIds.size>=1;
+  const appendBoltSeries=container=>{
+    const nextLeg=allBoltLegs.find(r=>shownBoltIds.has(r.id));
+    const p=dateParts(nextLeg.date);
+    if(p.group!==last){const h=document.createElement('div');h.className='month-label';h.textContent=p.group;container.append(h);last=p.group}
+    const nextIndex=allBoltLegs.findIndex(r=>r.id===nextLeg.id)+1;
+    const card=document.createElement('article');card.className='race-card bolt-series-card'+(state.boltSeriesOpen?' open':'');
+    const summary=document.createElement('button');summary.type='button';summary.className='race-summary bolt-series-summary';summary.setAttribute('aria-expanded',String(!!state.boltSeriesOpen));summary.setAttribute('aria-label',`${state.boltSeriesOpen?'Collapse':'Expand'} the Balance Bolt series`);
+    summary.innerHTML=`<span class="date-tile" aria-hidden="true"><strong>${nextIndex}</strong><span>of ${allBoltLegs.length}</span></span><div class="race-info"><h2>Balance Bolt Series</h2><p class="race-meta">Race ${nextIndex} of ${allBoltLegs.length} next &middot; ${p.day} ${p.month}</p></div><span class="chevron" aria-hidden="true">›</span>`;
+    summary.onclick=()=>{state.boltSeriesOpen=!state.boltSeriesOpen;persist();render()};
+    card.append(summary);
+    if(state.boltSeriesOpen){
+      const kids=document.createElement('div');kids.className='bolt-series-legs';
+      allBoltLegs.forEach((leg,i)=>{
+        const lp=dateParts(leg.date);
+        const status=leg.date<todayStr?'done':leg.id===nextLeg.id?'next':'upcoming';
+        const a=document.createElement('a');a.className=`bolt-series-leg bolt-series-leg-${status}`;a.href=racePath(leg);
+        a.innerHTML=`<span class="bolt-series-leg-marker" aria-hidden="true">${status==='done'?'✓':i+1}</span><span class="bolt-series-leg-name">${leg.name}</span><span class="bolt-series-leg-date">${lp.day} ${lp.month}</span>${status==='next'?'<span class="bolt-series-leg-tag">Next</span>':''}`;
+        a.onclick=e=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();openRaceScreen(leg.id)};
+        kids.append(a);
+      });
+      card.append(kids);
+    }
+    container.append(card);
+  };
+  let boltGroupShown=false;
+  shown.forEach(race=>{
+    if(race.balanceBolt==='Y'&&groupBolt){
+      if(!boltGroupShown){appendBoltSeries(list);boltGroupShown=true}
+      return;
+    }
+    appendRace(race,list);
+  });
+  if(openId){const openRace=races.find(r=>r.id===openId);if(openRace){const p=dateParts(openRace.date);$('#raceScreenEyebrow').textContent=`${p.day} ${p.month.toUpperCase()} ${p.group.split(' ')[1]}`;$('#raceScreenTitle').textContent=openRace.name;$('#raceScreenEditButton').onclick=()=>openEditScreen(openRace.id);const body=$('#raceScreenBody');body.innerHTML='';body.append(makeDetails(openRace))}else{openId=null;$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden')}}}
+function makeDetails(race){const wrap=document.createElement('div');wrap.className='details-card';if(race.balanceBolt==='Y'){
+  const legs=boltSeasonLegs();
+  const index=legs.findIndex(r=>r.id===race.id)+1;
+  const total=legs.length;
+  const today=todayISO();
+  const dots=legs.map(leg=>{
+    const status=leg.id===race.id?'current':leg.date<today?'done':'upcoming';
+    return `<span class="bolt-season-dot bolt-season-dot-${status}" aria-hidden="true"></span>`;
+  }).join('');
+  const tabUrls={signup:boltEmbedUrl(race),standings:boltStandingsUrl(race)};
+  const tabLabel={signup:'Sign up',standings:'Standings'};
+  wrap.innerHTML=`<div class="card-header">Balance Bolt series</div><div class="card-body bolt-season-body"><p class="bolt-season-meta">Race <strong>${index}</strong> of ${total}${total>1?`<span class="bolt-season-dots">${dots}</span>`:''}</p><div class="bolt-tabs" role="tablist" aria-label="Balance Bolt"><button type="button" class="bolt-tab" role="tab" data-tab="signup">Sign up</button><button type="button" class="bolt-tab" role="tab" data-tab="standings">Standings</button></div><a class="race-link bolt-tab-link hidden" target="_blank" rel="noopener"></a></div><div class="card-header">Race details</div><div class="card-body race-embed-body"><div class="bolt-tab-panel" data-panel="signup"></div><div class="bolt-tab-panel hidden" data-panel="standings"></div></div>`;
+  const link=wrap.querySelector('.bolt-tab-link');
+  const frames={};
+  const setTab=tab=>{
+    state.form.boltTab=tab;persist();
+    wrap.querySelectorAll('.bolt-tab').forEach(btn=>btn.setAttribute('aria-selected',String(btn.dataset.tab===tab)));
+    wrap.querySelectorAll('.bolt-tab-panel').forEach(panel=>panel.classList.toggle('hidden',panel.dataset.panel!==tab));
+    const url=tabUrls[tab];
+    link.classList.toggle('hidden',!url);
+    if(url){link.href=url;link.textContent=`Open ${tabLabel[tab].toLowerCase()} in a new tab`;link.setAttribute('aria-label',`${race.name} ${tabLabel[tab].toLowerCase()}: ${url}`)}
+    const panel=wrap.querySelector(`.bolt-tab-panel[data-panel="${tab}"]`);
+    if(!url){panel.innerHTML='<p class="helper-text">Not available for this race.</p>';return}
+    if(!frames[tab]){const iframe=makeEmbedFrame(url,`${race.name} ${tabLabel[tab].toLowerCase()}`);frames[tab]=iframe;panel.append(iframe)}
+  };
+  wrap.querySelectorAll('.bolt-tab').forEach(btn=>btn.onclick=()=>setTab(btn.dataset.tab));
+  setTab(state.form.boltTab==='standings'?'standings':'signup');
+  return wrap;
+}if(state.form.commitOpen===undefined){state.form.commitOpen=!!myEntry(race);state.form.editingName=myEntry(race)?.name||''}const entries=race.entries.filter(e=>e.level!=='not');const eventGroups={};entries.forEach(e=>{const key=e.events.length?e.events.join(', '):'Event TBC';(eventGroups[key]||=[]).push(e)});const eventKeys=Object.keys(eventGroups).sort((a,b)=>a.localeCompare(b));eventKeys.forEach(k=>eventGroups[k].sort((a,b)=>a.name.localeCompare(b.name)));const orderedEntries=eventKeys.flatMap(k=>eventGroups[k]);const levelLabel=Object.fromEntries(levels);const rosterBody=orderedEntries.length?eventKeys.map(key=>`<div class="roster-group"><p class="roster-group-label">${key}</p>${eventGroups[key].map(e=>`<div class="roster-entry"><div class="roster-who"><span class="roster-name">${e.name}</span><span class="roster-level level-${e.level}">${levelLabel[e.level]||e.level}</span></div><button type="button" class="roster-edit" aria-label="Edit ${e.name}'s commitment for this race">Edit</button></div>`).join('')}</div>`).join(''):'<p class="helper-text">No commitments yet — be the first.</p>';const editingEntry=state.form.editingName?race.entries.find(e=>e.name===state.form.editingName):null;wrap.innerHTML=`${race.url?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Club commitments</div><div class="card-body roster-body">${rosterBody}</div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button ${state.form.commitOpen?'hidden':''}">Add your commitment</button><div class="commitment-fields ${state.form.commitOpen?'':'hidden'}"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button>${editingEntry?'<button type="button" class="remove-commit-button">Remove commitment</button>':''}</div></div></div>`;const commitToggle=wrap.querySelector('.commit-toggle-button'),commitFields=wrap.querySelector('.commitment-fields');commitToggle.onclick=()=>{state.form.commitOpen=true;persist();commitToggle.classList.add('hidden');commitFields.classList.remove('hidden');nameInput.focus()};if(race.url){const a=document.createElement('a');a.className='race-link';a.href=race.url;a.textContent=race.url;a.title=race.url;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} website: ${race.url}`);wrap.querySelector('.race-website-body').append(a)}wrap.querySelectorAll('.roster-edit').forEach((btn,i)=>{btn.onclick=()=>{const entry=orderedEntries[i];const opts=participationOptions();const known=[],extra=[];entry.events.forEach(ev=>{const k=ev.trim().toLowerCase();const hit=opts.find(o=>o.toLowerCase()===k)||(k==='to'?'TO (Technical official)':k==='team'?'Team':null);if(hit)known.includes(hit)||known.push(hit);else extra.push(ev)});state.form={events:known,otherText:extra.join(', '),otherOpen:!!extra.length,level:entry.level,commitOpen:true,editingName:entry.name};persist();render();const fields=$('.commitment-fields');if(fields){fields.querySelector('.name-input').focus({preventScroll:true});fields.scrollIntoView({behavior:'smooth',block:'center'})}}});const removeCommitButton=wrap.querySelector('.remove-commit-button');if(removeCommitButton)removeCommitButton.onclick=async()=>{if(!confirm(`Remove ${editingEntry.name} from this race?`))return;removeCommitButton.disabled=true;removeCommitButton.textContent='Removing…';try{await removeEntry(race.id,editingEntry.name);state.form={events:[],otherText:'',otherOpen:false,level:'considering',commitOpen:false,editingName:''};persist();await loadRaces()}catch(err){removeCommitButton.disabled=false;removeCommitButton.textContent='Remove commitment';alert('Could not remove: '+err.message)}};const nameInput=wrap.querySelector('.name-input');nameInput.value=state.form.editingName||'';const eventChoices=wrap.querySelector('.event-choices');const otherRow=wrap.querySelector('.other-row');const otherInput=wrap.querySelector('.other-input');otherInput.value=state.form.otherText||'';otherInput.oninput=()=>{state.form.otherText=otherInput.value;persist()};
 function participationOptions(){const merged=[...race.events];const ensure=(label,aliases)=>{const idx=merged.findIndex(e=>aliases.includes(e.trim().toLowerCase()));if(idx>=0)merged[idx]=label;else merged.push(label)};ensure('TO (Technical official)',['to','to (technical official)']);ensure('Team',['team']);return merged}
 function update(){eventChoices.innerHTML='';participationOptions().forEach(event=>{const b=document.createElement('button');b.type='button';const active=state.form.events.includes(event);b.className='choice '+(active?'selected':'');b.setAttribute('aria-pressed',String(active));b.textContent=event;b.onclick=()=>{state.form.events=active?state.form.events.filter(x=>x!==event):[...state.form.events,event];persist();update()};eventChoices.append(b)});const otherBtn=document.createElement('button');otherBtn.type='button';otherBtn.className='choice '+(state.form.otherOpen?'selected':'');otherBtn.setAttribute('aria-pressed',String(!!state.form.otherOpen));otherBtn.textContent='Other';otherBtn.onclick=()=>{state.form.otherOpen=!state.form.otherOpen;persist();update();if(state.form.otherOpen)otherInput.focus()};eventChoices.append(otherBtn);otherRow.classList.toggle('hidden',!state.form.otherOpen);const lc=wrap.querySelector('.level-choices');lc.innerHTML='';levels.forEach(([key,label])=>{const b=document.createElement('button');b.type='button';b.className=`choice level-${key} ${state.form.level===key?'selected':''}`;b.textContent=label;b.onclick=()=>{state.form.level=key;persist();update()};lc.append(b)});const btn=wrap.querySelector('.save-button');btn.onclick=async()=>{const name=nameInput.value.trim();if(!name){nameInput.focus();return}const extra=(state.form.otherText||'').trim();const events=[...new Set([...state.form.events,...(extra?[extra]:[])])];if(!events.length){(state.form.otherOpen?otherInput:eventChoices).focus?.();return}btn.disabled=true;btn.textContent='Saving…';try{for(const ev of events){if(!race.events.includes(ev))await addEvent(race.id,ev)}await saveEntry(race.id,name,events,state.form.level);if(state.form.editingName&&state.form.editingName!==name)await removeEntry(race.id,state.form.editingName);state.form.editingName=name;state.user=name;persist();await loadRaces()}catch(err){btn.disabled=false;btn.textContent='Save commitment';alert('Could not save: '+err.message)}}}update();return wrap}
 function toggleAdd(open){const panel=$('#addPanel');panel.classList.toggle('hidden',!open);if(open)panel.querySelector('input').focus()}

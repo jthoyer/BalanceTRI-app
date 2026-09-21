@@ -62,3 +62,32 @@
 .remove-commit-button:hover{border-color:#e3a3a3;background:#fdecec;color:#b3261e}
 .danger-button{margin-right:auto;color:#b3261e}
 .danger-button:hover{background:#fdecec}
+/* Balance Bolt season grouping — the calendar list collapses all five legs
+   into one row (.race-summary's own styling — green fill, flex layout — is
+   reused as-is via the shared class; this only resets it for a <button>). */
+.bolt-series-summary{width:100%;border:0;cursor:pointer;font:inherit}
+.bolt-series-legs{display:flex;flex-direction:column;padding:6px 20px 14px}
+.bolt-series-leg{display:flex;align-items:center;gap:12px;padding:9px 6px 9px 10px;border-left:3px solid var(--line);border-radius:0 7px 7px 0;color:var(--ink);text-decoration:none;font-size:14px}
+.bolt-series-leg:hover{background:var(--canvas)}
+.bolt-series-leg-marker{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:20px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:11px;font-weight:700}
+.bolt-series-leg-name{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bolt-series-leg-date{flex-shrink:0;color:var(--muted);font-size:12.5px}
+.bolt-series-leg-done{border-left-color:var(--green)}
+.bolt-series-leg-done .bolt-series-leg-marker{border-color:var(--green);background:var(--green);color:#fff}
+.bolt-series-leg-done .bolt-series-leg-date{color:var(--green)}
+.bolt-series-leg-next{border-left-color:var(--yellow);background:var(--navy-bg)}
+.bolt-series-leg-next .bolt-series-leg-marker{border-color:var(--yellow);background:var(--yellow);color:var(--ink)}
+.bolt-series-leg-tag{flex-shrink:0;padding:2px 9px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+
+/* Balance Bolt season header + tabs — the race detail screen for one leg. */
+.bolt-season-body{display:flex;flex-direction:column;gap:12px}
+.bolt-season-meta{display:flex;align-items:center;gap:10px;margin:0;color:var(--muted);font-size:14px}
+.bolt-season-meta strong{color:var(--ink)}
+.bolt-season-dots{display:flex;gap:5px}
+.bolt-season-dot{width:8px;height:8px;border-radius:999px;border:1px solid var(--line)}
+.bolt-season-dot-done{background:var(--green);border-color:var(--green)}
+.bolt-season-dot-current{background:var(--yellow);border-color:var(--yellow)}
+.bolt-tabs{display:flex;gap:18px;border-bottom:1px solid var(--line)}
+.bolt-tab{min-height:36px;padding:0 0 9px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:700 14px "DM Sans";cursor:pointer}
+.bolt-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.bolt-tab-link{align-self:flex-start}
