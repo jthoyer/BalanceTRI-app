@@ -76,7 +76,14 @@ function openSignInForm(host,{heading,cancel}={}){
     btn.disabled=true;btn.textContent='Sending…';
     const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.href}});
     if(error){alert('Could not send sign-in link: '+error.message);btn.disabled=false;btn.textContent='Send link';return}
-    form.outerHTML='<span class="auth-name">Check your email for a sign-in link.</span>';
+    // Name the address we sent to and warn about spam: the two things people
+    // check before giving up on a link that hasn't arrived. Built as a node
+    // rather than interpolated into innerHTML so a typed email can't inject
+    // markup.
+    const sent=document.createElement('div');
+    sent.innerHTML='<span class="auth-name">Check your email for a sign-in link.</span><p class="auth-sheet-hint">Sent to <strong class="sent-to-address"></strong>. Give it a minute — and check your spam folder if it\'s not there.</p>';
+    sent.querySelector('.sent-to-address').textContent=email;
+    form.replaceWith(sent);
   });
   if(cancel)host.querySelector('.auth-sheet-cancel').onclick=cancel;
 }

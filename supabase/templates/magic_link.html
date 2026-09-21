@@ -1,0 +1,91 @@
+<!doctype html>
+<!--
+  Balance Tri Club — magic-link email (returning members).
+  Supabase Auth renders this server-side; see README.md ("Sign-in emails").
+  Available variables: {{ .ConfirmationURL }} {{ .Token }} {{ .TokenHash }}
+  {{ .SiteURL }} {{ .Email }} {{ .RedirectTo }}
+
+  Email clients strip <style> blocks and external CSS, so every rule here is
+  inline and the layout is tables, not flex/grid. Keep it that way.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Your Balance Tri Club sign-in link</title>
+</head>
+<body style="margin:0;padding:0;background:#0D1B2A;">
+  <!-- Preheader: the grey preview line next to the subject in the inbox. It
+       is the second thing a member reads, so it repeats the promise rather
+       than leaking the first line of body copy. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0D1B2A;font-size:1px;line-height:1px;">
+    One tap and you're back on the race calendar. This link lasts an hour.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0D1B2A" style="background:#0D1B2A;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+
+          <!-- Typographic wordmark, not the logo PNG. The club's logo is a
+               black wordmark on white, so it disappears on navy — and most
+               clients block remote images by default anyway. Text always
+               renders. Swap this for an <img> once a white-on-dark logo
+               asset exists (see README, "Sign-in emails"). -->
+          <tr>
+            <td style="padding:0 0 28px;font-family:Helvetica,Arial,sans-serif;">
+              <span style="color:#FFFFFF;font-size:20px;font-weight:800;letter-spacing:3px;">BALANCE</span>
+              <span style="color:#F5C518;font-size:20px;font-weight:800;letter-spacing:3px;">&nbsp;TRI CLUB</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 14px;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;font-size:32px;font-weight:800;line-height:1.1;letter-spacing:-0.5px;text-transform:uppercase;">
+              You're one tap<br />from the start line
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 28px;color:#E8E8E8;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;">
+              Hit the button and we'll sign you in — no password to remember, ever.
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td bgcolor="#3DAF4E" style="border-radius:9px;">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 32px;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;line-height:1;text-decoration:none;border-radius:9px;">Sign me in &rarr;</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 28px;color:#8E9BAC;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
+              The link works once and expires in an hour. Button not playing along? Paste this into your browser:<br />
+              <a href="{{ .ConfirmationURL }}" style="color:#3A8FD5;text-decoration:underline;word-break:break-all;">{{ .ConfirmationURL }}</a>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 20px;border-top:1px solid rgba(255,255,255,0.2);"></td>
+          </tr>
+
+          <tr>
+            <td style="color:#8E9BAC;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;">
+              Sent to {{ .Email }} because someone asked for a sign-in link to the Balance Tri Club race calendar. Wasn't you? Ignore this — nothing happens without the tap.<br /><br />
+              <strong style="color:#E8E8E8;">Balance Triathlon Club</strong> &middot; Sydney<br />
+              <a href="{{ .SiteURL }}" style="color:#3A8FD5;text-decoration:underline;">Race calendar</a>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

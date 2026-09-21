@@ -22,6 +22,23 @@ Browsing is always open — the calendar and every race's roster are visible whe
 
 Separately, a bottom-sheet **nudge** appears once per visit for a signed-out browser (unless snoozed), offering "Sign in" or "Just browsing" with equal weight — tapping outside it, scrolling the page, or "Just browsing" all dismiss it the same way, since it never blocks anything. Checking "Don't ask me to sign in again for 10 days" before dismissing snoozes the nudge for 10 days (tracked client-side in `localStorage` as `authDismissedUntil`, not in Supabase); leaving it unchecked just dismisses it for the current visit. The small sign-in control in the header stays available regardless, on mobile included.
 
+### Sign-in emails
+
+The sign-in email is the whole funnel — nobody who doesn't open it ever signs in — so it's branded rather than left on Supabase's default. Two templates live in `supabase/templates/`:
+
+- `confirmation.html` — what a brand-new email address gets ("Confirm your email"). This is the first impression, so the copy says what the calendar is before it asks for a tap.
+- `magic_link.html` — what an address that has signed in before gets.
+
+The app makes one `signInWithOtp()` call; Supabase picks the template based on whether the address is new. Both need to be branded or half the members see the default.
+
+They're table-based HTML with every style inline, because email clients strip `<style>` blocks and external CSS — keep it that way when editing. Each carries a hidden **preheader**: the grey preview line the inbox shows next to the subject, which is the second thing a member reads and a bigger lever on opens than anything in the body.
+
+**Two places, one source.** `[auth.email.template.*]` in `supabase/config.toml` points at these files, but that only drives a local `supabase start` stack. The hosted project reads its templates from the dashboard, so after editing a file here, paste it into [Authentication → Emails](https://supabase.com/dashboard/project/shkfwuogrldbqldpipxd/auth/templates) (subject line included) or the two drift apart.
+
+The mark at the top is set in text, not the club logo: `assets/balance-logo.png` is a black wordmark on white, so it vanishes against the navy canvas, and most clients block remote images by default anyway. A white-on-dark logo asset would let that become a real `<img>`.
+
+**The sender still says Supabase.** Emails go out as `Supabase Auth <noreply@mail.app.supabase.io>`, which no member recognises and which spam filters treat accordingly — and the shared sender is capped at a handful of emails per hour, so a club-wide push would silently hit the limit. The template can't fix any of that. Configuring custom SMTP (Resend, Postmark, SendGrid) under Authentication → Settings, with a verified `balancetriclub.com.au` sender and SPF/DKIM records, is the single biggest remaining lever on sign-in rates.
+
 Use **Refresh** to reload the latest data from Supabase.
 
 ## Shareable race URLs
