@@ -166,14 +166,18 @@ async function addRace(payload){
   });
   if(error) throw new Error(error.message);
 }
+// Removing a race is a soft delete: it stamps deleted_at rather than dropping
+// the row. A race carries its roster, so a hard delete destroys other people's
+// commitments too. There is no delete policy on races any more, and the update
+// policy only matches live rows, so this cannot resurrect one either.
 async function deleteRace(raceId){
-  // .select() makes the deleted rows come back, so a delete that matches
-  // nothing (e.g. a missing row-level-security delete policy, which returns
-  // success with zero rows rather than an error) surfaces instead of looking
-  // like it worked.
-  const {data,error}=await db.from('races').delete().eq('id',raceId).select('id');
+  // .select() makes the updated rows come back, so a write that matches nothing
+  // (row-level security returns success with zero rows rather than an error)
+  // surfaces instead of looking like it worked.
+  const {data,error}=await db.from('races').update({deleted_at:new Date().toISOString()})
+    .eq('id',raceId).is('deleted_at',null).select('id');
   if(error) throw new Error(error.message);
-  if(!data||!data.length) throw new Error('the race was not removed. The database rejected the delete — check that a delete policy exists on the races table.');
+  if(!data||!data.length) throw new Error('the race was not removed. The database rejected the write — you may have been signed out, or the race was already removed.');
 }
 async function updateRace(raceId,payload){
   const {error}=await db.from('races').update({
@@ -345,7 +349,13 @@ function closeEditScreen(){
 async function loadRaces(){
   try{
     loadError=null;
-    const {data,error}=await db.from('races').select('*, entries(name,events,level)').order('date');
+    const {data,error}=await db.from('races').select('*, entries(name,events,level)')
+      // Signed-in members can read removed races (the select policy has to
+      // let them, or the soft delete itself is rejected — see the
+      // races_auth_writes_and_soft_delete migration). Filter them here so a
+      // removed race doesn't reappear on the calendar just because you
+      // signed in. Anonymous visitors never see them at all.
+      .is('deleted_at',null).order('date');
     if(error) throw error;
     races=(data||[]).map(r=>({
       id:r.id,
@@ -388,7 +398,7 @@ function render(){const list=$('#raceList');list.innerHTML='';
     // left click that means "show me this race here".
     if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
     e.preventDefault();openRaceScreen(race.id);
-  };container.append(node)};shown.forEach(race=>appendRace(race,list));if(openId){const openRace=races.find(r=>r.id===openId);if(openRace){const p=dateParts(openRace.date);$('#raceScreenEyebrow').textContent=`${p.day} ${p.month.toUpperCase()} ${p.group.split(' ')[1]}`;$('#raceScreenTitle').textContent=openRace.name;$('#raceScreenEditButton').onclick=()=>openEditScreen(openRace.id);const body=$('#raceScreenBody');body.innerHTML='';body.append(makeDetails(openRace))}else{openId=null;$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden')}}}
+  };container.append(node)};shown.forEach(race=>appendRace(race,list));if(openId){const openRace=races.find(r=>r.id===openId);if(openRace){const p=dateParts(openRace.date);$('#raceScreenEyebrow').textContent=`${p.day} ${p.month.toUpperCase()} ${p.group.split(' ')[1]}`;$('#raceScreenTitle').textContent=openRace.name;$('#raceScreenEditButton').onclick=()=>{if(!requireSignIn('Sign in to edit this race'))return;openEditScreen(openRace.id)};const body=$('#raceScreenBody');body.innerHTML='';body.append(makeDetails(openRace))}else{openId=null;$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden')}}}
 function makeDetails(race){const wrap=document.createElement('div');wrap.className='details-card';if(race.balanceBolt==='Y'){const embedUrl=boltEmbedUrl(race);wrap.innerHTML=`${embedUrl?'<div class="card-header">Race website</div><div class="card-body race-website-body"></div>':''}<div class="card-header">Race details</div><div class="card-body race-embed-body"></div>`;if(embedUrl){const a=document.createElement('a');a.className='race-link';a.href=embedUrl;a.textContent='Open sign-up in a new tab';a.target='_blank';a.rel='noopener';a.setAttribute('aria-label',`${race.name} sign-up: ${embedUrl}`);wrap.querySelector('.race-website-body').append(a);const iframe=document.createElement('iframe');iframe.className='race-embed';iframe.src=embedUrl;iframe.loading='lazy';iframe.title=`${race.name} embedded website`;
     // Same origin as this app (both under jthoyer.github.io), so the frame's
     // own scroll height is readable — resize to it instead of clipping at a
@@ -415,12 +425,12 @@ function update(){eventChoices.innerHTML='';participationOptions().forEach(event
 function toggleAdd(open){const panel=$('#addPanel');panel.classList.toggle('hidden',!open);if(open)panel.querySelector('input').focus()}
 document.querySelectorAll('.view-toggle-btn').forEach(b=>b.onclick=()=>{state.viewFilter=b.dataset.view;persist();render()});
 document.querySelectorAll('#raceForm,#editForm').forEach(f=>{f.eventType.onchange=()=>applyEventTypeFields(f);applyEventTypeFields(f)});
-$('#athleteFilter').oninput=e=>{state.filter=e.target.value;persist();render()};$('#eventTypeFilter').onchange=e=>{state.eventTypeFilter=e.target.value;persist();render()};$('#heroAddButton').onclick=()=>{if(editingId)closeEditScreen();toggleAdd(true);$('#addPanel').scrollIntoView({behavior:'smooth',block:'start'})};$('#closeAddButton').onclick=()=>toggleAdd(false);$('#cancelAddButton').onclick=()=>toggleAdd(false);$('#raceForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;try{await addRace({name:f.get('name').trim(),date:f.get('date'),location:'Location TBC',url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});e.target.reset();applyEventTypeFields(e.target);toggleAdd(false);await loadRaces()}catch(err){alert('Could not add race: '+err.message)}finally{submitBtn.disabled=false}});
+$('#athleteFilter').oninput=e=>{state.filter=e.target.value;persist();render()};$('#eventTypeFilter').onchange=e=>{state.eventTypeFilter=e.target.value;persist();render()};$('#heroAddButton').onclick=()=>{if(!requireSignIn('Sign in to add a race'))return;if(editingId)closeEditScreen();toggleAdd(true);$('#addPanel').scrollIntoView({behavior:'smooth',block:'start'})};$('#closeAddButton').onclick=()=>toggleAdd(false);$('#cancelAddButton').onclick=()=>toggleAdd(false);$('#raceForm').addEventListener('submit',async e=>{e.preventDefault();if(!requireSignIn('Sign in to add a race'))return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;try{await addRace({name:f.get('name').trim(),date:f.get('date'),location:'Location TBC',url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});e.target.reset();applyEventTypeFields(e.target);toggleAdd(false);await loadRaces()}catch(err){alert('Could not add race: '+err.message)}finally{submitBtn.disabled=false}});
 $('#editCancelButton').onclick=closeEditScreen;$('#editBackButton').onclick=closeEditScreen;$('#raceScreenBackButton').onclick=()=>closeRaceScreen();
 // Back/forward between the list and a race. Ignored until the first load has
 // resolved, because findRaceBySlug has nothing to match against before then.
 window.addEventListener('popstate',()=>{if(bootstrapped)routeFromUrl()});
-$('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);const wasOpen=openId===raceId;editingId=null;openId=null;if(wasOpen)navigate(BASE_PATH,{replace:true});$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
+$('#removeRaceButton').onclick=async()=>{const raceId=editingId;if(!raceId)return;if(!requireSignIn('Sign in to remove this race'))return;const race=races.find(r=>r.id===raceId);if(!confirm(`Remove ${race?.name||'this race'} from the calendar? This can't be undone.`))return;const btn=$('#removeRaceButton');btn.disabled=true;btn.textContent='Removing…';try{await deleteRace(raceId);const wasOpen=openId===raceId;editingId=null;openId=null;if(wasOpen)navigate(BASE_PATH,{replace:true});$('#editScreen').classList.add('hidden');$('#raceScreen').classList.add('hidden');$('#top').classList.remove('hidden');document.querySelector('.toolbar').classList.remove('hidden');$('#raceList').classList.remove('hidden');await loadRaces();showToast(`${race?.name||'Race'} removed`)}catch(err){alert('Could not remove race: '+err.message)}finally{btn.disabled=false;btn.textContent='Remove race'}};$('#editForm').addEventListener('submit',async e=>{e.preventDefault();const raceId=editingId;if(!raceId)return;if(!requireSignIn('Sign in to save these changes'))return;const f=new FormData(e.target);const submitBtn=e.target.querySelector('.primary-button');submitBtn.disabled=true;let url=f.get('url').trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;const name=f.get('name').trim();try{await updateRace(raceId,{name,date:f.get('date'),url,events:f.get('events').split(',').map(x=>x.trim()).filter(Boolean),eventType:f.get('eventType'),clubFocus:f.get('clubFocus')?'Y':'N'});closeEditScreen();await loadRaces();showToast(`${name} updated`)}catch(err){alert('Could not save changes: '+err.message)}finally{submitBtn.disabled=false}});
 $('#resetButton').onclick=()=>{loadRaces()};loadRaces();
 $('#authSheetBackdrop').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAuthSheet()});
 $('#authSheetClose').onclick=closeAuthSheet;
