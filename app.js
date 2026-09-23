@@ -338,20 +338,41 @@ async function initAuth() {
   });
 }
 async function removeEntry(raceId, name) {
-  const { error } = await db.from('entries').delete().eq('race_id', raceId).eq('name', name);
+  // .select() makes the deleted row come back, so a write that matches
+  // nothing (row-level security returns success with zero rows rather than
+  // an error) surfaces instead of looking like it worked.
+  const { data, error } = await db
+    .from('entries')
+    .delete()
+    .eq('race_id', raceId)
+    .eq('name', name)
+    .select('id');
   if (error) throw new Error(error.message);
+  if (!data || !data.length)
+    throw new Error(
+      'the commitment was not removed. The database rejected the write — you may have been signed out, or you may not have access to make this change.',
+    );
 }
 async function addEvent(raceId, event) {
   const race = races.find(r => r.id === raceId);
   const events = [...new Set([...(race?.events || []), event])];
-  const { error } = await db.from('races').update({ events }).eq('id', raceId);
+  const { data, error } = await db.from('races').update({ events }).eq('id', raceId).select('id');
   if (error) throw new Error(error.message);
+  if (!data || !data.length)
+    throw new Error(
+      'the event was not added. The database rejected the write — you may have been signed out, or you may not have access to make this change.',
+    );
 }
 async function saveEntry(raceId, name, events, level) {
-  const { error } = await db
+  const { data, error } = await db
     .from('entries')
-    .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' });
+    .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' })
+    .select('id');
   if (error) throw new Error(error.message);
+  if (!data || !data.length)
+    throw new Error(
+      'the commitment was not saved. The database rejected the write — you may have been signed out, or you may not have access to make this change.',
+    );
 }
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
@@ -387,7 +408,7 @@ async function deleteRace(raceId) {
     );
 }
 async function updateRace(raceId, payload) {
-  const { error } = await db
+  const { data, error } = await db
     .from('races')
     .update({
       name: payload.name,
@@ -398,8 +419,13 @@ async function updateRace(raceId, payload) {
       club_focus: payload.eventType === 'Balance Bolt' || payload.clubFocus === 'Y',
       balance_bolt: payload.eventType === 'Balance Bolt',
     })
-    .eq('id', raceId);
+    .eq('id', raceId)
+    .select('id');
   if (error) throw new Error(error.message);
+  if (!data || !data.length)
+    throw new Error(
+      'the race was not updated. The database rejected the write — you may have been signed out, or you may not have access to make this change.',
+    );
 }
 // ---------------------------------------------------------------------------
 // Routing. Every race is shareable at <base>race/<slug>.
