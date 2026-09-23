@@ -595,6 +595,9 @@
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.72);
 }
+.auth-sheet .auth-sheet-hint a {
+  color: var(--brand-blue);
+}
 .auth-sheet .auth-sheet-hint-muted {
   text-align: center;
   color: rgba(255, 255, 255, 0.65);

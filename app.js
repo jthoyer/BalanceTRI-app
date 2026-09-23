@@ -298,7 +298,7 @@ function showAuthSheetNudge() {
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
   $('#authSheetBody').innerHTML =
-    `<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint auth-sheet-hint-muted">You can close this and come back to it later.</p>`;
+    `<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint">Balance Tri Club members only. Not a member? Email <a href="mailto:mail@balancetriclub.com">mail@balancetriclub.com</a> to sign up.</p><p class="auth-sheet-hint auth-sheet-hint-muted">You can close this and come back to it later.</p>`;
   $('#authSheetSnooze').onchange = e => {
     authSheetSnoozeWanted = e.target.checked;
   };
