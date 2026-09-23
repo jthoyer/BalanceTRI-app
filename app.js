@@ -1334,11 +1334,4 @@ $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
 $('#authSheetClose').onclick = closeAuthSheet;
-window.addEventListener(
-  'scroll',
-  () => {
-    if (!$('#authSheetBackdrop').classList.contains('hidden')) closeAuthSheet();
-  },
-  { passive: true },
-);
 initAuth();
