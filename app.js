@@ -488,6 +488,9 @@ function computeBasePath(pathname) {
   return pathname.replace(/[^/]*$/, '') || '/';
 }
 const BASE_PATH = computeBasePath(location.pathname);
+// A plain href (no click handler) so it's a real navigation to the app root —
+// clicking it from a race screen, or from the main page itself, reloads fresh.
+$('#brandLink').href = BASE_PATH;
 function slugFromPath(pathname) {
   const m = pathname.match(ROUTE_RE);
   if (!m) return null;
