@@ -131,6 +131,45 @@ function myEntry(race) {
 // ---------------------------------------------------------------------------
 let session = null;
 let profile = null;
+// isMember mirrors the server-side private.is_allow_listed() check — it
+// never gates sign-in or browsing, only whether the write buttons below are
+// left clickable. RLS is the real boundary (see friendlyWriteError); this is
+// UX so a non-member isn't left clicking a button that was always going to
+// fail. checkMembership() re-reads it right after sign-in and again after
+// sign-out (to false, with no RPC call needed).
+let isMember = false;
+async function checkMembership() {
+  if (!session) {
+    isMember = false;
+    return;
+  }
+  const { data, error } = await db.rpc('is_allow_listed');
+  isMember = !error && data === true;
+}
+const MEMBER_ONLY_HINT = 'Club members only — email mail@balancetriclub.com to request access.';
+// Disables a write button for a signed-in non-member, leaving it untouched
+// for a signed-out visitor (clicking still opens the sign-in gate as before)
+// and for an approved member. A disabled button never fires its click
+// handler, so this only ever suppresses a request RLS would have rejected
+// anyway — it adds no new permission check of its own.
+function gateButton(btn) {
+  if (!btn) return;
+  const gated = session && !isMember;
+  btn.disabled = gated;
+  btn.title = gated ? MEMBER_ONLY_HINT : '';
+}
+// Covers the write controls that are static DOM (always present, never torn
+// down by render()) — the header's Add-a-race button, the two form submit
+// buttons, and the edit screen's Edit/Remove buttons. Controls makeDetails()
+// rebuilds fresh on every render (the roster's per-entry Edit buttons, Add
+// your commitment, Remove commitment) gate themselves inline instead.
+function applyMemberGating() {
+  gateButton($('#heroAddButton'));
+  gateButton($('#removeRaceButton'));
+  gateButton($('#raceScreenEditButton'));
+  gateButton(document.querySelector('#raceForm .primary-button'));
+  gateButton(document.querySelector('#editForm .primary-button'));
+}
 async function loadProfile() {
   const { data, error } = await db
     .from('profiles')
@@ -168,6 +207,8 @@ function renderAuth() {
     // not an overlay, competing for space in .header-actions).
     $('#signInButton').onclick = () => requireSignIn('Sign in');
   }
+  $('#memberBanner').classList.toggle('hidden', !session || isMember);
+  applyMemberGating();
 }
 // heading: an <h2> to show above the email field. cancel: a handler for a
 // "Cancel" button shown below the form. Always targets the auth sheet now.
@@ -321,15 +362,22 @@ async function initAuth() {
     data: { session: s },
   } = await db.auth.getSession();
   session = s;
-  if (session) await loadProfile();
+  if (session) {
+    await loadProfile();
+    await checkMembership();
+  }
   renderAuth();
   showAuthSheetNudge();
   db.auth.onAuthStateChange(async (_event, s) => {
     session = s;
     if (session) {
       await loadProfile();
+      await checkMembership();
       closeAuthSheet();
-    } else profile = null;
+    } else {
+      profile = null;
+      isMember = false;
+    }
     renderAuth();
     // Signing in with the code never reloads the page, so the name loadProfile
     // just seeded into state.user would sit unrendered until the next redraw.
@@ -785,6 +833,7 @@ function render() {
         if (!requireSignIn('Sign in to edit this race')) return;
         openEditScreen(openRace.id);
       };
+      gateButton($('#raceScreenEditButton'));
       const body = $('#raceScreenBody');
       body.innerHTML = '';
       body.append(makeDetails(openRace));
@@ -796,6 +845,7 @@ function render() {
       $('#raceList').classList.remove('hidden');
     }
   }
+  applyMemberGating();
 }
 // Builds the club-commitments roster as DOM nodes. Every member-supplied
 // string — the event-group label and the entry name — goes in via textContent
@@ -956,6 +1006,7 @@ function makeDetails(race) {
     commitFields.classList.remove('hidden');
     nameInput.focus();
   };
+  gateButton(commitToggle);
   const websiteUrl = race.url ? safeLinkUrl(race.url) : null;
   if (websiteUrl) {
     const a = document.createElement('a');
@@ -999,6 +1050,7 @@ function makeDetails(race) {
         fields.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     };
+    gateButton(btn);
   });
   const removeCommitButton = wrap.querySelector('.remove-commit-button');
   if (removeCommitButton)
@@ -1025,6 +1077,7 @@ function makeDetails(race) {
         alert('Could not remove: ' + err.message);
       }
     };
+  gateButton(removeCommitButton);
   const nameInput = wrap.querySelector('.name-input');
   nameInput.value = state.form.editingName || '';
   const eventChoices = wrap.querySelector('.event-choices');
