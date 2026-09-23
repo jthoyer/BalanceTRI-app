@@ -131,12 +131,17 @@ function myEntry(race) {
 // ---------------------------------------------------------------------------
 let session = null;
 let profile = null;
-// isMember mirrors the server-side private.is_allow_listed() check — it
-// never gates sign-in or browsing, only whether the write buttons below are
-// left clickable. RLS is the real boundary (see friendlyWriteError); this is
-// UX so a non-member isn't left clicking a button that was always going to
-// fail. checkMembership() re-reads it right after sign-in and again after
-// sign-out (to false, with no RPC call needed).
+// isMember mirrors the server-side private.is_allow_listed() check. It never
+// gates sign-in itself — that would mean testing an email against the list
+// before Supabase Auth has verified the caller owns it, which is exactly the
+// address-probing oracle private.is_allow_listed() was written to rule out
+// (see the migration). Instead a signed-in non-member is bounced straight
+// back out by rejectNonMember(), below, rather than left sitting in a
+// half-signed-in state with nothing they can do. RLS is the real boundary
+// either way (see friendlyWriteError); gateButton/applyMemberGating just
+// keep the write buttons from being clickable for the brief moment before
+// that sign-out completes. checkMembership() re-reads it right after sign-in
+// and again after sign-out (to false, with no RPC call needed).
 let isMember = false;
 async function checkMembership() {
   if (!session) {
@@ -145,6 +150,18 @@ async function checkMembership() {
   }
   const { data, error } = await db.rpc('is_allow_listed');
   isMember = !error && data === true;
+}
+// supabase-js warns against calling auth methods synchronously from inside
+// onAuthStateChange (it can deadlock the client), so the actual sign-out is
+// deferred a tick; the alert goes first since the session is still valid
+// while it's up, so nothing on screen looks broken mid-message.
+function rejectNonMember() {
+  alert(
+    "This app is for Balance Tri Club members only, so you've been signed " +
+      'out. Not a member? Email mail@balancetriclub.com to request access, ' +
+      'or visit balancetriclub.com.au for club info.',
+  );
+  setTimeout(() => db.auth.signOut(), 0);
 }
 const MEMBER_ONLY_HINT = 'Club members only — email mail@balancetriclub.com to request access.';
 // Disables a write button for a signed-in non-member, leaving it untouched
@@ -218,7 +235,7 @@ function openSignInForm(host, { heading, cancel } = {}) {
   // so that no innerHTML sink in this file takes an argument at all — which
   // is what lets the lint rule run with no suppressions, and makes the next
   // one somebody adds fail the build.
-  host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
+  host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
   if (heading) {
     const h2 = document.createElement('h2');
     h2.textContent = heading;
@@ -339,7 +356,7 @@ function showAuthSheetNudge() {
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
   $('#authSheetBody').innerHTML =
-    `<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint">Balance Tri Club members only. Not a member? Email <a href="mailto:mail@balancetriclub.com">mail@balancetriclub.com</a> to sign up.</p><p class="auth-sheet-hint auth-sheet-hint-muted">You can close this and come back to it later.</p>`;
+    `<h2>Sign in to save your name?</h2><p class="auth-sheet-hint">Sign in once and we'll fill your name in every time.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign in</button><button type="button" class="secondary-button" id="authSheetBrowseButton">Just browsing</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label><p class="auth-sheet-hint auth-sheet-hint-muted">You can close this and come back to it later.</p>`;
   $('#authSheetSnooze').onchange = e => {
     authSheetSnoozeWanted = e.target.checked;
   };
@@ -365,6 +382,7 @@ async function initAuth() {
   if (session) {
     await loadProfile();
     await checkMembership();
+    if (!isMember) rejectNonMember();
   }
   renderAuth();
   showAuthSheetNudge();
@@ -374,6 +392,7 @@ async function initAuth() {
       await loadProfile();
       await checkMembership();
       closeAuthSheet();
+      if (!isMember) rejectNonMember();
     } else {
       profile = null;
       isMember = false;
