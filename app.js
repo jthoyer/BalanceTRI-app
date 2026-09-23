@@ -337,21 +337,43 @@ async function initAuth() {
     render();
   });
 }
+// Postgres/PostgREST report a write the allow-list blocked in two different
+// shapes: an INSERT's WITH CHECK failure comes back as a real "row-level
+// security" error, while an UPDATE/DELETE whose USING clause excludes every
+// row returns success with zero rows instead. Both mean the same thing here
+// — requireSignIn() already guarantees the caller is signed in by this
+// point, so a rejection can only mean their email isn't on the allow-list —
+// and both get the same message rather than raw Postgres text or looking
+// like nothing happened.
+function friendlyWriteError(message) {
+  return /row-level security/i.test(message)
+    ? new Error('This action is for approved members only.')
+    : new Error(message);
+}
 async function removeEntry(raceId, name) {
-  const { error } = await db.from('entries').delete().eq('race_id', raceId).eq('name', name);
-  if (error) throw new Error(error.message);
+  const { data, error } = await db
+    .from('entries')
+    .delete()
+    .eq('race_id', raceId)
+    .eq('name', name)
+    .select('id');
+  if (error) throw friendlyWriteError(error.message);
+  if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
 async function addEvent(raceId, event) {
   const race = races.find(r => r.id === raceId);
   const events = [...new Set([...(race?.events || []), event])];
-  const { error } = await db.from('races').update({ events }).eq('id', raceId);
-  if (error) throw new Error(error.message);
+  const { data, error } = await db.from('races').update({ events }).eq('id', raceId).select('id');
+  if (error) throw friendlyWriteError(error.message);
+  if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
 async function saveEntry(raceId, name, events, level) {
-  const { error } = await db
+  const { data, error } = await db
     .from('entries')
-    .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' });
-  if (error) throw new Error(error.message);
+    .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' })
+    .select('id');
+  if (error) throw friendlyWriteError(error.message);
+  if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
@@ -364,7 +386,7 @@ async function addRace(payload) {
     club_focus: payload.eventType === 'Balance Bolt' || payload.clubFocus === 'Y',
     balance_bolt: payload.eventType === 'Balance Bolt',
   });
-  if (error) throw new Error(error.message);
+  if (error) throw friendlyWriteError(error.message);
 }
 // Removing a race is a soft delete: it stamps deleted_at rather than dropping
 // the row. A race carries its roster, so a hard delete destroys other people's
@@ -380,14 +402,12 @@ async function deleteRace(raceId) {
     .eq('id', raceId)
     .is('deleted_at', null)
     .select('id');
-  if (error) throw new Error(error.message);
+  if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length)
-    throw new Error(
-      'the race was not removed. The database rejected the write — you may have been signed out, or the race was already removed.',
-    );
+    throw new Error('This action is for approved members only, or the race was already removed.');
 }
 async function updateRace(raceId, payload) {
-  const { error } = await db
+  const { data, error } = await db
     .from('races')
     .update({
       name: payload.name,
@@ -398,8 +418,10 @@ async function updateRace(raceId, payload) {
       club_focus: payload.eventType === 'Balance Bolt' || payload.clubFocus === 'Y',
       balance_bolt: payload.eventType === 'Balance Bolt',
     })
-    .eq('id', raceId);
-  if (error) throw new Error(error.message);
+    .eq('id', raceId)
+    .select('id');
+  if (error) throw friendlyWriteError(error.message);
+  if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
 // ---------------------------------------------------------------------------
 // Routing. Every race is shareable at <base>race/<slug>.
