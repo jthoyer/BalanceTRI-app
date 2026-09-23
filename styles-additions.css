@@ -378,6 +378,19 @@
   font-size: 14px;
   font-weight: 700;
 }
+.member-banner {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 9px;
+  background: #fdf3de;
+  color: #7a5b12;
+  font-size: 14px;
+  font-weight: 600;
+}
+.member-banner a {
+  color: inherit;
+  text-decoration: underline;
+}
 @media (max-width: 700px) {
   .edit-screen .add-panel {
     padding: 22px 18px;
