@@ -228,24 +228,11 @@ function renderAuth() {
   applyMemberGating();
 }
 // heading: an <h2> to show above the email field. cancel: a handler for a
-// "Cancel" button shown below the form. skipIntro: true when the caller
-// (the nudge) already showed this same explanation a moment ago, so this
-// step should jump straight to the email field instead of repeating it.
+// "Cancel" button shown below the form. Always reached via showSignInActions,
+// which already showed the explanation, so this step is just the email field.
 // Always targets the auth sheet now.
-function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
-  // Every `heading` passed in today is one of this file's own literals, so
-  // this was never the live hole the roster was. It is written as DOM anyway
-  // so that no innerHTML sink in this file takes an argument at all — which
-  // is what lets the lint rule run with no suppressions, and makes the next
-  // one somebody adds fail the build. Two full literals rather than one
-  // built with an interpolated intro: `skipIntro` is a boolean, not
-  // untrusted text, but the rule flags any substitution into innerHTML, not
-  // just unsafe ones — so it has to stay a bare template literal either way.
-  if (skipIntro) {
-    host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
-  } else {
-    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
-  }
+function openSignInForm(host, { heading, cancel } = {}) {
+  host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
   if (heading) {
     const h2 = document.createElement('h2');
     h2.textContent = heading;
@@ -361,26 +348,42 @@ function closeAuthSheet() {
   authSheetSnoozeWanted = false;
   $('#authSheetBackdrop').classList.add('hidden');
 }
+// The landing step for every sign-in trigger, nudge and gate alike: an
+// explanation, a "Sign In" / dismiss button pair, and (nudge only) the
+// snooze checkbox. "Sign In" moves on to openSignInForm's email field;
+// the dismiss button just backs out via `cancel`.
+function showSignInActions(host, { heading, dismissLabel, cancel, showSnooze }) {
+  // Two full literals, as elsewhere in this file, rather than one built by
+  // concatenating in the checkbox conditionally — no-unsanitized/property
+  // flags any non-literal reaching innerHTML, showSnooze included.
+  if (showSnooze) {
+    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetDismissButton"></button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
+  } else {
+    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetDismissButton"></button></div>`;
+  }
+  if (heading) {
+    const h2 = document.createElement('h2');
+    h2.textContent = heading;
+    host.prepend(h2);
+  }
+  host.querySelector('#authSheetDismissButton').textContent = dismissLabel;
+  host.querySelector('#authSheetDismissButton').onclick = cancel;
+  if (showSnooze) {
+    host.querySelector('#authSheetSnooze').onchange = e => {
+      authSheetSnoozeWanted = e.target.checked;
+    };
+  }
+  $('#authSheetSignInButton').onclick = () => openSignInForm(host, { heading, cancel });
+}
 function showAuthSheetNudge() {
   if (session || authSheetDismissed || Date.now() < state.authDismissedUntil) return;
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
-  // Same wording as openSignInForm's intro (a bare literal here too, for the
-  // same no-unsanitized reason) so a visitor sees one consistent explanation
-  // rather than two different ones back to back; skipIntro on the click
-  // through below is what keeps it from repeating a second time.
-  $('#authSheetBody').innerHTML =
-    `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetBrowseButton">View Calendar</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
-  $('#authSheetSnooze').onchange = e => {
-    authSheetSnoozeWanted = e.target.checked;
-  };
-  $('#authSheetSignInButton').onclick = () =>
-    openSignInForm($('#authSheetBody'), {
-      heading: 'Sign in',
-      cancel: closeAuthSheet,
-      skipIntro: true,
-    });
-  $('#authSheetBrowseButton').onclick = closeAuthSheet;
+  showSignInActions($('#authSheetBody'), {
+    dismissLabel: 'View Calendar',
+    cancel: closeAuthSheet,
+    showSnooze: true,
+  });
   $('#authSheetBackdrop').classList.remove('hidden');
 }
 // Called before a write; opens the gate and returns false if signed out
@@ -388,7 +391,11 @@ function showAuthSheetNudge() {
 function requireSignIn(title) {
   if (session) return true;
   authSheetMode = 'gate';
-  openSignInForm($('#authSheetBody'), { heading: title, cancel: closeAuthSheet });
+  showSignInActions($('#authSheetBody'), {
+    heading: title,
+    dismissLabel: 'Cancel',
+    cancel: closeAuthSheet,
+  });
   $('#authSheetBackdrop').classList.remove('hidden');
   return false;
 }
