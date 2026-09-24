@@ -216,6 +216,9 @@ function renderAuth() {
     signOut.className = 'text-button';
     signOut.id = 'signOutButton';
     signOut.textContent = 'Sign out';
+    // Name first, Sign out last: it ends the session, so it sits at the edge
+    // where it's easy to find and hard to hit by mistake.
+    widget.append(name);
     if (isAdmin) {
       const adminLink = document.createElement('a');
       adminLink.className = 'text-button';
@@ -223,7 +226,7 @@ function renderAuth() {
       adminLink.textContent = 'Admin';
       widget.append(adminLink);
     }
-    widget.append(name, signOut);
+    widget.append(signOut);
     $('#signOutButton').onclick = () => db.auth.signOut();
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;

@@ -252,6 +252,16 @@
   align-items: center;
   gap: 14px;
 }
+/* Header labels never wrap: a two-line "Sign out" or "Add a race" reads as
+   broken. Refresh drops to the account links' 14px so it stays the quietest
+   thing in the row. */
+.header-actions button,
+.header-actions a {
+  white-space: nowrap;
+}
+#resetButton {
+  font-size: 14px;
+}
 .hero-copy .view-toggle {
   display: flex;
   gap: 4px;
@@ -278,7 +288,7 @@
 }
 @media (max-width: 700px) {
   .header-actions {
-    gap: 8px;
+    gap: 6px;
   }
 }
 .hero-copy .race-count-group {
@@ -470,13 +480,18 @@
 .danger-button:hover {
   background: #fdecec;
 }
+/* The account cluster (name, Admin, Sign out, or Sign in) sits last, split
+   from the page actions by a hairline so it reads as its own group. */
 .auth-widget {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
   font-size: 14px;
 }
 .auth-widget .auth-name {
+  margin-right: 6px;
   color: var(--ink);
   font-weight: 700;
   max-width: 160px;
@@ -529,8 +544,23 @@
   appearance: none;
 }
 @media (max-width: 700px) {
+  .auth-widget {
+    padding-left: 8px;
+  }
+  /* A signed-in admin puts four controls beside the logo; a slightly
+     smaller logo and a tighter primary button keep them on a 360px row. */
+  .brand-logo {
+    height: 52px;
+  }
+  .header-actions .primary-button {
+    padding: 10px 12px;
+  }
+  .header-actions .primary-button span {
+    display: none;
+  }
+  /* No room for the name on a phone; Sign out already says who is in. */
   .auth-widget .auth-name {
-    max-width: 90px;
+    display: none;
   }
   /* #signInButton/#signOutButton are .text-button, hidden by styles.css's
      blanket mobile rule; the header sign-in control is meant to "stay
