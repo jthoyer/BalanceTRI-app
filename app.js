@@ -22,6 +22,11 @@
 const SUPABASE_URL = 'https://shkfwuogrldbqldpipxd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Cloudflare Turnstile site key: public, like the anon key. Empty means no bot
+// check — sign-in works as before. Set it and deploy BEFORE turning CAPTCHA on
+// in Supabase (Authentication → Attack Protection): once that switch is on,
+// every signInWithOtp without a token fails. See README.md.
+const TURNSTILE_SITE_KEY = '';
 
 const levels = [
   ['considering', 'Considering'],
@@ -265,10 +270,19 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
     const btn = e.target.querySelector('button');
     btn.disabled = true;
     btn.textContent = 'Sending…';
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: location.href },
-    });
+    let captchaToken;
+    let error;
+    try {
+      captchaToken = await getCaptchaToken(form);
+    } catch (captchaError) {
+      error = captchaError;
+    }
+    if (!error) {
+      ({ error } = await db.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: location.href, captchaToken },
+      }));
+    }
     if (error) {
       alert('Could not send sign-in link: ' + error.message);
       btn.disabled = false;
@@ -278,6 +292,54 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
     showCodeStep(host, email, cancel);
   });
   if (cancel) host.querySelector('.auth-sheet-cancel').onclick = cancel;
+}
+// Turnstile's script loads only when someone actually asks for a sign-in
+// email, so browsing never fetches it. A failed load clears the promise, so
+// the next attempt retries instead of reusing the failure.
+let turnstileLoading = null;
+function loadTurnstile() {
+  turnstileLoading ||= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.onload = () => resolve(window.turnstile);
+    script.onerror = () => {
+      turnstileLoading = null;
+      reject(new Error('the bot check could not load. Check your connection and try again.'));
+    };
+    document.head.append(script);
+  });
+  return turnstileLoading;
+}
+// One fresh widget per send: a Turnstile token is single-use, so a retry after
+// a failed send needs a new one anyway. 'interaction-only' keeps the widget
+// hidden unless Cloudflare wants a click, which for most members is never.
+// Returns undefined with no site key, which signInWithOtp simply ignores.
+async function getCaptchaToken(form) {
+  if (!TURNSTILE_SITE_KEY) return undefined;
+  const turnstile = await loadTurnstile();
+  const slot = document.createElement('div');
+  slot.className = 'captcha-slot';
+  form.after(slot);
+  let widgetId;
+  try {
+    return await new Promise((resolve, reject) => {
+      widgetId = turnstile.render(slot, {
+        sitekey: TURNSTILE_SITE_KEY,
+        appearance: 'interaction-only',
+        callback: resolve,
+        'error-callback': code => {
+          reject(new Error(`the bot check failed (${code}). Please try again.`));
+          return true;
+        },
+        'expired-callback': () => reject(new Error('the bot check expired. Please try again.')),
+        'timeout-callback': () => reject(new Error('the bot check timed out. Please try again.')),
+      });
+    });
+  } finally {
+    if (widgetId !== undefined) turnstile.remove(widgetId);
+    slot.remove();
+  }
 }
 // Step two: the email carries both a link and a 6-digit code, and this is the
 // box for the code. It exists because of how magic links fail on a phone —

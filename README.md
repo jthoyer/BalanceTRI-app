@@ -57,6 +57,20 @@ Four migrations limit what a bot, or one bad member account, can do once past th
      and changed_at > now() - interval '1 day';
   ```
 
+### supabase-js is committed, not loaded from a CDN
+
+`index.html` loads `vendor/supabase-js-2.117.1.js`, a copy of the library's UMD build taken from the npm package, with its licence alongside. It used to load `cdn.jsdelivr.net/npm/@supabase/supabase-js@2`, which floated to whatever 2.x release was newest and carried no integrity check. That script runs with full access to a member's session, so a bad release or a CDN compromise could have acted as every signed-in member. Now an upgrade happens only when someone commits one.
+
+To upgrade:
+
+```sh
+npm pack @supabase/supabase-js@<version>   # checks the tarball against the registry's hash
+tar xzf supabase-supabase-js-<version>.tgz
+cp package/dist/umd/supabase.js vendor/supabase-js-<version>.js
+```
+
+Then point the `<script>` tag in `index.html` at the new file, delete the old one, and check sign-in and saving a commitment still work. `vendor/` is excluded from Prettier and ESLint on purpose, so the file stays byte-for-byte what was published.
+
 ## Removing a race
 
 Removing a race is a **soft delete**: `deleted_at` is stamped and the row stays. A race carries its roster, so a hard delete would destroy other people's commitments as well. `app.js` never issues a `DELETE` against `races`, and there is no delete policy on the table.
@@ -75,6 +89,20 @@ The unique index on `slug` is partial (`where deleted_at is null`), so removing 
 Browsing is always open — the calendar and every race's roster are visible whether or not you're signed in. Saving, editing or removing a commitment is not: a signed-out attempt opens a bottom sheet asking you to sign in first (`requireSignIn` in `app.js`), and the click that started it resumes once you are.
 
 Separately, a bottom-sheet **nudge** appears once per visit for a signed-out browser (unless snoozed), offering "Sign in" or "Just browsing" with equal weight — tapping outside it or "Just browsing" both dismiss it the same way, since it never blocks anything. (An earlier version also dismissed it on any page scroll; that closed the sheet the moment a phone's keyboard opened for the email field, since focusing an input inside a fixed-position sheet makes mobile browsers scroll the document to keep it in view — so scroll-to-dismiss was removed.) Checking "Don't ask me to sign in again for 10 days" before dismissing snoozes the nudge for 10 days (tracked client-side in `localStorage` as `authDismissedUntil`, not in Supabase); leaving it unchecked just dismisses it for the current visit. The small sign-in control in the header stays available regardless, on mobile included.
+
+### Bot check (Cloudflare Turnstile)
+
+Anyone can ask Supabase to send a sign-in email to any address, and the allow-list can't stop that: it only controls writes. A script could burn through the project's email quota and lock real members out of sign-in. Turnstile makes each send prove it came from a browser.
+
+It's off until a site key is set. With `TURNSTILE_SITE_KEY` empty in `app.js`, sign-in works exactly as before. With a key, pressing **Send link** loads Cloudflare's script (browsing never loads it), gets a single-use token, and passes it to `signInWithOtp` as `captchaToken`. The widget uses `appearance: 'interaction-only'`, so most members never see it. The rest get a single checkbox.
+
+**Switching it on — in this order:**
+
+1. In the Cloudflare dashboard, go to **Turnstile → Add widget**. Add the hostname `jthoyer.github.io` and choose the **Managed** mode. Copy the **site key** and the **secret key**.
+2. Put the site key in `TURNSTILE_SITE_KEY` in `app.js` and deploy. Sign-in still works, because Supabase ignores a token it isn't checking.
+3. In Supabase, go to **Authentication → Attack Protection**, enable CAPTCHA protection, choose Turnstile, paste the **secret key** and save.
+
+Doing step 3 before step 2 breaks sign-in for everyone: once CAPTCHA protection is on, every send without a token is refused. To switch it off, reverse the order: turn it off in Supabase first, then clear the key.
 
 ### Sign-in emails
 
