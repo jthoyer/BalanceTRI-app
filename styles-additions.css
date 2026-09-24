@@ -388,6 +388,13 @@
   font-size: 14px;
   font-weight: 700;
 }
+/* A write failure reuses the same banner, swapped to the destructive
+   palette used elsewhere (.remove-commit-button:hover); see
+   showToast(msg, 'error') and the two SVGs it toggles between. */
+.update-banner.error {
+  background: #fdecec;
+  color: #b3261e;
+}
 .member-banner {
   margin: 0 0 16px;
   padding: 12px 16px;
@@ -785,6 +792,15 @@
 }
 .auth-sheet .sign-in-form {
   margin-top: 4px;
+}
+/* A failed send-link/verify-code attempt, inline rather than a showToast()
+   banner — the sheet's own opaque backdrop would hide that banner until
+   the member closed the sheet, which defeats the point. */
+.auth-sheet-error {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #b3261e;
 }
 .auth-sheet .sign-in-form input {
   min-height: 44px;

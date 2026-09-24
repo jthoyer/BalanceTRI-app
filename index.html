@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026092403" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026092404" />
   </head>
   <body>
     <main class="shell">
@@ -206,8 +206,14 @@
           <div id="raceScreenBody"></div>
         </div>
       </section>
-      <p class="update-banner hidden" id="updateBanner">
+      <!-- Drives both a save/remove success ("N updated") and a write
+           failure ("Could not save: …") — see showToast(msg, kind) in
+           app.js, which despite the name is this inline banner, not a
+           floating toast. role="status" replaces what a native alert()
+           gave screen-reader users for free. -->
+      <p class="update-banner hidden" id="updateBanner" role="status">
         <svg
+          id="updateBannerCheck"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -216,8 +222,25 @@
           stroke-width="2.4"
           stroke-linecap="round"
           stroke-linejoin="round"
+          aria-hidden="true"
         >
           <path d="M20 6 9 17l-5-5" /></svg
+        ><svg
+          id="updateBannerAlert"
+          class="hidden"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v6" />
+          <path d="M12 16.5h.01" /></svg
         ><span id="updateBannerText"></span>
       </p>
       <div class="race-info upcoming-heading hidden" id="upcomingHeading">
@@ -233,6 +256,29 @@
       <section id="raceList" class="race-list" tabindex="-1"></section>
       <p id="raceListStatus" class="sr-only" role="status"></p>
     </main>
+
+    <!-- A native <dialog> for destructive confirms (remove a commitment,
+         remove a race) — see confirmDialog() in app.js. Replaces
+         window.confirm(), which is unstyled, blocks the page, and looks
+         broken on mobile; showModal() gives the same built-in focus trap
+         and Escape-to-close for free. -->
+    <dialog id="confirmDialog">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <h2 id="confirmDialogTitle"></h2>
+          <button type="button" class="icon-button" id="confirmDialogClose" aria-label="Cancel">
+            ×
+          </button>
+        </div>
+        <p id="confirmDialogBody"></p>
+        <div class="dialog-footer">
+          <button type="button" class="secondary-button" id="confirmDialogCancel">Cancel</button>
+          <button type="button" class="secondary-button danger-button" id="confirmDialogConfirm">
+            Remove
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
       <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
@@ -338,6 +384,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026092401"></script>
-    <script src="app.js?v=2026092407"></script>
+    <script src="app.js?v=2026092408"></script>
   </body>
 </html>

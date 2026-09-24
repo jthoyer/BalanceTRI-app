@@ -957,13 +957,18 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
         <div class="guide-block">
           <h3>Update banner</h3>
           <p class="block-note">
-            <code>.update-banner</code> is a persistent success banner — green, with a checkmark —
-            shown above the race list after a save. It isn't a toast: it doesn't time out or dismiss
-            itself, and stays until the next action re-renders the page. Text comes from
-            <code>showToast(msg)</code> in <code>app.js</code>, which despite the function name
-            drives this banner, not a floating toast.
+            <code>.update-banner</code> carries every write result — success or failure — shown
+            above the race list, driven by <code>showToast(msg, kind)</code> in
+            <code>app.js</code> (<code>kind</code> defaults to <code>'success'</code>). It replaced
+            every <code>alert()</code> this app used to raise for a save/remove result: unstyled,
+            blocked the page, and looked broken on mobile. It clears itself after 4 seconds like a
+            toast would, but it isn't a floating, positioned overlay: it's inline in the page flow,
+            above the race list, so it never covers content and its arrival doesn't shift focus.
+            <code>role="status"</code> gives screen-reader users what a native <code>alert()</code>
+            gave them for free. Not used for the auth sheet's own errors (send-link/verify-code
+            failures) — those stay inline in the sheet; see Auth sheet, above.
           </p>
-          <div class="specimen demo-card-width">
+          <div class="specimen stack demo-card-width">
             <p class="update-banner" style="margin: 0">
               <svg
                 width="16"
@@ -980,6 +985,65 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
               </svg>
               <span>Commitment saved.</span>
             </p>
+            <p class="update-banner error" style="margin: 0">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7.5v6" />
+                <path d="M12 16.5h.01" />
+              </svg>
+              <span>Could not save: network error.</span>
+            </p>
+          </div>
+          <pre class="code">
+showToast('Commitment saved.');                     &lt;!-- kind defaults to 'success' --&gt;
+showToast('Could not save: ' + err.message, 'error');</pre>
+        </div>
+        <div class="guide-block">
+          <h3>Confirm dialog</h3>
+          <p class="block-note">
+            A native <code>&lt;dialog&gt;</code>, opened with <code>showModal()</code>, for every
+            destructive confirm (remove a commitment, remove a race) — see
+            <code>confirmDialog()</code> in <code>app.js</code>. It replaced
+            <code>window.confirm()</code>, and gets a real focus trap and Escape-to-close for free
+            from the browser rather than needing the auth sheet's hand-rolled version. Resolves true
+            only on Confirm; Cancel, ×, Escape, and a backdrop click all resolve false, the same as
+            a plain "no" from <code>confirm()</code>. The confirm button reuses
+            <code>.secondary-button.danger-button</code> — the same quiet-until-hovered destructive
+            styling as <code>#removeRaceButton</code> in the edit-race form, not a bold red button,
+            so it doesn't invite a reflex tap.
+          </p>
+          <div
+            class="specimen demo-card-width"
+            style="padding: 0; background: transparent; border: 0"
+          >
+            <div
+              class="dialog-card"
+              style="
+                border-radius: 9px;
+                box-shadow: 0 8px 24px rgba(18, 31, 55, 0.14);
+                background: #fff;
+              "
+            >
+              <div class="dialog-header">
+                <h2>Remove commitment?</h2>
+                <button type="button" class="icon-button" aria-label="Cancel">×</button>
+              </div>
+              <p>Remove Alice from this race?</p>
+              <div class="dialog-footer">
+                <button type="button" class="secondary-button">Cancel</button>
+                <button type="button" class="secondary-button danger-button">Remove</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="guide-block">

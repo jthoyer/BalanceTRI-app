@@ -112,9 +112,17 @@ let openId = null;
 let raceScreenReturnFocus = null;
 let editScreenReturnFocus = null;
 let toast = null;
+let toastKind = 'success'; // 'success' | 'error' — see render()'s #updateBanner block
 let toastTimer = null;
-function showToast(msg) {
+// The one place a save/remove/error result reaches the member: a banner
+// above the race list, not a blocking alert(). Replaces every alert() this
+// app used to raise for a write result — those were unstyled, blocked the
+// page, and read as broken on mobile. Not for the auth sheet's own errors
+// (send-link/verify-code failures): its opaque backdrop sits above this
+// banner, so those stay inline in the sheet instead — see openSignInForm.
+function showToast(msg, kind = 'success') {
   toast = msg;
+  toastKind = kind;
   render();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
@@ -124,6 +132,32 @@ function showToast(msg) {
 }
 const $ = s => document.querySelector(s);
 const persist = () => localStorage.setItem('balance-race-ui', JSON.stringify(state));
+// Replaces window.confirm() for destructive actions (remove a commitment,
+// remove a race) — unstyled, blocking, and looks broken on mobile, unlike
+// this native <dialog>: showModal() gives a real focus trap and
+// Escape-to-close for free, the same way the auth sheet's own trap does by
+// hand. Resolves true only if Confirm was clicked; every other way out —
+// Cancel, ×, Escape, a backdrop click — resolves false, same as a plain
+// "no" from window.confirm().
+function confirmDialog({ title, body, confirmLabel = 'Remove' }) {
+  const dialog = $('#confirmDialog');
+  $('#confirmDialogTitle').textContent = title;
+  $('#confirmDialogBody').textContent = body;
+  $('#confirmDialogConfirm').textContent = confirmLabel;
+  return new Promise(resolve => {
+    const confirmBtn = $('#confirmDialogConfirm');
+    const onConfirm = () => dialog.close('confirm');
+    const onClose = () => {
+      confirmBtn.removeEventListener('click', onConfirm);
+      dialog.removeEventListener('close', onClose);
+      resolve(dialog.returnValue === 'confirm');
+    };
+    confirmBtn.addEventListener('click', onConfirm);
+    dialog.addEventListener('close', onClose);
+    dialog.returnValue = '';
+    dialog.showModal();
+  });
+}
 function dateParts(date) {
   const d = new Date(date + 'T12:00:00');
   return {
@@ -177,13 +211,17 @@ async function checkMembership() {
 }
 // supabase-js warns against calling auth methods synchronously from inside
 // onAuthStateChange (it can deadlock the client), so the actual sign-out is
-// deferred a tick; the alert goes first since the session is still valid
-// while it's up, so nothing on screen looks broken mid-message.
+// deferred a tick; the toast fires first since the session is still valid
+// while it's showing, so nothing on screen looks broken mid-message. Every
+// caller has already closed the auth sheet by this point (see
+// onAuthStateChange), so showToast()'s banner is actually visible — unlike
+// the auth sheet's own errors, which stay inline; see openSignInForm.
 function rejectNonMember() {
-  alert(
+  showToast(
     "This app is for Balance Tri Club members only, so you've been signed " +
       'out. Not a member? Email mail@balancetriclub.com to request access, ' +
       'or visit balancetriclub.com.au for club info.',
+    'error',
   );
   setTimeout(() => db.auth.signOut(), 0);
 }
@@ -276,9 +314,9 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
   // untrusted text, but the rule flags any substitution into innerHTML, not
   // just unsafe ones — so it has to stay a bare template literal either way.
   if (skipIntro) {
-    host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
+    host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form><p class="auth-sheet-error hidden" role="alert"></p>`;
   } else {
-    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
+    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form><p class="auth-sheet-error hidden" role="alert"></p>`;
   }
   if (heading) {
     const h2 = document.createElement('h2');
@@ -293,8 +331,10 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
     host.append(cancelButton);
   }
   const form = host.querySelector('form');
+  const formError = host.querySelector('.auth-sheet-error');
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    formError.classList.add('hidden');
     const email = new FormData(e.target).get('email').trim();
     const btn = e.target.querySelector('button');
     btn.disabled = true;
@@ -313,7 +353,13 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
       }));
     }
     if (error) {
-      alert('Could not send sign-in link: ' + error.message);
+      // Inline, not showToast(): the auth sheet's own opaque backdrop sits
+      // above the page banner (z-index 40 vs. the banner's place in normal
+      // flow), so a toast fired from here would be invisible until the
+      // member closed the sheet — exactly the wrong time to tell them why
+      // their sign-in attempt failed.
+      formError.textContent = 'Could not send sign-in link: ' + error.message;
+      formError.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Send link';
       return;
@@ -333,7 +379,7 @@ function showCodeStep(host, email, cancel) {
   // A bare literal, like the form above it: nothing interpolated reaches
   // innerHTML, which is what keeps no-unsanitized/property passing here with
   // no suppression. The typed address and the Cancel button go in as DOM.
-  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
+  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-error hidden" role="alert"></p><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
   host.querySelector('.sent-to-address').textContent = email;
   if (cancel) {
     const cancelButton = document.createElement('button');
@@ -345,6 +391,7 @@ function showCodeStep(host, email, cancel) {
   }
   const form = host.querySelector('form');
   const input = form.querySelector('.code-input');
+  const formError = host.querySelector('.auth-sheet-error');
   // Phones paste the code with whatever spacing the mail app rendered, so
   // strip anything that isn't a digit as they type rather than rejecting it.
   // This is also why there's no maxlength: the attribute truncates a pasted
@@ -356,6 +403,7 @@ function showCodeStep(host, email, cancel) {
   input.focus();
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    formError.classList.add('hidden');
     const token = input.value.trim();
     const btn = form.querySelector('button');
     btn.disabled = true;
@@ -364,9 +412,12 @@ function showCodeStep(host, email, cancel) {
     // (signup) and a returning one (magiclink) — so one call handles both.
     const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
     // On success onAuthStateChange closes the sheet and re-renders; there's
-    // no page reload here, unlike the link, so nothing else to do.
+    // no page reload here, unlike the link, so nothing else to do. Inline,
+    // not showToast() — see the same note in openSignInForm's submit
+    // handler: the auth sheet's backdrop hides the page banner.
     if (error) {
-      alert("That code didn't work: " + error.message);
+      formError.textContent = "That code didn't work: " + error.message;
+      formError.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Sign me in';
       input.select();
@@ -911,6 +962,9 @@ function render() {
     .forEach(b => b.classList.toggle('selected', b.dataset.view === state.viewFilter));
   $('#updateBannerText').textContent = toast || '';
   $('#updateBanner').classList.toggle('hidden', !toast);
+  $('#updateBanner').classList.toggle('error', toastKind === 'error');
+  $('#updateBannerCheck').classList.toggle('hidden', toastKind === 'error');
+  $('#updateBannerAlert').classList.toggle('hidden', toastKind !== 'error');
   if (loadError === 'fetch-failed') {
     $('#emptyState').textContent =
       'Could not reach the Supabase backend. Check your connection and try refreshing.';
@@ -1245,7 +1299,13 @@ function makeDetails(race) {
   if (removeCommitButton)
     removeCommitButton.onclick = async () => {
       if (!requireSignIn('Sign in to remove this entry')) return;
-      if (!confirm(`Remove ${editingEntry.name} from this race?`)) return;
+      if (
+        !(await confirmDialog({
+          title: 'Remove commitment?',
+          body: `Remove ${editingEntry.name} from this race?`,
+        }))
+      )
+        return;
       removeCommitButton.disabled = true;
       removeCommitButton.textContent = 'Removing…';
       try {
@@ -1263,7 +1323,7 @@ function makeDetails(race) {
       } catch (err) {
         removeCommitButton.disabled = false;
         removeCommitButton.textContent = 'Remove commitment';
-        alert('Could not remove: ' + err.message);
+        showToast('Could not remove: ' + err.message, 'error');
       }
     };
   gateButton(removeCommitButton);
@@ -1386,7 +1446,7 @@ function makeDetails(race) {
       } catch (err) {
         btn.disabled = false;
         btn.textContent = 'Save commitment';
-        alert('Could not save: ' + err.message);
+        showToast('Could not save: ' + err.message, 'error');
       }
     };
   }
@@ -1437,9 +1497,10 @@ $('#raceForm').addEventListener('submit', async e => {
   submitBtn.disabled = true;
   let url = f.get('url').trim();
   if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const name = f.get('name').trim();
   try {
     await addRace({
-      name: f.get('name').trim(),
+      name,
       date: f.get('date'),
       location: 'Location TBC',
       url,
@@ -1455,8 +1516,11 @@ $('#raceForm').addEventListener('submit', async e => {
     applyEventTypeFields(e.target);
     toggleAdd(false);
     await loadRaces();
+    // Editing and removing a race both toasted; adding one succeeded
+    // silently. Same event, same feedback.
+    showToast(`${name} added`);
   } catch (err) {
-    alert('Could not add race: ' + err.message);
+    showToast('Could not add race: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
   }
@@ -1474,7 +1538,12 @@ $('#removeRaceButton').onclick = async () => {
   if (!raceId) return;
   if (!requireSignIn('Sign in to remove this race')) return;
   const race = races.find(r => r.id === raceId);
-  if (!confirm(`Remove ${race?.name || 'this race'} from the calendar? This can't be undone.`))
+  if (
+    !(await confirmDialog({
+      title: 'Remove race?',
+      body: `Remove ${race?.name || 'this race'} from the calendar? This can't be undone.`,
+    }))
+  )
     return;
   const btn = $('#removeRaceButton');
   btn.disabled = true;
@@ -1493,7 +1562,7 @@ $('#removeRaceButton').onclick = async () => {
     await loadRaces();
     showToast(`${race?.name || 'Race'} removed`);
   } catch (err) {
-    alert('Could not remove race: ' + err.message);
+    showToast('Could not remove race: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Remove race';
@@ -1527,7 +1596,7 @@ $('#editForm').addEventListener('submit', async e => {
     await loadRaces();
     showToast(`${name} updated`);
   } catch (err) {
-    alert('Could not save changes: ' + err.message);
+    showToast('Could not save changes: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
   }
@@ -1536,6 +1605,16 @@ $('#resetButton').onclick = () => {
   loadRaces();
 };
 loadRaces();
+$('#confirmDialogCancel').onclick = () => $('#confirmDialog').close();
+$('#confirmDialogClose').onclick = () => $('#confirmDialog').close();
+// Native <dialog> backdrop clicks land on the dialog element itself (its
+// ::backdrop pseudo-element isn't part of the DOM click target), so this is
+// the same "click landed on the overlay, not the card" check the auth
+// sheet uses. Escape needs no handler at all: showModal() closes on it
+// natively, firing this same 'close' event confirmDialog() is listening for.
+$('#confirmDialog').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.close();
+});
 $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
