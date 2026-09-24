@@ -1,0 +1,342 @@
+/* Admin console. Builds on styles.css tokens (--ink, --muted, --line,
+   --canvas, --yellow, --green) and its button classes. */
+.admin-root button,
+.admin-root input,
+.admin-root select {
+  font-family: 'DM Sans', Arial, sans-serif;
+}
+.admin-root {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 60px;
+}
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+  text-decoration: none;
+}
+.admin-loading,
+.admin-empty {
+  color: var(--muted);
+}
+.admin-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-title h1,
+.admin-card h1,
+.admin-card h2 {
+  margin: 0 0 12px;
+  font-family: Outfit, sans-serif;
+  color: var(--ink);
+}
+.admin-title h1 {
+  margin: 0;
+  font-size: 32px;
+}
+.admin-card h2 {
+  font-size: 20px;
+}
+.admin-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 20px;
+  min-width: 0;
+}
+.admin-message {
+  max-width: 560px;
+}
+.admin-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+.admin-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #e8c56a;
+  border-radius: 9px;
+  background: #fff8e6;
+  color: var(--ink);
+}
+
+/* Forms */
+.admin-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.admin-form input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #aab5c6;
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px 'DM Sans';
+}
+.admin-form .admin-code {
+  flex: 0 1 180px;
+  letter-spacing: 6px;
+  font:
+    700 18px/1 'DM Sans',
+    monospace;
+}
+.admin-result {
+  min-height: 1.5em;
+  margin: 12px 0 0;
+  color: var(--ink);
+}
+.admin-enrol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.admin-qr {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.admin-secret {
+  word-break: break-all;
+  font-size: 14px;
+}
+
+/* Stat tiles */
+.admin-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.admin-tile {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--canvas);
+}
+.admin-tile-label,
+.admin-tile-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.admin-tile-value {
+  font-family: Outfit, sans-serif;
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+/* Sign-up bar strip: one series, thin bars, 4px rounded tops sitting on the
+   baseline, a 2px gap between bars, and a recessive baseline. */
+.admin-chart {
+  margin: 20px 0 0;
+}
+.admin-chart figcaption {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.admin-bars {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 2px;
+  align-items: end;
+}
+.admin-bar-slot {
+  display: grid;
+  grid-template-rows: 18px 72px auto;
+  justify-items: center;
+  min-width: 0;
+  cursor: default;
+}
+.admin-bar-value {
+  font-size: 12px;
+  color: var(--ink);
+}
+.admin-bar-track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 72px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-bar {
+  display: block;
+  width: min(18px, 70%);
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  background: #0077a8;
+}
+.admin-bar-slot:hover .admin-bar {
+  background: #005b82;
+}
+.admin-bar-day {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Activity feed and lists */
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.admin-filters select {
+  min-height: 40px;
+  border: 1px solid #aab5c6;
+  border-radius: 9px;
+  padding: 6px 10px;
+  background: #fff;
+  color: var(--ink);
+  font: 15px 'DM Sans';
+}
+.admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+.admin-activity,
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.admin-change,
+.admin-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.admin-change:first-child,
+.admin-list li:first-child {
+  border-top: 0;
+}
+.admin-change-main {
+  min-width: 0;
+}
+.admin-change-text {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.admin-change-delete .admin-change-text {
+  font-weight: 600;
+  color: #9b2c2c;
+}
+.admin-change-meta {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.admin-diff {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.admin-field {
+  font-weight: 600;
+}
+.admin-diff del {
+  color: var(--muted);
+}
+.admin-diff ins {
+  text-decoration: none;
+  color: var(--green);
+}
+.admin-small-button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 14px;
+}
+.admin-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Accounts table */
+.admin-table-wrap {
+  overflow-x: auto;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.admin-table th {
+  border-top: 0;
+  font-weight: 600;
+  color: var(--muted);
+}
+.admin-user-email {
+  display: block;
+  color: var(--ink);
+}
+.admin-num {
+  text-align: right;
+}
+.admin-yes {
+  color: var(--green);
+}
+.admin-no {
+  color: #9b2c2c;
+}
+
+@media (max-width: 700px) {
+  .admin-card {
+    padding: 16px;
+  }
+  .admin-title h1 {
+    font-size: 26px;
+  }
+  .admin-change,
+  .admin-list li {
+    flex-direction: column;
+  }
+  .admin-bar-day {
+    font-size: 9px;
+  }
+}

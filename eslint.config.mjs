@@ -37,6 +37,18 @@ export default [
     },
   },
   {
+    // shared.js runs first on both pages and defines these as script globals.
+    files: ['app.js', 'admin.js'],
+    languageOptions: {
+      globals: {
+        SUPABASE_URL: 'readonly',
+        SUPABASE_ANON_KEY: 'readonly',
+        TURNSTILE_SITE_KEY: 'readonly',
+        getCaptchaToken: 'readonly',
+      },
+    },
+  },
+  {
     // The GitHub Pages deep-link shim in 404.html / index.html is inline
     // ES5 and deliberately so — it must run before anything else.
     files: ['eslint.config.mjs'],
