@@ -18,16 +18,8 @@
   const base = l.pathname.replace(/index\.html$/, '').replace(/\/+$/, '');
   window.history.replaceState(null, '', base + route + query + l.hash);
 })();
-// Backed by Supabase — see README.md for the project and schema.
-const SUPABASE_URL = 'https://shkfwuogrldbqldpipxd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV';
+// Backed by Supabase. The URL and key live in shared.js; README.md has the schema.
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// hCaptcha site key: public, like the anon key. Empty means no bot check —
-// sign-in works as before. Set it and deploy BEFORE turning CAPTCHA on in
-// Supabase (Authentication → Attack Protection): once that switch is on,
-// every signInWithOtp without a token fails. See README.md.
-const HCAPTCHA_SITE_KEY = '9ab8d78a-9dc8-4eb4-b1e6-cd4250aeff68';
-
 const levels = [
   ['considering', 'Considering'],
   ['planning', 'Planning'],
@@ -148,13 +140,18 @@ let profile = null;
 // that sign-out completes. checkMembership() re-reads it right after sign-in
 // and again after sign-out (to false, with no RPC call needed).
 let isMember = false;
+// isAdmin only decides whether the header shows a link to admin.html. The
+// admin functions check for themselves; see the add_admin_console migration.
+let isAdmin = false;
 async function checkMembership() {
   if (!session) {
     isMember = false;
+    isAdmin = false;
     return;
   }
-  const { data, error } = await db.rpc('is_allow_listed');
-  isMember = !error && data === true;
+  const [member, admin] = await Promise.all([db.rpc('is_allow_listed'), db.rpc('admin_status')]);
+  isMember = !member.error && member.data === true;
+  isAdmin = !admin.error && admin.data?.admin === true;
 }
 // supabase-js warns against calling auth methods synchronously from inside
 // onAuthStateChange (it can deadlock the client), so the actual sign-out is
@@ -219,6 +216,13 @@ function renderAuth() {
     signOut.className = 'text-button';
     signOut.id = 'signOutButton';
     signOut.textContent = 'Sign out';
+    if (isAdmin) {
+      const adminLink = document.createElement('a');
+      adminLink.className = 'text-button';
+      adminLink.href = 'admin.html';
+      adminLink.textContent = 'Admin';
+      widget.append(adminLink);
+    }
     widget.append(name, signOut);
     $('#signOutButton').onclick = () => db.auth.signOut();
   } else {
@@ -292,58 +296,6 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
     showCodeStep(host, email, cancel);
   });
   if (cancel) host.querySelector('.auth-sheet-cancel').onclick = cancel;
-}
-// hCaptcha's script loads only when someone actually asks for a sign-in
-// email, so browsing never fetches it. A failed load clears the promise, so
-// the next attempt retries instead of reusing the failure.
-let hcaptchaLoading = null;
-function loadHcaptcha() {
-  hcaptchaLoading ||= new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
-    script.async = true;
-    script.onload = () => resolve(window.hcaptcha);
-    script.onerror = () => {
-      hcaptchaLoading = null;
-      reject(new Error('the bot check could not load. Check your connection and try again.'));
-    };
-    document.head.append(script);
-  });
-  return hcaptchaLoading;
-}
-// One fresh widget per send: an hCaptcha token is single-use, so a retry
-// after a failed send needs a new one anyway. size:'invisible' keeps the
-// widget out of the form; execute() below triggers a check that only shows
-// a challenge when hCaptcha decides one is needed. Returns undefined with
-// no site key, which signInWithOtp simply ignores.
-async function getCaptchaToken(form) {
-  if (!HCAPTCHA_SITE_KEY) return undefined;
-  const hcaptcha = await loadHcaptcha();
-  const slot = document.createElement('div');
-  slot.className = 'captcha-slot';
-  form.after(slot);
-  let widgetId;
-  try {
-    return await new Promise((resolve, reject) => {
-      widgetId = hcaptcha.render(slot, {
-        sitekey: HCAPTCHA_SITE_KEY,
-        size: 'invisible',
-        callback: resolve,
-        'error-callback': code => {
-          reject(new Error(`the bot check failed (${code}). Please try again.`));
-          return true;
-        },
-        'expired-callback': () => reject(new Error('the bot check expired. Please try again.')),
-        'chalexpired-callback': () => reject(new Error('the bot check expired. Please try again.')),
-        'close-callback': () =>
-          reject(new Error('the bot check was closed before finishing. Please try again.')),
-      });
-      hcaptcha.execute(widgetId);
-    });
-  } finally {
-    if (widgetId !== undefined) hcaptcha.remove(widgetId);
-    slot.remove();
-  }
 }
 // Step two: the email carries both a link and a 6-digit code, and this is the
 // box for the code. It exists because of how magic links fail on a phone —

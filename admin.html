@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Balance Tri Club — Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Same cache-busting rule as index.html: bump on any stylesheet change. -->
+    <link rel="stylesheet" href="styles.css?v=2026092402" />
+    <link rel="stylesheet" href="admin.css?v=2026092401" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="." aria-label="Back to the race calendar"
+          ><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club"
+        /></a>
+        <div class="header-actions admin-header-actions" id="adminHeaderActions">
+          <a class="text-button admin-link" href=".">Back to calendar</a>
+        </div>
+      </header>
+      <div id="adminRoot" class="admin-root" aria-live="polite">
+        <p class="admin-loading">Loading…</p>
+      </div>
+    </main>
+    <script src="vendor/supabase-js-2.117.1.js"></script>
+    <script src="shared.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>

@@ -69,7 +69,29 @@ tar xzf supabase-supabase-js-<version>.tgz
 cp package/dist/umd/supabase.js vendor/supabase-js-<version>.js
 ```
 
-Then point the `<script>` tag in `index.html` at the new file, delete the old one, and check sign-in and saving a commitment still work. `vendor/` is excluded from Prettier and ESLint on purpose, so the file stays byte-for-byte what was published.
+Then point the `<script>` tags in `index.html` and `admin.html` at the new file, delete the old one, and check sign-in and saving a commitment still work. `vendor/` is excluded from Prettier and ESLint on purpose, so the file stays byte-for-byte what was published.
+
+## Admin console
+
+`admin.html` is a page for club admins. It shows:
+
+- **Stats:** upcoming races, commitments, accounts, accounts not on the allow-list, changes this week, and sign-ups over the last 14 days.
+- **Activity:** every change to commitments and races in the last 30 days, who made it, and what changed. Each one has an **Undo** button.
+- **Removed races,** each with a **Restore** button.
+- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account.
+- **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed.
+
+Signed-in admins see an **Admin** link in the calendar header.
+
+**Access.** Admins are rows in `private.admins` (`add_admin_console` migration); at launch that's one account. Every action is a `public.admin_*` function that refuses anyone else. Admins also need **two-factor sign-in**: the first visit sets up an authenticator app, and every later sign-in asks for its code. The functions check the session's `aal2` claim, so a stolen inbox alone isn't enough.
+
+- To add an admin, find their user id under Authentication → Users and run `insert into private.admins (user_id) values ('<id>');`.
+- To drop the two-factor requirement for one admin: `update private.admins set mfa_required = false where user_id = '<id>';`.
+- If an admin loses their authenticator, delete their factor under Authentication → Users → the user → MFA. The console then asks them to set up a new one.
+
+**The page has its own sign-in.** The calendar signs out anyone who isn't on the allow-list, so an admin who isn't listed could never reach the console through it. The admin form uses `shouldCreateUser: false`, so it can't create accounts. Both pages share one session, so if an admin who isn't listed opens the calendar, they're signed out of the console too. The console warns about this and offers to add their address.
+
+**Undo is careful.** It only goes ahead if the row is still exactly as that change left it; otherwise it asks you to undo the later change first. Undoing a new race removes it softly, so its roster stays. A restored commitment is credited to the admin who restored it, while the history keeps the original. Every admin action is logged in `private.admin_actions`.
 
 ## Removing a race
 
@@ -94,12 +116,12 @@ Separately, a bottom-sheet **nudge** appears once per visit for a signed-out bro
 
 Anyone can ask Supabase to send a sign-in email to any address, and the allow-list can't stop that: it only controls writes. A script could burn through the project's email quota and lock real members out of sign-in. hCaptcha makes each send prove it came from a browser.
 
-It's off until a site key is set. With `HCAPTCHA_SITE_KEY` empty in `app.js`, sign-in works exactly as before. With a key, pressing **Send link** loads hCaptcha's script (browsing never loads it), gets a single-use token via an invisible widget (`size: 'invisible'`, triggered with `execute()`), and passes it to `signInWithOtp` as `captchaToken`. hCaptcha only surfaces a visible challenge when it decides one is needed — most members never see anything.
+It's off until a site key is set. With `HCAPTCHA_SITE_KEY` empty in `shared.js`, sign-in works exactly as before. With a key, pressing **Send link** loads hCaptcha's script (browsing never loads it), gets a single-use token via an invisible widget (`size: 'invisible'`, triggered with `execute()`), and passes it to `signInWithOtp` as `captchaToken`. hCaptcha only surfaces a visible challenge when it decides one is needed — most members never see anything.
 
 **Switching it on — in this order:**
 
 1. In the [hCaptcha dashboard](https://dashboard.hcaptcha.com/), add a site for `jthoyer.github.io`. Copy the **site key** and the **secret key**.
-2. Put the site key in `HCAPTCHA_SITE_KEY` in `app.js` and deploy. Sign-in still works, because Supabase ignores a token it isn't checking.
+2. Put the site key in `HCAPTCHA_SITE_KEY` in `shared.js` and deploy. Both the calendar and the admin console read it from there. Sign-in still works, because Supabase ignores a token it isn't checking.
 3. In Supabase, go to **Authentication → Attack Protection**, enable CAPTCHA protection, choose hCaptcha, paste the **secret key** and save.
 
 Doing step 3 before step 2 breaks sign-in for everyone: once CAPTCHA protection is on, every send without a token is refused. To switch it off, reverse the order: turn it off in Supabase first, then clear the key.
