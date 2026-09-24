@@ -797,7 +797,9 @@ function syncOpenRaceUrl() {
 }
 // Balance Bolt races only need a date and a race number, and they are always club
 // focus races — so the other fields are hidden and the name field is relabelled.
-// Shared by #raceForm and #editForm, whose field markup is identical.
+// Shared by #raceForm and #editForm, whose field markup comes from the same
+// #raceFormFieldsTemplate (see the querySelectorAll('#raceForm,#editForm')
+// block, below), so the two can never drift out of sync with each other.
 function applyEventTypeFields(form) {
   const bolt = form.eventType.value === 'Balance Bolt';
   form
@@ -1405,6 +1407,7 @@ document.querySelectorAll('.view-toggle-btn').forEach(
     }),
 );
 document.querySelectorAll('#raceForm,#editForm').forEach(f => {
+  f.querySelector('.add-form-fields').append($('#raceFormFieldsTemplate').content.cloneNode(true));
   f.eventType.onchange = () => applyEventTypeFields(f);
   applyEventTypeFields(f);
 });

@@ -134,32 +134,9 @@
               ×
             </button>
           </div>
-          <div class="add-form-fields">
-            <label
-              >Event type <span class="optional">optional</span
-              ><select name="eventType">
-                <option value="">Select type…</option>
-                <option value="Balance Bolt">Balance Bolt</option>
-                <option value="Bike">Bike</option>
-                <option value="Multi-sport">Multi-sport</option>
-                <option value="Run">Run</option>
-                <option value="Swim">Swim</option>
-                <option value="Triathlon">Triathlon</option>
-              </select></label
-            ><label class="field-name"
-              ><span class="field-label">Race name</span
-              ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
-            ><label>Date<input name="date" type="date" required /></label
-            ><label class="field-url"
-              >Race website <span class="optional">optional</span
-              ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
-            ><label class="field-events"
-              >Events or distances <span class="optional">optional</span
-              ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
-            ><label class="checkbox-field"
-              ><input name="clubFocus" type="checkbox" /> Club focus race</label
-            >
-          </div>
+          <!-- Filled from #raceFormFieldsTemplate at load — see app.js, near
+               applyEventTypeFields. -->
+          <div class="add-form-fields"></div>
           <div class="dialog-footer">
             <button type="button" id="cancelAddButton" class="secondary-button">Cancel</button
             ><button class="primary-button" value="default">Create race</button>
@@ -189,32 +166,9 @@
             </div>
           </div>
           <form id="editForm" class="add-form">
-            <div class="add-form-fields">
-              <label
-                >Event type <span class="optional">optional</span
-                ><select name="eventType">
-                  <option value="">Select type…</option>
-                  <option value="Balance Bolt">Balance Bolt</option>
-                  <option value="Bike">Bike</option>
-                  <option value="Multi-sport">Multi-sport</option>
-                  <option value="Run">Run</option>
-                  <option value="Swim">Swim</option>
-                  <option value="Triathlon">Triathlon</option>
-                </select></label
-              ><label class="field-name"
-                ><span class="field-label">Race name</span
-                ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
-              ><label>Date<input name="date" type="date" required /></label
-              ><label class="field-url"
-                >Race website <span class="optional">optional</span
-                ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
-              ><label class="field-events"
-                >Events or distances <span class="optional">optional</span
-                ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
-              ><label class="checkbox-field"
-                ><input name="clubFocus" type="checkbox" /> Club focus race</label
-              >
-            </div>
+            <!-- Filled from #raceFormFieldsTemplate at load — see app.js, near
+                 applyEventTypeFields. -->
+            <div class="add-form-fields"></div>
             <div class="dialog-footer">
               <button type="button" id="removeRaceButton" class="secondary-button danger-button">
                 Remove race</button
@@ -341,6 +295,38 @@
         >
       </article></template
     >
+    <!-- The field block shared by #raceForm and #editForm — cloned into each
+         form's empty .add-form-fields at load (see app.js, near
+         applyEventTypeFields). Was duplicated verbatim between the two
+         forms; a field changed in one and not the other broke Balance Bolt
+         field-hiding silently, since applyEventTypeFields assumes both are
+         identical. -->
+    <template id="raceFormFieldsTemplate"
+      ><label
+        >Event type <span class="optional">optional</span
+        ><select name="eventType">
+          <option value="">Select type…</option>
+          <option value="Balance Bolt">Balance Bolt</option>
+          <option value="Bike">Bike</option>
+          <option value="Multi-sport">Multi-sport</option>
+          <option value="Run">Run</option>
+          <option value="Swim">Swim</option>
+          <option value="Triathlon">Triathlon</option>
+        </select></label
+      ><label class="field-name"
+        ><span class="field-label">Race name</span
+        ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
+      ><label>Date<input name="date" type="date" required /></label
+      ><label class="field-url"
+        >Race website <span class="optional">optional</span
+        ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
+      ><label class="field-events"
+        >Events or distances <span class="optional">optional</span
+        ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
+      ><label class="checkbox-field"
+        ><input name="clubFocus" type="checkbox" /> Club focus race</label
+      ></template
+    >
     <!-- supabase-js is a copy committed to the repo, not a CDN link. It runs
          with full access to members' sessions, so an upgrade is a
          deliberate commit (see README.md), never a silent CDN update. -->
@@ -352,6 +338,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026092401"></script>
-    <script src="app.js?v=2026092406"></script>
+    <script src="app.js?v=2026092407"></script>
   </body>
 </html>
