@@ -4,6 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Balance Tri Club — Race commitments</title>
+    <!-- Every race is shareable at /race/<slug>, but GitHub Pages has no
+         server-side rendering to give each one its own preview — a crawler
+         fetching a shared link never runs app.js, so per-race tags aren't
+         possible here. This is the site-wide fallback: one description and
+         image for every link, better than the bare URL a crawler saw before. -->
+    <meta
+      name="description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <link rel="canonical" href="https://jthoyer.github.io/BalanceTRI-app/" />
+    <link rel="icon" type="image/png" href="assets/balance-logo.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Balance Tri Club" />
+    <meta property="og:title" content="Balance Tri Club — Race commitments" />
+    <meta
+      property="og:description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <meta property="og:url" content="https://jthoyer.github.io/BalanceTRI-app/" />
+    <meta
+      property="og:image"
+      content="https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Balance Tri Club — Race commitments" />
+    <meta
+      name="twitter:description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <meta
+      name="twitter:image"
+      content="https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
