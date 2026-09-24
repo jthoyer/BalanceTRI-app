@@ -19,6 +19,21 @@
   window.history.replaceState(null, '', base + route + query + l.hash);
 })();
 // Backed by Supabase. The URL and key live in shared.js; README.md has the schema.
+//
+// If vendor/supabase-js failed to load (a dropped connection mid-page-load, a
+// stale cache after an upgrade renamed the file), window.supabase is missing
+// and the createClient call below would throw before anything renders — a
+// blank calendar with no explanation. Say so in the page instead, then stop:
+// nothing below this line can work without the client.
+if (!window.supabase?.createClient) {
+  const emptyState = document.getElementById('emptyState');
+  if (emptyState) {
+    emptyState.textContent =
+      'The calendar could not load. Check your connection and try refreshing.';
+    emptyState.classList.remove('hidden');
+  }
+  throw new Error('supabase-js did not load (vendor/supabase-js-*.js); app.js stopped.');
+}
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const levels = [
   ['considering', 'Considering'],
@@ -481,6 +496,34 @@ async function saveEntry(raceId, name, events, level) {
   if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
+// Renaming an existing commitment is one UPDATE of that row, never
+// saveEntry(new name) + removeEntry(old name). That pair was two requests, and
+// saveEntry upserts on (race_id, name): renaming to a name already on the
+// roster silently overwrote that member's row, and a failed follow-up delete
+// left you listed twice. A single UPDATE is atomic, keeps the row's id and
+// created_by (so the admin console can undo it as one change), and lets the
+// unique (race_id, name) constraint refuse a clash instead of overwriting.
+async function renameEntry(raceId, oldName, newName, events, level) {
+  const { data, error } = await db
+    .from('entries')
+    .update({ name: newName, events, level })
+    .eq('race_id', raceId)
+    .eq('name', oldName)
+    .select('id');
+  if (error) {
+    if (error.code === '23505')
+      throw new Error(
+        `${newName} is already on this race. Choose a different name, or edit that entry instead.`,
+      );
+    throw friendlyWriteError(error.message);
+  }
+  // Zero rows: the allow-list blocked it (see friendlyWriteError), or the
+  // entry being renamed was removed or renamed by someone else meanwhile.
+  if (!data || !data.length)
+    throw new Error(
+      `Could not find ${oldName} on this race any more — it may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
+    );
+}
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
     name: payload.name,
@@ -765,6 +808,9 @@ async function loadRaces() {
       })),
     }));
   } catch (err) {
+    // The member sees a generic "could not reach" message; the real cause
+    // (network, RLS, a bad column in the select) is only ever visible here.
+    console.error('loadRaces failed:', err);
     loadError = 'fetch-failed';
     races = [];
   }
@@ -1232,9 +1278,9 @@ function makeDetails(race) {
         for (const ev of events) {
           if (!race.events.includes(ev)) await addEvent(race.id, ev);
         }
-        await saveEntry(race.id, name, events, state.form.level);
         if (previousEditingName && previousEditingName !== name)
-          await removeEntry(race.id, previousEditingName);
+          await renameEntry(race.id, previousEditingName, name, events, state.form.level);
+        else await saveEntry(race.id, name, events, state.form.level);
         state.form.editingName = name;
         state.user = name;
         persist();

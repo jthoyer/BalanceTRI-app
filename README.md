@@ -71,6 +71,8 @@ cp package/dist/umd/supabase.js vendor/supabase-js-<version>.js
 
 Then point the `<script>` tags in `index.html` and `admin.html` at the new file, delete the old one, and check sign-in and saving a commitment still work. `vendor/` is excluded from Prettier and ESLint on purpose, so the file stays byte-for-byte what was published.
 
+If the file ever fails to load, `app.js` and `admin.js` check for `window.supabase` before creating the client and show a "could not load, try refreshing" message instead of a blank page.
+
 ## Admin console
 
 `admin.html` is a page for club admins. It shows:
