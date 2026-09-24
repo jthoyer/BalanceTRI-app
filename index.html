@@ -10,8 +10,12 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="styles-additions.css" />
+    <!-- No build step, so no content hash to bust the cache with — bump this
+         query string whenever either stylesheet changes, or returning
+         visitors can get fresh HTML paired with a stale cached stylesheet
+         (new markup, old rules: an unstyled, oddly-sized render). -->
+    <link rel="stylesheet" href="styles.css?v=2026092401" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026092401" />
   </head>
   <body>
     <main class="shell">
