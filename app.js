@@ -18,11 +18,23 @@
   const base = l.pathname.replace(/index\.html$/, '').replace(/\/+$/, '');
   window.history.replaceState(null, '', base + route + query + l.hash);
 })();
-// Backed by Supabase — see README.md for the project and schema.
-const SUPABASE_URL = 'https://shkfwuogrldbqldpipxd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV';
+// Backed by Supabase. The URL and key live in shared.js; README.md has the schema.
+//
+// If vendor/supabase-js failed to load (a dropped connection mid-page-load, a
+// stale cache after an upgrade renamed the file), window.supabase is missing
+// and the createClient call below would throw before anything renders — a
+// blank calendar with no explanation. Say so in the page instead, then stop:
+// nothing below this line can work without the client.
+if (!window.supabase?.createClient) {
+  const emptyState = document.getElementById('emptyState');
+  if (emptyState) {
+    emptyState.textContent =
+      'The calendar could not load. Check your connection and try refreshing.';
+    emptyState.classList.remove('hidden');
+  }
+  throw new Error('supabase-js did not load (vendor/supabase-js-*.js); app.js stopped.');
+}
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const levels = [
   ['considering', 'Considering'],
   ['planning', 'Planning'],
@@ -95,10 +107,22 @@ let races = [];
 let loadError = null;
 let editingId = null;
 let openId = null;
+// Who to give focus back to when the race/edit screen closes: whatever was
+// focused right before it opened (usually the race card that was clicked).
+let raceScreenReturnFocus = null;
+let editScreenReturnFocus = null;
 let toast = null;
+let toastKind = 'success'; // 'success' | 'error' — see render()'s #updateBanner block
 let toastTimer = null;
-function showToast(msg) {
+// The one place a save/remove/error result reaches the member: a banner
+// above the race list, not a blocking alert(). Replaces every alert() this
+// app used to raise for a write result — those were unstyled, blocked the
+// page, and read as broken on mobile. Not for the auth sheet's own errors
+// (send-link/verify-code failures): its opaque backdrop sits above this
+// banner, so those stay inline in the sheet instead — see openSignInForm.
+function showToast(msg, kind = 'success') {
   toast = msg;
+  toastKind = kind;
   render();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
@@ -108,6 +132,32 @@ function showToast(msg) {
 }
 const $ = s => document.querySelector(s);
 const persist = () => localStorage.setItem('balance-race-ui', JSON.stringify(state));
+// Replaces window.confirm() for destructive actions (remove a commitment,
+// remove a race) — unstyled, blocking, and looks broken on mobile, unlike
+// this native <dialog>: showModal() gives a real focus trap and
+// Escape-to-close for free, the same way the auth sheet's own trap does by
+// hand. Resolves true only if Confirm was clicked; every other way out —
+// Cancel, ×, Escape, a backdrop click — resolves false, same as a plain
+// "no" from window.confirm().
+function confirmDialog({ title, body, confirmLabel = 'Remove' }) {
+  const dialog = $('#confirmDialog');
+  $('#confirmDialogTitle').textContent = title;
+  $('#confirmDialogBody').textContent = body;
+  $('#confirmDialogConfirm').textContent = confirmLabel;
+  return new Promise(resolve => {
+    const confirmBtn = $('#confirmDialogConfirm');
+    const onConfirm = () => dialog.close('confirm');
+    const onClose = () => {
+      confirmBtn.removeEventListener('click', onConfirm);
+      dialog.removeEventListener('close', onClose);
+      resolve(dialog.returnValue === 'confirm');
+    };
+    confirmBtn.addEventListener('click', onConfirm);
+    dialog.addEventListener('close', onClose);
+    dialog.returnValue = '';
+    dialog.showModal();
+  });
+}
 function dateParts(date) {
   const d = new Date(date + 'T12:00:00');
   return {
@@ -124,9 +174,12 @@ function myEntry(race) {
 // roster stays open to everyone signed out — but saving, editing or removing
 // a commitment requires being signed in (requireSignIn, below, and the
 // matching RLS policies on entries). It's still the same honour system once
-// signed in: any authenticated member can add or edit any entry by typed
-// name (see saveEntry) — sign-in isn't tied to ownership, only to being
-// someone. A signed-in profile's display_name seeds state.user once, but
+// signed in: any authenticated member can edit or rename any entry they've
+// opened via the roster's Edit link (see saveEntry, renameEntry) — sign-in
+// isn't tied to ownership, only to being someone. What it doesn't cover is
+// typing an existing member's name into a fresh commitment instead of using
+// Edit: addEntry refuses that outright rather than silently taking over
+// their row. A signed-in profile's display_name seeds state.user once, but
 // never overwrites a name someone's already typed in this browser.
 // ---------------------------------------------------------------------------
 let session = null;
@@ -143,23 +196,32 @@ let profile = null;
 // that sign-out completes. checkMembership() re-reads it right after sign-in
 // and again after sign-out (to false, with no RPC call needed).
 let isMember = false;
+// isAdmin only decides whether the header shows a link to admin.html. The
+// admin functions check for themselves; see the add_admin_console migration.
+let isAdmin = false;
 async function checkMembership() {
   if (!session) {
     isMember = false;
+    isAdmin = false;
     return;
   }
-  const { data, error } = await db.rpc('is_allow_listed');
-  isMember = !error && data === true;
+  const [member, admin] = await Promise.all([db.rpc('is_allow_listed'), db.rpc('admin_status')]);
+  isMember = !member.error && member.data === true;
+  isAdmin = !admin.error && admin.data?.admin === true;
 }
 // supabase-js warns against calling auth methods synchronously from inside
 // onAuthStateChange (it can deadlock the client), so the actual sign-out is
-// deferred a tick; the alert goes first since the session is still valid
-// while it's up, so nothing on screen looks broken mid-message.
+// deferred a tick; the toast fires first since the session is still valid
+// while it's showing, so nothing on screen looks broken mid-message. Every
+// caller has already closed the auth sheet by this point (see
+// onAuthStateChange), so showToast()'s banner is actually visible — unlike
+// the auth sheet's own errors, which stay inline; see openSignInForm.
 function rejectNonMember() {
-  alert(
+  showToast(
     "This app is for Balance Tri Club members only, so you've been signed " +
       'out. Not a member? Email mail@balancetriclub.com to request access, ' +
       'or visit balancetriclub.com.au for club info.',
+    'error',
   );
   setTimeout(() => db.auth.signOut(), 0);
 }
@@ -214,7 +276,17 @@ function renderAuth() {
     signOut.className = 'text-button';
     signOut.id = 'signOutButton';
     signOut.textContent = 'Sign out';
-    widget.append(name, signOut);
+    // Name first, Sign out last: it ends the session, so it sits at the edge
+    // where it's easy to find and hard to hit by mistake.
+    widget.append(name);
+    if (isAdmin) {
+      const adminLink = document.createElement('a');
+      adminLink.className = 'text-button';
+      adminLink.href = 'admin.html';
+      adminLink.textContent = 'Admin';
+      widget.append(adminLink);
+    }
+    widget.append(signOut);
     $('#signOutButton').onclick = () => db.auth.signOut();
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
@@ -232,7 +304,7 @@ function renderAuth() {
 // which already showed the explanation, so this step is just the email field.
 // Always targets the auth sheet now.
 function openSignInForm(host, { heading, cancel } = {}) {
-  host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form>`;
+  host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form><p class="auth-sheet-error hidden" role="alert"></p>`;
   if (heading) {
     const h2 = document.createElement('h2');
     h2.textContent = heading;
@@ -246,18 +318,35 @@ function openSignInForm(host, { heading, cancel } = {}) {
     host.append(cancelButton);
   }
   const form = host.querySelector('form');
+  const formError = host.querySelector('.auth-sheet-error');
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    formError.classList.add('hidden');
     const email = new FormData(e.target).get('email').trim();
     const btn = e.target.querySelector('button');
     btn.disabled = true;
     btn.textContent = 'Sending…';
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: location.href },
-    });
+    let captchaToken;
+    let error;
+    try {
+      captchaToken = await getCaptchaToken(form);
+    } catch (captchaError) {
+      error = captchaError;
+    }
+    if (!error) {
+      ({ error } = await db.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: location.href, captchaToken },
+      }));
+    }
     if (error) {
-      alert('Could not send sign-in link: ' + error.message);
+      // Inline, not showToast(): the auth sheet's own opaque backdrop sits
+      // above the page banner (z-index 40 vs. the banner's place in normal
+      // flow), so a toast fired from here would be invisible until the
+      // member closed the sheet — exactly the wrong time to tell them why
+      // their sign-in attempt failed.
+      formError.textContent = 'Could not send sign-in link: ' + error.message;
+      formError.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Send link';
       return;
@@ -277,7 +366,7 @@ function showCodeStep(host, email, cancel) {
   // A bare literal, like the form above it: nothing interpolated reaches
   // innerHTML, which is what keeps no-unsanitized/property passing here with
   // no suppression. The typed address and the Cancel button go in as DOM.
-  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
+  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-error hidden" role="alert"></p><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
   host.querySelector('.sent-to-address').textContent = email;
   if (cancel) {
     const cancelButton = document.createElement('button');
@@ -289,6 +378,7 @@ function showCodeStep(host, email, cancel) {
   }
   const form = host.querySelector('form');
   const input = form.querySelector('.code-input');
+  const formError = host.querySelector('.auth-sheet-error');
   // Phones paste the code with whatever spacing the mail app rendered, so
   // strip anything that isn't a digit as they type rather than rejecting it.
   // This is also why there's no maxlength: the attribute truncates a pasted
@@ -300,6 +390,7 @@ function showCodeStep(host, email, cancel) {
   input.focus();
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    formError.classList.add('hidden');
     const token = input.value.trim();
     const btn = form.querySelector('button');
     btn.disabled = true;
@@ -308,9 +399,12 @@ function showCodeStep(host, email, cancel) {
     // (signup) and a returning one (magiclink) — so one call handles both.
     const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
     // On success onAuthStateChange closes the sheet and re-renders; there's
-    // no page reload here, unlike the link, so nothing else to do.
+    // no page reload here, unlike the link, so nothing else to do. Inline,
+    // not showToast() — see the same note in openSignInForm's submit
+    // handler: the auth sheet's backdrop hides the page banner.
     if (error) {
-      alert("That code didn't work: " + error.message);
+      formError.textContent = "That code didn't work: " + error.message;
+      formError.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Sign me in';
       input.select();
@@ -336,6 +430,25 @@ let authSheetMode = null; // 'nudge' | 'gate' | null
 // the email form — so a box checked before that swap must still be honoured
 // if the visitor then cancels out of the email step instead of finishing it.
 let authSheetSnoozeWanted = false;
+// Who to give focus back to on close: whatever was focused right before the
+// sheet opened (the header's Sign In button, a write button behind the
+// gate, or nothing at all for the automatic nudge).
+let authSheetReturnFocus = null;
+function focusableElements(container) {
+  return [
+    ...container.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter(el => el.offsetParent !== null);
+}
+// Moves focus into the sheet once its content for this open/step exists.
+// Called after building the nudge, and after openSignInForm/showCodeStep
+// build their step — those already focus a specific input where it matters
+// more (e.g. the code field); this is the fallback for everything else.
+function focusAuthSheet() {
+  const focusables = focusableElements($('.auth-sheet'));
+  (focusables[0] || $('#authSheetClose')).focus();
+}
 function closeAuthSheet() {
   if (authSheetMode === 'nudge') {
     if (authSheetSnoozeWanted) {
@@ -347,6 +460,9 @@ function closeAuthSheet() {
   authSheetMode = null;
   authSheetSnoozeWanted = false;
   $('#authSheetBackdrop').classList.add('hidden');
+  if (authSheetReturnFocus && document.body.contains(authSheetReturnFocus))
+    authSheetReturnFocus.focus();
+  authSheetReturnFocus = null;
 }
 // The landing step for every sign-in trigger, nudge and gate alike: an
 // explanation, a "Sign In" / dismiss button pair, and (nudge only) the
@@ -377,6 +493,7 @@ function showSignInActions(host, { heading, dismissLabel, cancel, showSnooze }) 
 }
 function showAuthSheetNudge() {
   if (session || authSheetDismissed || Date.now() < state.authDismissedUntil) return;
+  authSheetReturnFocus = document.activeElement;
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
   showSignInActions($('#authSheetBody'), {
@@ -385,11 +502,13 @@ function showAuthSheetNudge() {
     showSnooze: true,
   });
   $('#authSheetBackdrop').classList.remove('hidden');
+  focusAuthSheet();
 }
 // Called before a write; opens the gate and returns false if signed out
 // (callers must return immediately), or returns true if already signed in.
 function requireSignIn(title) {
   if (session) return true;
+  authSheetReturnFocus = document.activeElement;
   authSheetMode = 'gate';
   showSignInActions($('#authSheetBody'), {
     heading: title,
@@ -397,6 +516,7 @@ function requireSignIn(title) {
     cancel: closeAuthSheet,
   });
   $('#authSheetBackdrop').classList.remove('hidden');
+  focusAuthSheet();
   return false;
 }
 async function initAuth() {
@@ -459,6 +579,11 @@ async function addEvent(raceId, event) {
   if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
+// Only for a name already loaded into the form as the entry being edited
+// (state.form.editingName), via the Edit button or picking up your own
+// existing entry — never for a first-time commitment, where an upsert would
+// silently take over any existing member's row of the same name. That case
+// is addEntry, below.
 async function saveEntry(raceId, name, events, level) {
   const { data, error } = await db
     .from('entries')
@@ -466,6 +591,49 @@ async function saveEntry(raceId, name, events, level) {
     .select('id');
   if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length) throw new Error('This action is for approved members only.');
+}
+// A first-time commitment (no entry was loaded into the form to begin with)
+// is an INSERT, not an upsert: typing a name already on the roster must be
+// refused, not silently take over that member's row and commitment level.
+// The unique (race_id, name) constraint does the refusing; an INSERT can't
+// upsert by definition, so this gets it for free the way saveEntry can't.
+async function addEntry(raceId, name, events, level) {
+  const { error } = await db.from('entries').insert({ race_id: raceId, name, events, level });
+  if (error) {
+    if (error.code === '23505')
+      throw new Error(
+        `${name} is already on this race. If that's you, use their "Edit" link on the roster instead of adding a new entry.`,
+      );
+    throw friendlyWriteError(error.message);
+  }
+}
+// Renaming an existing commitment is one UPDATE of that row, never
+// saveEntry(new name) + removeEntry(old name). That pair was two requests, and
+// saveEntry upserts on (race_id, name): renaming to a name already on the
+// roster silently overwrote that member's row, and a failed follow-up delete
+// left you listed twice. A single UPDATE is atomic, keeps the row's id and
+// created_by (so the admin console can undo it as one change), and lets the
+// unique (race_id, name) constraint refuse a clash instead of overwriting.
+async function renameEntry(raceId, oldName, newName, events, level) {
+  const { data, error } = await db
+    .from('entries')
+    .update({ name: newName, events, level })
+    .eq('race_id', raceId)
+    .eq('name', oldName)
+    .select('id');
+  if (error) {
+    if (error.code === '23505')
+      throw new Error(
+        `${newName} is already on this race. Choose a different name, or edit that entry instead.`,
+      );
+    throw friendlyWriteError(error.message);
+  }
+  // Zero rows: the allow-list blocked it (see friendlyWriteError), or the
+  // entry being renamed was removed or renamed by someone else meanwhile.
+  if (!data || !data.length)
+    throw new Error(
+      `Could not find ${oldName} on this race any more — it may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
+    );
 }
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
@@ -629,6 +797,7 @@ function openRaceScreen(raceId, opts = {}) {
   const race = races.find(r => r.id === raceId);
   if (!race) return false;
   const mine = myEntry(race);
+  raceScreenReturnFocus = document.activeElement;
   openId = raceId;
   state.form = {
     events: mine ? mine.events.slice() : [],
@@ -653,6 +822,10 @@ function openRaceScreen(raceId, opts = {}) {
   if (opts.history !== 'none') navigate(racePath(race), { replace: opts.history === 'replace' });
   if (opts.scroll !== false) window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
+  // Hiding #raceList doesn't move a keyboard user anywhere; land them on the
+  // new screen's back button rather than stranding focus on a now-hidden
+  // element (or nothing, on a fresh page load).
+  $('#raceScreenBackButton').focus();
   return true;
 }
 function closeRaceScreen(opts = {}) {
@@ -663,6 +836,15 @@ function closeRaceScreen(opts = {}) {
   $('#raceList').classList.remove('hidden');
   if (opts.history !== 'none') navigate(BASE_PATH, { replace: opts.history === 'replace' });
   render();
+  // Return focus to whatever opened this screen (the race's card, usually);
+  // if that's gone — filtered out, or this was a deep link — #raceList has
+  // tabindex="-1" for exactly this fallback.
+  const target =
+    raceScreenReturnFocus && document.body.contains(raceScreenReturnFocus)
+      ? raceScreenReturnFocus
+      : $('#raceList');
+  target.focus({ preventScroll: true });
+  raceScreenReturnFocus = null;
 }
 // After a reload, keep the URL pointing at the open race — a rename changes the
 // slug, so the address bar would otherwise still hold the old one.
@@ -673,7 +855,9 @@ function syncOpenRaceUrl() {
 }
 // Balance Bolt races only need a date and a race number, and they are always club
 // focus races — so the other fields are hidden and the name field is relabelled.
-// Shared by #raceForm and #editForm, whose field markup is identical.
+// Shared by #raceForm and #editForm, whose field markup comes from the same
+// #raceFormFieldsTemplate (see the querySelectorAll('#raceForm,#editForm')
+// block, below), so the two can never drift out of sync with each other.
 function applyEventTypeFields(form) {
   const bolt = form.eventType.value === 'Balance Bolt';
   form
@@ -686,6 +870,7 @@ function applyEventTypeFields(form) {
 function openEditScreen(raceId) {
   const race = races.find(r => r.id === raceId);
   if (!race) return;
+  editScreenReturnFocus = document.activeElement;
   editingId = raceId;
   $('#editBackLabel').textContent = `Back to ${race.name}`;
   $('#editScreenTitle').textContent = race.name;
@@ -706,6 +891,7 @@ function openEditScreen(raceId) {
   $('#raceScreen').classList.add('hidden');
   $('#editScreen').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('#editBackButton').focus();
 }
 function closeEditScreen() {
   editingId = null;
@@ -718,6 +904,13 @@ function closeEditScreen() {
     $('#raceList').classList.remove('hidden');
   }
   render();
+  const fallback = openId ? $('#raceScreenEditButton') : $('#raceList');
+  const target =
+    editScreenReturnFocus && document.body.contains(editScreenReturnFocus)
+      ? editScreenReturnFocus
+      : fallback;
+  target.focus({ preventScroll: true });
+  editScreenReturnFocus = null;
 }
 async function loadRaces() {
   try {
@@ -751,6 +944,9 @@ async function loadRaces() {
       })),
     }));
   } catch (err) {
+    // The member sees a generic "could not reach" message; the real cause
+    // (network, RLS, a bad column in the select) is only ever visible here.
+    console.error('loadRaces failed:', err);
     loadError = 'fetch-failed';
     races = [];
   }
@@ -773,6 +969,9 @@ function render() {
     .forEach(b => b.classList.toggle('selected', b.dataset.view === state.viewFilter));
   $('#updateBannerText').textContent = toast || '';
   $('#updateBanner').classList.toggle('hidden', !toast);
+  $('#updateBanner').classList.toggle('error', toastKind === 'error');
+  $('#updateBannerCheck').classList.toggle('hidden', toastKind === 'error');
+  $('#updateBannerAlert').classList.toggle('hidden', toastKind !== 'error');
   if (loadError === 'fetch-failed') {
     $('#emptyState').textContent =
       'Could not reach the Supabase backend. Check your connection and try refreshing.';
@@ -869,6 +1068,10 @@ function render() {
     container.append(node);
   };
   shown.forEach(race => appendRace(race, list));
+  // The one thing screen readers should hear after a filter change: not the
+  // whole rebuilt list (see the comment on #raceList in index.html), just
+  // how many races matched.
+  $('#raceListStatus').textContent = `${shown.length} race${shown.length === 1 ? '' : 's'} shown`;
   if (openId) {
     const openRace = races.find(r => r.id === openId);
     if (openRace) {
@@ -1103,7 +1306,13 @@ function makeDetails(race) {
   if (removeCommitButton)
     removeCommitButton.onclick = async () => {
       if (!requireSignIn('Sign in to remove this entry')) return;
-      if (!confirm(`Remove ${editingEntry.name} from this race?`)) return;
+      if (
+        !(await confirmDialog({
+          title: 'Remove commitment?',
+          body: `Remove ${editingEntry.name} from this race?`,
+        }))
+      )
+        return;
       removeCommitButton.disabled = true;
       removeCommitButton.textContent = 'Removing…';
       try {
@@ -1121,12 +1330,24 @@ function makeDetails(race) {
       } catch (err) {
         removeCommitButton.disabled = false;
         removeCommitButton.textContent = 'Remove commitment';
-        alert('Could not remove: ' + err.message);
+        showToast('Could not remove: ' + err.message, 'error');
       }
     };
   gateButton(removeCommitButton);
   const nameInput = wrap.querySelector('.name-input');
-  nameInput.value = state.form.editingName || '';
+  // pendingName is a typed-but-not-yet-saved name, kept live by oninput
+  // below the same way otherInput already keeps otherText live — not just
+  // snapshotted on submit. A signed-in session can drop out from under a
+  // member mid-edit (Supabase's own background token refresh failing, not
+  // only a click on an already-expired session), and that fires a
+  // re-render on its own via onAuthStateChange — same as any other
+  // re-render — which would otherwise wipe whatever they'd typed but not
+  // saved yet back to editingName's old value.
+  nameInput.value = state.form.pendingName ?? state.form.editingName ?? '';
+  nameInput.oninput = () => {
+    state.form.pendingName = nameInput.value;
+    persist();
+  };
   const eventChoices = wrap.querySelector('.event-choices');
   const otherRow = wrap.querySelector('.other-row');
   const otherInput = wrap.querySelector('.other-input');
@@ -1198,13 +1419,15 @@ function makeDetails(race) {
         nameInput.focus();
         return;
       }
-      // Snapshot the typed name before the gate, so a signed-out save attempt
-      // doesn't lose it if the magic-link round trip reloads the page.
+      // editingName (not pendingName, which nameInput's oninput already
+      // keeps live) is what tells this handler whether it's renaming an
+      // existing entry or adding a new one, so it must stay untouched until
+      // the save actually succeeds, below. Overwriting it here used to mean:
+      // sign-in expires mid-edit, this runs again after re-auth with
+      // editingName already clobbered to the new name, previousEditingName
+      // reads back as already matching name, and the save goes through as a
+      // fresh add — orphaning the old-named entry instead of renaming it.
       const previousEditingName = state.form.editingName;
-      if (name !== previousEditingName) {
-        state.form.editingName = name;
-        persist();
-      }
       if (!requireSignIn('Sign in to save your commitment')) return;
       const extra = (state.form.otherText || '').trim();
       const events = [...new Set([...state.form.events, ...(extra ? [extra] : [])])];
@@ -1218,17 +1441,19 @@ function makeDetails(race) {
         for (const ev of events) {
           if (!race.events.includes(ev)) await addEvent(race.id, ev);
         }
-        await saveEntry(race.id, name, events, state.form.level);
         if (previousEditingName && previousEditingName !== name)
-          await removeEntry(race.id, previousEditingName);
+          await renameEntry(race.id, previousEditingName, name, events, state.form.level);
+        else if (previousEditingName) await saveEntry(race.id, name, events, state.form.level);
+        else await addEntry(race.id, name, events, state.form.level);
         state.form.editingName = name;
+        delete state.form.pendingName;
         state.user = name;
         persist();
         await loadRaces();
       } catch (err) {
         btn.disabled = false;
         btn.textContent = 'Save commitment';
-        alert('Could not save: ' + err.message);
+        showToast('Could not save: ' + err.message, 'error');
       }
     };
   }
@@ -1249,6 +1474,7 @@ document.querySelectorAll('.view-toggle-btn').forEach(
     }),
 );
 document.querySelectorAll('#raceForm,#editForm').forEach(f => {
+  f.querySelector('.add-form-fields').append($('#raceFormFieldsTemplate').content.cloneNode(true));
   f.eventType.onchange = () => applyEventTypeFields(f);
   applyEventTypeFields(f);
 });
@@ -1278,9 +1504,10 @@ $('#raceForm').addEventListener('submit', async e => {
   submitBtn.disabled = true;
   let url = f.get('url').trim();
   if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const name = f.get('name').trim();
   try {
     await addRace({
-      name: f.get('name').trim(),
+      name,
       date: f.get('date'),
       location: 'Location TBC',
       url,
@@ -1296,8 +1523,11 @@ $('#raceForm').addEventListener('submit', async e => {
     applyEventTypeFields(e.target);
     toggleAdd(false);
     await loadRaces();
+    // Editing and removing a race both toasted; adding one succeeded
+    // silently. Same event, same feedback.
+    showToast(`${name} added`);
   } catch (err) {
-    alert('Could not add race: ' + err.message);
+    showToast('Could not add race: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
   }
@@ -1315,7 +1545,12 @@ $('#removeRaceButton').onclick = async () => {
   if (!raceId) return;
   if (!requireSignIn('Sign in to remove this race')) return;
   const race = races.find(r => r.id === raceId);
-  if (!confirm(`Remove ${race?.name || 'this race'} from the calendar? This can't be undone.`))
+  if (
+    !(await confirmDialog({
+      title: 'Remove race?',
+      body: `Remove ${race?.name || 'this race'} from the calendar? This can't be undone.`,
+    }))
+  )
     return;
   const btn = $('#removeRaceButton');
   btn.disabled = true;
@@ -1334,7 +1569,7 @@ $('#removeRaceButton').onclick = async () => {
     await loadRaces();
     showToast(`${race?.name || 'Race'} removed`);
   } catch (err) {
-    alert('Could not remove race: ' + err.message);
+    showToast('Could not remove race: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Remove race';
@@ -1368,7 +1603,7 @@ $('#editForm').addEventListener('submit', async e => {
     await loadRaces();
     showToast(`${name} updated`);
   } catch (err) {
-    alert('Could not save changes: ' + err.message);
+    showToast('Could not save changes: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
   }
@@ -1377,8 +1612,40 @@ $('#resetButton').onclick = () => {
   loadRaces();
 };
 loadRaces();
+$('#confirmDialogCancel').onclick = () => $('#confirmDialog').close();
+$('#confirmDialogClose').onclick = () => $('#confirmDialog').close();
+// Native <dialog> backdrop clicks land on the dialog element itself (its
+// ::backdrop pseudo-element isn't part of the DOM click target), so this is
+// the same "click landed on the overlay, not the card" check the auth
+// sheet uses. Escape needs no handler at all: showModal() closes on it
+// natively, firing this same 'close' event confirmDialog() is listening for.
+$('#confirmDialog').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.close();
+});
 $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
 $('#authSheetClose').onclick = closeAuthSheet;
+// Escape backs out same as the × button; Tab is trapped inside the sheet so
+// a keyboard user can't tab into the page behind what's meant to be modal.
+$('#authSheetBackdrop').addEventListener('keydown', e => {
+  if ($('#authSheetBackdrop').classList.contains('hidden')) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeAuthSheet();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusables = focusableElements($('.auth-sheet'));
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
 initAuth();

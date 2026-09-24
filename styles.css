@@ -56,13 +56,22 @@ body {
 }
 .text-button,
 .icon-button {
+  /* inline-flex, or min-width/min-height do nothing on an <a class=
+     "text-button"> (the header's Admin link) and it sits off the baseline. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 44px;
   min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
+}
+.text-button:hover {
+  color: var(--ink);
 }
 .hero {
   border-radius: 9px;
@@ -309,6 +318,21 @@ body {
 }
 .hidden {
   display: none !important;
+}
+/* Present to screen readers, invisible on screen: for live-region status
+   text and similar content with nothing to show sighted users. Unlike
+   .hidden, this must not use display:none, which removes it from the
+   accessibility tree along with the page. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .empty-state {
   padding: 34px;

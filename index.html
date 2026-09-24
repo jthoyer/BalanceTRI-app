@@ -4,6 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Balance Tri Club — Race commitments</title>
+    <!-- Every race is shareable at /race/<slug>, but GitHub Pages has no
+         server-side rendering to give each one its own preview — a crawler
+         fetching a shared link never runs app.js, so per-race tags aren't
+         possible here. This is the site-wide fallback: one description and
+         image for every link, better than the bare URL a crawler saw before. -->
+    <meta
+      name="description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <link rel="canonical" href="https://jthoyer.github.io/BalanceTRI-app/" />
+    <link rel="icon" type="image/png" href="assets/balance-logo.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Balance Tri Club" />
+    <meta property="og:title" content="Balance Tri Club — Race commitments" />
+    <meta
+      property="og:description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <meta property="og:url" content="https://jthoyer.github.io/BalanceTRI-app/" />
+    <meta
+      property="og:image"
+      content="https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Balance Tri Club — Race commitments" />
+    <meta
+      name="twitter:description"
+      content="See who's racing and add your own commitments to Balance Tri Club's race calendar."
+    />
+    <meta
+      name="twitter:image"
+      content="https://jthoyer.github.io/BalanceTRI-app/assets/balance-logo.png"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,8 +47,8 @@
          query string whenever either stylesheet changes, or returning
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
-    <link rel="stylesheet" href="styles.css?v=2026092401" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026092401" />
+    <link rel="stylesheet" href="styles.css?v=2026092403" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026092404" />
   </head>
   <body>
     <main class="shell">
@@ -23,10 +56,12 @@
         <a class="brand" id="brandLink" href="." aria-label="Balance Tri Club home"
           ><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club"
         /></a>
+        <!-- Order runs from least to most personal: a utility, the page's one
+             primary action, then the account cluster at the far edge. -->
         <div class="header-actions">
+          <button class="text-button" id="resetButton">Refresh</button>
+          <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button>
           <div class="auth-widget" id="authWidget"></div>
-          <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button
-          ><button class="text-button" id="resetButton">Refresh</button>
         </div>
       </header>
 
@@ -99,32 +134,9 @@
               ×
             </button>
           </div>
-          <div class="add-form-fields">
-            <label
-              >Event type <span class="optional">optional</span
-              ><select name="eventType">
-                <option value="">Select type…</option>
-                <option value="Balance Bolt">Balance Bolt</option>
-                <option value="Bike">Bike</option>
-                <option value="Multi-sport">Multi-sport</option>
-                <option value="Run">Run</option>
-                <option value="Swim">Swim</option>
-                <option value="Triathlon">Triathlon</option>
-              </select></label
-            ><label class="field-name"
-              ><span class="field-label">Race name</span
-              ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
-            ><label>Date<input name="date" type="date" required /></label
-            ><label class="field-url"
-              >Race website <span class="optional">optional</span
-              ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
-            ><label class="field-events"
-              >Events or distances <span class="optional">optional</span
-              ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
-            ><label class="checkbox-field"
-              ><input name="clubFocus" type="checkbox" /> Club focus race</label
-            >
-          </div>
+          <!-- Filled from #raceFormFieldsTemplate at load — see app.js, near
+               applyEventTypeFields. -->
+          <div class="add-form-fields"></div>
           <div class="dialog-footer">
             <button type="button" id="cancelAddButton" class="secondary-button">Cancel</button
             ><button class="primary-button" value="default">Create race</button>
@@ -154,32 +166,9 @@
             </div>
           </div>
           <form id="editForm" class="add-form">
-            <div class="add-form-fields">
-              <label
-                >Event type <span class="optional">optional</span
-                ><select name="eventType">
-                  <option value="">Select type…</option>
-                  <option value="Balance Bolt">Balance Bolt</option>
-                  <option value="Bike">Bike</option>
-                  <option value="Multi-sport">Multi-sport</option>
-                  <option value="Run">Run</option>
-                  <option value="Swim">Swim</option>
-                  <option value="Triathlon">Triathlon</option>
-                </select></label
-              ><label class="field-name"
-                ><span class="field-label">Race name</span
-                ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
-              ><label>Date<input name="date" type="date" required /></label
-              ><label class="field-url"
-                >Race website <span class="optional">optional</span
-                ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
-              ><label class="field-events"
-                >Events or distances <span class="optional">optional</span
-                ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
-              ><label class="checkbox-field"
-                ><input name="clubFocus" type="checkbox" /> Club focus race</label
-              >
-            </div>
+            <!-- Filled from #raceFormFieldsTemplate at load — see app.js, near
+                 applyEventTypeFields. -->
+            <div class="add-form-fields"></div>
             <div class="dialog-footer">
               <button type="button" id="removeRaceButton" class="secondary-button danger-button">
                 Remove race</button
@@ -217,8 +206,14 @@
           <div id="raceScreenBody"></div>
         </div>
       </section>
-      <p class="update-banner hidden" id="updateBanner">
+      <!-- Drives both a save/remove success ("N updated") and a write
+           failure ("Could not save: …") — see showToast(msg, kind) in
+           app.js, which despite the name is this inline banner, not a
+           floating toast. role="status" replaces what a native alert()
+           gave screen-reader users for free. -->
+      <p class="update-banner hidden" id="updateBanner" role="status">
         <svg
+          id="updateBannerCheck"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -227,8 +222,25 @@
           stroke-width="2.4"
           stroke-linecap="round"
           stroke-linejoin="round"
+          aria-hidden="true"
         >
           <path d="M20 6 9 17l-5-5" /></svg
+        ><svg
+          id="updateBannerAlert"
+          class="hidden"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v6" />
+          <path d="M12 16.5h.01" /></svg
         ><span id="updateBannerText"></span>
       </p>
       <div class="race-info upcoming-heading hidden" id="upcomingHeading">
@@ -237,8 +249,36 @@
       <p class="empty-state hidden" id="emptyState">
         No races here yet. Add a race or switch back to all races.
       </p>
-      <section id="raceList" class="race-list" aria-live="polite"></section>
+      <!-- The list itself isn't aria-live: it's fully rebuilt on every
+           keystroke in the athlete filter, and a live region announces
+           its whole contents on every change, not just the change. The
+           count in raceListStatus below is the live region instead. -->
+      <section id="raceList" class="race-list" tabindex="-1"></section>
+      <p id="raceListStatus" class="sr-only" role="status"></p>
     </main>
+
+    <!-- A native <dialog> for destructive confirms (remove a commitment,
+         remove a race) — see confirmDialog() in app.js. Replaces
+         window.confirm(), which is unstyled, blocks the page, and looks
+         broken on mobile; showModal() gives the same built-in focus trap
+         and Escape-to-close for free. -->
+    <dialog id="confirmDialog">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <h2 id="confirmDialogTitle"></h2>
+          <button type="button" class="icon-button" id="confirmDialogClose" aria-label="Cancel">
+            ×
+          </button>
+        </div>
+        <p id="confirmDialogBody"></p>
+        <div class="dialog-footer">
+          <button type="button" class="secondary-button" id="confirmDialogCancel">Cancel</button>
+          <button type="button" class="secondary-button danger-button" id="confirmDialogConfirm">
+            Remove
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
       <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
@@ -301,7 +341,49 @@
         >
       </article></template
     >
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-    <script src="app.js"></script>
+    <!-- The field block shared by #raceForm and #editForm — cloned into each
+         form's empty .add-form-fields at load (see app.js, near
+         applyEventTypeFields). Was duplicated verbatim between the two
+         forms; a field changed in one and not the other broke Balance Bolt
+         field-hiding silently, since applyEventTypeFields assumes both are
+         identical. -->
+    <template id="raceFormFieldsTemplate"
+      ><label
+        >Event type <span class="optional">optional</span
+        ><select name="eventType">
+          <option value="">Select type…</option>
+          <option value="Balance Bolt">Balance Bolt</option>
+          <option value="Bike">Bike</option>
+          <option value="Multi-sport">Multi-sport</option>
+          <option value="Run">Run</option>
+          <option value="Swim">Swim</option>
+          <option value="Triathlon">Triathlon</option>
+        </select></label
+      ><label class="field-name"
+        ><span class="field-label">Race name</span
+        ><input name="name" required placeholder="e.g. Melbourne Marathon" /></label
+      ><label>Date<input name="date" type="date" required /></label
+      ><label class="field-url"
+        >Race website <span class="optional">optional</span
+        ><input name="url" type="text" placeholder="e.g. ironman.com/melbourne" /></label
+      ><label class="field-events"
+        >Events or distances <span class="optional">optional</span
+        ><input name="events" placeholder="e.g. 70.3, Olympic, Sprint" /></label
+      ><label class="checkbox-field"
+        ><input name="clubFocus" type="checkbox" /> Club focus race</label
+      ></template
+    >
+    <!-- supabase-js is a copy committed to the repo, not a CDN link. It runs
+         with full access to members' sessions, so an upgrade is a
+         deliberate commit (see README.md), never a silent CDN update. -->
+    <script src="vendor/supabase-js-2.117.1.js"></script>
+    <!-- Same cache-busting rule as the stylesheets above: bump this whenever
+         shared.js or app.js changes, or a returning visitor's browser can
+         keep running a stale cached copy against the current HTML — cited
+         as the likely cause of "no captcha_token found" right after the
+         hCaptcha switch-on, since neither script carried a version query
+         string before this. -->
+    <script src="shared.js?v=2026092401"></script>
+    <script src="app.js?v=2026092408"></script>
   </body>
 </html>

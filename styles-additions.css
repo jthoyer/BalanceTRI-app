@@ -252,6 +252,16 @@
   align-items: center;
   gap: 14px;
 }
+/* Header labels never wrap: a two-line "Sign out" or "Add a race" reads as
+   broken. Refresh drops to the account links' 14px so it stays the quietest
+   thing in the row. */
+.header-actions button,
+.header-actions a {
+  white-space: nowrap;
+}
+#resetButton {
+  font-size: 14px;
+}
 .hero-copy .view-toggle {
   display: flex;
   gap: 4px;
@@ -278,7 +288,7 @@
 }
 @media (max-width: 700px) {
   .header-actions {
-    gap: 8px;
+    gap: 6px;
   }
 }
 .hero-copy .race-count-group {
@@ -378,6 +388,13 @@
   font-size: 14px;
   font-weight: 700;
 }
+/* A write failure reuses the same banner, swapped to the destructive
+   palette used elsewhere (.remove-commit-button:hover); see
+   showToast(msg, 'error') and the two SVGs it toggles between. */
+.update-banner.error {
+  background: #fdecec;
+  color: #b3261e;
+}
 .member-banner {
   margin: 0 0 16px;
   padding: 12px 16px;
@@ -470,13 +487,18 @@
 .danger-button:hover {
   background: #fdecec;
 }
+/* The account cluster (name, Admin, Sign out, or Sign in) sits last, split
+   from the page actions by a hairline so it reads as its own group. */
 .auth-widget {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
   font-size: 14px;
 }
 .auth-widget .auth-name {
+  margin-right: 6px;
   color: var(--ink);
   font-weight: 700;
   max-width: 160px;
@@ -492,6 +514,11 @@
 }
 .sign-in-form input {
   flex: 1;
+  /* Flex items default to min-width:auto (their content's intrinsic width as
+     a floor), which a native text input can push past this row's available
+     space on a narrow header. Without this, the input can refuse to shrink
+     and force the row wider than its container. */
+  min-width: 0;
   min-height: 36px;
   border: 1px solid #aab5c6;
   border-radius: 9px;
@@ -499,6 +526,13 @@
   background: #fff;
   color: var(--ink);
   font: 14px 'DM Sans';
+  /* Native form controls carry their own UA theming (-webkit-appearance),
+     which on some WebKit versions has sized itself independently of the
+     author's box-sizing: border-box, adding padding/border on top of the
+     computed width instead of inside it. Resetting appearance removes that
+     native theming so the box-sizing rule actually governs the box. */
+  -webkit-appearance: none;
+  appearance: none;
 }
 .sign-in-form button {
   flex-shrink: 0;
@@ -513,10 +547,27 @@
   font: 700 13px 'DM Sans';
   cursor: pointer;
   flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
 }
 @media (max-width: 700px) {
+  .auth-widget {
+    padding-left: 8px;
+  }
+  /* A signed-in admin puts four controls beside the logo; a slightly
+     smaller logo and a tighter primary button keep them on a 360px row. */
+  .brand-logo {
+    height: 52px;
+  }
+  .header-actions .primary-button {
+    padding: 10px 12px;
+  }
+  .header-actions .primary-button span {
+    display: none;
+  }
+  /* No room for the name on a phone; Sign out already says who is in. */
   .auth-widget .auth-name {
-    max-width: 90px;
+    display: none;
   }
   /* #signInButton/#signOutButton are .text-button, hidden by styles.css's
      blanket mobile rule; the header sign-in control is meant to "stay
@@ -664,6 +715,11 @@
   font-size: 15px;
   line-height: 1.5;
   color: rgba(24, 37, 66, 0.72);
+  /* Belt-and-suspenders against clipping on the narrowest phones: wrap
+     rather than let any word (or the "her[e]"-cutting content itself) run
+     past the sheet's edge. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .auth-sheet .auth-sheet-hint:last-of-type {
   margin-bottom: 18px;
@@ -737,14 +793,33 @@
 .auth-sheet .sign-in-form {
   margin-top: 4px;
 }
+/* A failed send-link/verify-code attempt, inline rather than a showToast()
+   banner — the sheet's own opaque backdrop would hide that banner until
+   the member closed the sheet, which defeats the point. */
+.auth-sheet-error {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #b3261e;
+}
 .auth-sheet .sign-in-form input {
   min-height: 44px;
+  /* Explicit width rather than relying solely on align-items:stretch: the
+     code-form below is a column flex container, and native form controls
+     have historically been inconsistent (WebKit especially) about fully
+     honoring stretch alignment on their own intrinsic/UA-default width. An
+     explicit width:100% + min-width:0 stops the input from falling back to
+     that intrinsic width and overflowing the sheet on narrow phones. */
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid rgba(24, 37, 66, 0.25);
   border-radius: 9px;
   padding: 10px 12px;
   background: #fff;
   color: var(--ink);
   font: 14px 'DM Sans';
+  -webkit-text-size-adjust: 100%;
 }
 .auth-sheet .send-link-button {
   background: var(--yellow);
@@ -758,8 +833,12 @@
   font:
     700 18px/1 'DM Sans',
     monospace;
-  letter-spacing: 8px;
-  text-indent: 8px;
+  /* 8px on anything past ~440px wide (i.e. everywhere above the 700px
+     mobile breakpoint, where this clamps to its 8px ceiling); tapers down
+     on the narrowest phones so six widely-tracked digits plus the leading
+     indent can't out-grow the input's own content box. */
+  letter-spacing: clamp(5px, 2vw, 8px);
+  text-indent: clamp(5px, 2vw, 8px);
 }
 .auth-sheet .code-form {
   display: flex;
@@ -773,6 +852,11 @@
    code form opts out of it. */
 .auth-sheet .code-form input {
   flex: none;
+}
+/* Same reasoning as the input above: don't lean on stretch alignment alone
+   to size the submit button to the column's width. */
+.auth-sheet .code-form .send-link-button {
+  width: 100%;
 }
 .auth-sheet .auth-sheet-cancel {
   display: block;
@@ -832,4 +916,10 @@
     margin-top: 14px;
     font-size: 40px;
   }
+}
+/* hCaptcha. The slot only exists while a sign-in email is being sent, and
+   stays empty (so takes no space) unless hCaptcha decides the member needs
+   to complete a challenge. */
+.captcha-slot:not(:empty) {
+  margin-top: 12px;
 }

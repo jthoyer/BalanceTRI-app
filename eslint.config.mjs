@@ -5,7 +5,7 @@ import noUnsanitized from 'eslint-plugin-no-unsanitized';
 
 export default [
   {
-    ignores: ['node_modules/**', 'supabase/**'],
+    ignores: ['node_modules/**', 'supabase/**', 'vendor/**'],
   },
   {
     files: ['**/*.js'],
@@ -14,7 +14,7 @@ export default [
       sourceType: 'script',
       globals: {
         ...globals.browser,
-        // Loaded from a CDN <script> tag ahead of app.js.
+        // Loaded from vendor/ by a <script> tag ahead of app.js.
         supabase: 'readonly',
       },
     },
@@ -34,6 +34,18 @@ export default [
       eqeqeq: ['error', 'smart'],
       'no-var': 'error',
       'prefer-const': 'error',
+    },
+  },
+  {
+    // shared.js runs first on both pages and defines these as script globals.
+    files: ['app.js', 'admin.js'],
+    languageOptions: {
+      globals: {
+        SUPABASE_URL: 'readonly',
+        SUPABASE_ANON_KEY: 'readonly',
+        TURNSTILE_SITE_KEY: 'readonly',
+        getCaptchaToken: 'readonly',
+      },
     },
   },
   {
