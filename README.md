@@ -112,19 +112,21 @@ Browsing is always open — the calendar and every race's roster are visible whe
 
 Separately, a bottom-sheet **nudge** appears once per visit for a signed-out browser (unless snoozed), offering "Sign in" or "Just browsing" with equal weight — tapping outside it or "Just browsing" both dismiss it the same way, since it never blocks anything. (An earlier version also dismissed it on any page scroll; that closed the sheet the moment a phone's keyboard opened for the email field, since focusing an input inside a fixed-position sheet makes mobile browsers scroll the document to keep it in view — so scroll-to-dismiss was removed.) Checking "Don't ask me to sign in again for 10 days" before dismissing snoozes the nudge for 10 days (tracked client-side in `localStorage` as `authDismissedUntil`, not in Supabase); leaving it unchecked just dismisses it for the current visit. The small sign-in control in the header stays available regardless, on mobile included.
 
-### Bot check (Cloudflare Turnstile)
+### Bot check (hCaptcha)
 
-Anyone can ask Supabase to send a sign-in email to any address, and the allow-list can't stop that: it only controls writes. A script could burn through the project's email quota and lock real members out of sign-in. Turnstile makes each send prove it came from a browser.
+Anyone can ask Supabase to send a sign-in email to any address, and the allow-list can't stop that: it only controls writes. A script could burn through the project's email quota and lock real members out of sign-in. hCaptcha makes each send prove it came from a browser.
 
-It's off until a site key is set. With `TURNSTILE_SITE_KEY` empty in `shared.js`, sign-in works exactly as before. With a key, pressing **Send link** loads Cloudflare's script (browsing never loads it), gets a single-use token, and passes it to `signInWithOtp` as `captchaToken`. The widget uses `appearance: 'interaction-only'`, so most members never see it. The rest get a single checkbox.
+It's off until a site key is set. With `HCAPTCHA_SITE_KEY` empty in `shared.js`, sign-in works exactly as before. With a key, pressing **Send link** loads hCaptcha's script (browsing never loads it), gets a single-use token via an invisible widget (`size: 'invisible'`, triggered with `execute()`), and passes it to `signInWithOtp` as `captchaToken`. hCaptcha only surfaces a visible challenge when it decides one is needed — most members never see anything.
 
 **Switching it on — in this order:**
 
-1. In the Cloudflare dashboard, go to **Turnstile → Add widget**. Add the hostname `jthoyer.github.io` and choose the **Managed** mode. Copy the **site key** and the **secret key**.
-2. Put the site key in `TURNSTILE_SITE_KEY` in `shared.js` and deploy. Both the calendar and the admin console read it from there. Sign-in still works, because Supabase ignores a token it isn't checking.
-3. In Supabase, go to **Authentication → Attack Protection**, enable CAPTCHA protection, choose Turnstile, paste the **secret key** and save.
+1. In the [hCaptcha dashboard](https://dashboard.hcaptcha.com/), add a site for `jthoyer.github.io`. Copy the **site key** and the **secret key**.
+2. Put the site key in `HCAPTCHA_SITE_KEY` in `shared.js` and deploy. Both the calendar and the admin console read it from there. Sign-in still works, because Supabase ignores a token it isn't checking.
+3. In Supabase, go to **Authentication → Attack Protection**, enable CAPTCHA protection, choose hCaptcha, paste the **secret key** and save.
 
 Doing step 3 before step 2 breaks sign-in for everyone: once CAPTCHA protection is on, every send without a token is refused. To switch it off, reverse the order: turn it off in Supabase first, then clear the key.
+
+(An earlier version of this used Cloudflare Turnstile; it was replaced with hCaptcha before Turnstile's site key was ever set, so no live sign-in flow depended on it.)
 
 ### Sign-in emails
 
