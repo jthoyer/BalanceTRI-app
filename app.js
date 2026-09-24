@@ -1266,7 +1266,19 @@ function makeDetails(race) {
     };
   gateButton(removeCommitButton);
   const nameInput = wrap.querySelector('.name-input');
-  nameInput.value = state.form.editingName || '';
+  // pendingName is a typed-but-not-yet-saved name, kept live by oninput
+  // below the same way otherInput already keeps otherText live — not just
+  // snapshotted on submit. A signed-in session can drop out from under a
+  // member mid-edit (Supabase's own background token refresh failing, not
+  // only a click on an already-expired session), and that fires a
+  // re-render on its own via onAuthStateChange — same as any other
+  // re-render — which would otherwise wipe whatever they'd typed but not
+  // saved yet back to editingName's old value.
+  nameInput.value = state.form.pendingName ?? state.form.editingName ?? '';
+  nameInput.oninput = () => {
+    state.form.pendingName = nameInput.value;
+    persist();
+  };
   const eventChoices = wrap.querySelector('.event-choices');
   const otherRow = wrap.querySelector('.other-row');
   const otherInput = wrap.querySelector('.other-input');
@@ -1338,13 +1350,15 @@ function makeDetails(race) {
         nameInput.focus();
         return;
       }
-      // Snapshot the typed name before the gate, so a signed-out save attempt
-      // doesn't lose it if the magic-link round trip reloads the page.
+      // editingName (not pendingName, which nameInput's oninput already
+      // keeps live) is what tells this handler whether it's renaming an
+      // existing entry or adding a new one, so it must stay untouched until
+      // the save actually succeeds, below. Overwriting it here used to mean:
+      // sign-in expires mid-edit, this runs again after re-auth with
+      // editingName already clobbered to the new name, previousEditingName
+      // reads back as already matching name, and the save goes through as a
+      // fresh add — orphaning the old-named entry instead of renaming it.
       const previousEditingName = state.form.editingName;
-      if (name !== previousEditingName) {
-        state.form.editingName = name;
-        persist();
-      }
       if (!requireSignIn('Sign in to save your commitment')) return;
       const extra = (state.form.otherText || '').trim();
       const events = [...new Set([...state.form.events, ...(extra ? [extra] : [])])];
@@ -1363,6 +1377,7 @@ function makeDetails(race) {
         else if (previousEditingName) await saveEntry(race.id, name, events, state.form.level);
         else await addEntry(race.id, name, events, state.form.level);
         state.form.editingName = name;
+        delete state.form.pendingName;
         state.user = name;
         persist();
         await loadRaces();
