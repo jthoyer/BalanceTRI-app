@@ -40,6 +40,23 @@ Write access to `entries` and `races` is further narrowed to an email allow-list
 
 `public.handle_new_user()` has no `EXECUTE` grant on it at all (`revoke_handle_new_user_execute` migration). It is `SECURITY DEFINER`, and Supabase's linter flagged that `anon` and `authenticated` could call it directly over `/rest/v1/rpc/`. Its only legitimate caller is the `on_auth_user_created` trigger, and that still works: PostgreSQL checks `EXECUTE` on a trigger function when the trigger is *created*, not each time it fires. Don't "fix" a future permission error by granting it back to `supabase_auth_admin` — the trigger does not need it.
 
+### Bot and abuse defences
+
+Four migrations limit what a bot, or one bad member account, can do once past the allow-list:
+
+- **Confirmed email only** (`require_confirmed_email_for_allow_list`). `private.is_allow_listed()` reads the caller's address from `auth.users`, and only when `email_confirmed_at` is set, rather than trusting the JWT's `email` claim. If "Confirm email" were ever switched off in the dashboard, a bot could otherwise sign up with a password as a member who hasn't joined yet and get write access.
+- **Size and value limits** (`add_size_and_value_limits`). Check constraints cap name, location, URL and event lengths, force `url` to `http(s)://`, and pin `entries.level` and `races.event_type` to known values. Both lists keep a legacy value existing rows hold (`not`, `SwimRun`). **Adding a level or event type to `app.js` now needs a migration too.** A value past a limit comes back as a raw `violates check constraint` error.
+- **Bulk-write guard** (`add_bulk_write_guard`). Statement-level triggers reject any API request (`authenticated` or `anon`) that inserts, updates or deletes more than 5 rows of `entries` or `races` at once. The app only ever writes one row per request. The dashboard and the service role are not limited, so bulk fixes and restores still work there.
+- **Change history** (`add_change_history`). Every insert, update and delete on `entries` and `races` is copied to `private.change_history`: the old row, the new row, `auth.uid()` and the time. The app can't read it. To restore entries deleted in the last day, run this in the SQL editor:
+
+  ```sql
+  insert into public.entries
+  select (jsonb_populate_record(null::public.entries, old_row)).*
+    from private.change_history
+   where table_name = 'entries' and op = 'DELETE'
+     and changed_at > now() - interval '1 day';
+  ```
+
 ## Removing a race
 
 Removing a race is a **soft delete**: `deleted_at` is stamped and the row stays. A race carries its roster, so a hard delete would destroy other people's commitments as well. `app.js` never issues a `DELETE` against `races`, and there is no delete policy on the table.
