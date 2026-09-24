@@ -56,13 +56,22 @@ body {
 }
 .text-button,
 .icon-button {
+  /* inline-flex, or min-width/min-height do nothing on an <a class=
+     "text-button"> (the header's Admin link) and it sits off the baseline. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 44px;
   min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
+}
+.text-button:hover {
+  color: var(--ink);
 }
 .hero {
   border-radius: 9px;

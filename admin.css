@@ -16,10 +16,7 @@
   gap: 8px;
 }
 .admin-link {
-  display: inline-flex;
-  align-items: center;
   color: var(--ink);
-  text-decoration: none;
 }
 .admin-loading,
 .admin-empty {

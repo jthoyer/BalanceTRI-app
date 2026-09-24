@@ -14,8 +14,8 @@
          query string whenever either stylesheet changes, or returning
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
-    <link rel="stylesheet" href="styles.css?v=2026092402" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026092402" />
+    <link rel="stylesheet" href="styles.css?v=2026092403" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026092403" />
   </head>
   <body>
     <main class="shell">
@@ -23,10 +23,12 @@
         <a class="brand" id="brandLink" href="." aria-label="Balance Tri Club home"
           ><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club"
         /></a>
+        <!-- Order runs from least to most personal: a utility, the page's one
+             primary action, then the account cluster at the far edge. -->
         <div class="header-actions">
+          <button class="text-button" id="resetButton">Refresh</button>
+          <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button>
           <div class="auth-widget" id="authWidget"></div>
-          <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button
-          ><button class="text-button" id="resetButton">Refresh</button>
         </div>
       </header>
 
@@ -312,6 +314,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026092401"></script>
-    <script src="app.js?v=2026092401"></script>
+    <script src="app.js?v=2026092402"></script>
   </body>
 </html>
