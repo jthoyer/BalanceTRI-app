@@ -1,7 +1,3 @@
--- PLACEHOLDER TIMESTAMP: drafted 2026-09-24, not yet applied. After
--- apply_migration (project_id shkfwuogrldbqldpipxd), rename this file to the
--- version list_migrations reports, per CLAUDE.md.
---
 -- ---------------------------------------------------------------------------
 -- entries: record who created each commitment. Attribution only — no policy
 -- changes here, so this migration does not change what any member can do.
@@ -12,8 +8,10 @@
 -- deleting a *different* member's commitment. entries.name is free text with
 -- no link to an account, so today that cannot even be traced afterwards.
 -- This migration adds the link. Whether to *enforce* it is a separate,
--- deliberate decision — see `entries_creator_scoped_writes`, which depends on
--- this migration but can be left unapplied.
+-- deliberate decision, held for now: it would protect nothing on existing
+-- rows (created_by stays null forever on them) and would let whoever types a
+-- teammate's name in first become that entry's sole future editor. Revisit
+-- if there's a concrete incident.
 --
 -- Same shape as races.created_by (`races_auth_writes_and_soft_delete`):
 -- stamped by a trigger from auth.uid(), never trusted from the client, and
