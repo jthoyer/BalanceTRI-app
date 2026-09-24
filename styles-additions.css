@@ -653,7 +653,10 @@
   background: var(--blue-tint);
   color: var(--ink);
   border-radius: 22px 22px 0 0;
-  margin-top: 20px;
+  /* Negative, not positive: pulls the panel up to overlap the hero's
+     bottom edge so its rounded top reads flush against the dark blue,
+     instead of leaving a gap where the backdrop's white shows through. */
+  margin-top: -20px;
   padding: 28px 22px 26px;
 }
 .auth-sheet-panel-inner {
