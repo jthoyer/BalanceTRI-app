@@ -554,27 +554,73 @@
   position: relative;
   width: min(420px, 100%);
   max-height: calc(100dvh - 32px);
-  overflow: auto;
-  background: var(--ink);
-  color: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 16px 16px 0 0;
-  padding: 16px 20px 22px;
   box-shadow: 0 8px 32px rgba(24, 37, 66, 0.18);
 }
+/* The brand strip: always visible (it doesn't scroll), carries the drag
+   handle and close button so they stay reachable however tall the panel
+   below gets. */
+.auth-sheet-hero {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-blue);
+  padding: 30px 20px 26px;
+}
+.auth-sheet-logo {
+  height: 100px;
+  width: auto;
+  display: block;
+}
 .auth-sheet-handle {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 32px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(24, 37, 66, 0.3);
   border-radius: 999px;
-  margin: 0 auto 12px;
 }
 .auth-sheet-close {
   position: absolute;
   top: 8px;
   right: 8px;
-  color: #fff;
+  color: var(--ink);
   font-size: 26px;
   line-height: 1;
+}
+.auth-sheet-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--blue-tint);
+  color: var(--ink);
+  border-radius: 22px 22px 0 0;
+  padding: 24px 20px 22px;
+}
+.auth-sheet-eyebrow {
+  margin: 0;
+  font:
+    600 12px Outfit,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.7;
+}
+.auth-sheet-title {
+  margin: 8px 0 16px;
+  font:
+    700 28px Outfit,
+    sans-serif;
+  line-height: 1.15;
+  color: var(--ink);
 }
 @media (max-width: 700px) {
   .auth-sheet-backdrop {
@@ -586,13 +632,14 @@
     max-height: none;
     border-radius: 0;
     box-shadow: none;
+  }
+  .auth-sheet-hero {
+    padding-top: calc(30px + env(safe-area-inset-top));
+  }
+  .auth-sheet-panel {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 56px 24px;
-  }
-  .auth-sheet-handle {
-    display: none;
   }
 }
 .auth-sheet h2 {
@@ -600,20 +647,22 @@
   font:
     600 17px Outfit,
     sans-serif;
-  color: #fff;
+  color: var(--ink);
 }
 .auth-sheet .auth-sheet-hint {
   margin: 0 0 4px;
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(24, 37, 66, 0.72);
 }
 .auth-sheet .auth-sheet-hint a {
-  color: var(--brand-blue);
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .auth-sheet .auth-sheet-hint-muted {
   text-align: center;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(24, 37, 66, 0.65);
   margin-top: 10px;
 }
 .auth-sheet-actions {
@@ -628,8 +677,8 @@
 }
 .auth-sheet-actions .secondary-button {
   background: transparent;
-  border: 1.5px solid rgba(255, 255, 255, 0.65);
-  color: #fff;
+  border: 1.5px solid rgba(24, 37, 66, 0.4);
+  color: var(--ink);
 }
 .auth-sheet-checkbox {
   display: flex;
@@ -639,7 +688,7 @@
   padding: 4px 2px;
   font-size: 12px;
   line-height: 1.4;
-  color: #fff;
+  color: var(--ink);
   cursor: pointer;
 }
 .auth-sheet-checkbox input {
@@ -648,7 +697,7 @@
   width: 18px;
   height: 18px;
   margin-top: 1px;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(24, 37, 66, 0.45);
   border-radius: 4px;
   background: transparent;
   flex-shrink: 0;
@@ -677,7 +726,7 @@
 }
 .auth-sheet .sign-in-form input {
   min-height: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(24, 37, 66, 0.25);
   border-radius: 9px;
   padding: 10px 12px;
   background: #fff;
@@ -719,7 +768,7 @@
   min-width: 44px;
   border: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(24, 37, 66, 0.72);
   font: 600 13px 'DM Sans';
   cursor: pointer;
 }
@@ -727,7 +776,7 @@
   display: block;
   padding: 8px 0;
   font-size: 13px;
-  color: #fff;
+  color: var(--ink);
 }
 @media (min-width: 701px) {
   .auth-sheet-backdrop {

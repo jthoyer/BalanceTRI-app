@@ -238,16 +238,23 @@
 
     <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
       <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
-        <div class="auth-sheet-handle" aria-hidden="true"></div>
-        <button
-          type="button"
-          class="icon-button auth-sheet-close"
-          id="authSheetClose"
-          aria-label="Close"
-        >
-          ×
-        </button>
-        <div id="authSheetBody"></div>
+        <div class="auth-sheet-hero">
+          <div class="auth-sheet-handle" aria-hidden="true"></div>
+          <button
+            type="button"
+            class="icon-button auth-sheet-close"
+            id="authSheetClose"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          <img class="auth-sheet-logo" src="assets/balance-logo.png" alt="Balance Tri Club" />
+        </div>
+        <div class="auth-sheet-panel">
+          <p class="auth-sheet-eyebrow">Balance Tri Club</p>
+          <h1 class="auth-sheet-title">Racing Calendar</h1>
+          <div id="authSheetBody"></div>
+        </div>
       </div>
     </div>
 
