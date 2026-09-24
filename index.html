@@ -242,40 +242,46 @@
 
     <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
       <div class="auth-sheet" role="dialog" aria-modal="true" aria-label="Sign in">
+        <!-- A direct child of .auth-sheet, not of the hero: on the desktop
+             split layout the hero is a side column, and this still needs to
+             sit at the top-right corner of the whole sheet, not of that
+             column. -->
+        <button
+          type="button"
+          class="icon-button auth-sheet-close"
+          id="authSheetClose"
+          aria-label="Close"
+        >
+          ×
+        </button>
         <div class="auth-sheet-hero">
           <div class="auth-sheet-handle" aria-hidden="true"></div>
-          <button
-            type="button"
-            class="icon-button auth-sheet-close"
-            id="authSheetClose"
-            aria-label="Close"
-          >
-            ×
-          </button>
           <img class="auth-sheet-logo" src="assets/balance-logo.png" alt="Balance Tri Club" />
         </div>
         <div class="auth-sheet-panel">
-          <p class="auth-sheet-eyebrow">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="3" y="5" width="18" height="16" rx="2" />
-              <path d="M3 9h18M8 3v4M16 3v4" />
-              <circle cx="8" cy="14" r="1" fill="currentColor" stroke="none" />
-              <circle cx="12" cy="14" r="1" fill="currentColor" stroke="none" />
-              <circle cx="16" cy="14" r="1" fill="currentColor" stroke="none" /></svg
-            >Balance Tri Club
-          </p>
-          <h1 class="auth-sheet-title">Racing Calendar</h1>
-          <div id="authSheetBody"></div>
+          <div class="auth-sheet-panel-inner">
+            <p class="auth-sheet-eyebrow">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M3 9h18M8 3v4M16 3v4" />
+                <circle cx="8" cy="14" r="1" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="14" r="1" fill="currentColor" stroke="none" />
+                <circle cx="16" cy="14" r="1" fill="currentColor" stroke="none" /></svg
+              >Balance Tri Club
+            </p>
+            <h1 class="auth-sheet-title">Racing Calendar</h1>
+            <div id="authSheetBody"></div>
+          </div>
         </div>
       </div>
     </div>

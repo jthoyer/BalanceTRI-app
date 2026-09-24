@@ -561,8 +561,7 @@
   box-shadow: 0 8px 32px rgba(24, 37, 66, 0.18);
 }
 /* The brand strip: always visible (it doesn't scroll), carries the drag
-   handle and close button so they stay reachable however tall the panel
-   below gets. */
+   handle so it stays reachable however tall the panel below gets. */
 .auth-sheet-hero {
   position: relative;
   flex-shrink: 0;
@@ -570,10 +569,10 @@
   align-items: center;
   justify-content: center;
   background: var(--brand-blue);
-  padding: 30px 20px 26px;
+  padding: 36px 24px 0;
 }
 .auth-sheet-logo {
-  height: 100px;
+  height: 150px;
   width: auto;
   display: block;
 }
@@ -591,6 +590,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 1;
   color: var(--ink);
   font-size: 26px;
   line-height: 1;
@@ -602,7 +602,11 @@
   background: var(--blue-tint);
   color: var(--ink);
   border-radius: 22px 22px 0 0;
+  margin-top: 20px;
   padding: 24px 20px 22px;
+}
+.auth-sheet-panel-inner {
+  width: 100%;
 }
 .auth-sheet-eyebrow {
   display: flex;
@@ -640,7 +644,7 @@
     box-shadow: none;
   }
   .auth-sheet-hero {
-    padding-top: calc(30px + env(safe-area-inset-top));
+    padding-top: calc(36px + env(safe-area-inset-top));
   }
   .auth-sheet-panel {
     display: flex;
@@ -784,12 +788,45 @@
   font-size: 13px;
   color: var(--ink);
 }
+/* At desktop width the sheet stops being a compact centered card and
+   becomes a full-bleed two-column split: the brand strip as a left column
+   instead of a top strip, the panel filling the rest. */
 @media (min-width: 701px) {
   .auth-sheet-backdrop {
-    align-items: center;
+    align-items: stretch;
   }
   .auth-sheet {
-    border-radius: 16px;
-    max-width: 380px;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    max-width: none;
+    flex-direction: row;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .auth-sheet-hero {
+    width: min(42%, 640px);
+    padding: 0;
+  }
+  .auth-sheet-logo {
+    height: 220px;
+  }
+  .auth-sheet-handle {
+    display: none;
+  }
+  .auth-sheet-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
+    border-radius: 0;
+    padding: 60px;
+  }
+  .auth-sheet-panel-inner {
+    max-width: 440px;
+  }
+  .auth-sheet-title {
+    margin-top: 14px;
+    font-size: 40px;
   }
 }
