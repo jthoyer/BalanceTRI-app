@@ -5,7 +5,7 @@ import noUnsanitized from 'eslint-plugin-no-unsanitized';
 
 export default [
   {
-    ignores: ['node_modules/**', 'supabase/**'],
+    ignores: ['node_modules/**', 'supabase/**', 'vendor/**'],
   },
   {
     files: ['**/*.js'],
@@ -14,7 +14,7 @@ export default [
       sourceType: 'script',
       globals: {
         ...globals.browser,
-        // Loaded from a CDN <script> tag ahead of app.js.
+        // Loaded from vendor/ by a <script> tag ahead of app.js.
         supabase: 'readonly',
       },
     },

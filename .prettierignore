@@ -9,3 +9,7 @@ supabase
 # future documentation change for no gain.
 *.md
 .claude
+
+# Third-party code copied in as released (see README.md). Reformatting it
+# would make it impossible to compare against the published file.
+vendor

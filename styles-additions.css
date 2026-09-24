@@ -871,3 +871,9 @@
     font-size: 40px;
   }
 }
+/* Cloudflare Turnstile. The slot only exists while a sign-in email is being
+   sent, and stays empty (so takes no space) unless Cloudflare asks the
+   member to click. */
+.captcha-slot:not(:empty) {
+  margin-top: 12px;
+}
