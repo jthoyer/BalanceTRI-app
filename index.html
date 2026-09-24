@@ -305,7 +305,13 @@
          with full access to members' sessions, so an upgrade is a
          deliberate commit (see README.md), never a silent CDN update. -->
     <script src="vendor/supabase-js-2.117.1.js"></script>
-    <script src="shared.js"></script>
-    <script src="app.js"></script>
+    <!-- Same cache-busting rule as the stylesheets above: bump this whenever
+         shared.js or app.js changes, or a returning visitor's browser can
+         keep running a stale cached copy against the current HTML — cited
+         as the likely cause of "no captcha_token found" right after the
+         hCaptcha switch-on, since neither script carried a version query
+         string before this. -->
+    <script src="shared.js?v=2026092401"></script>
+    <script src="app.js?v=2026092401"></script>
   </body>
 </html>
