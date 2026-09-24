@@ -212,10 +212,7 @@ body {
 }
 .race-info h2 {
   margin: 0;
-  overflow: hidden;
   font-size: 18px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .race-meta {
   margin: 4px 0 0;
