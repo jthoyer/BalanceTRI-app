@@ -140,9 +140,12 @@ function myEntry(race) {
 // roster stays open to everyone signed out — but saving, editing or removing
 // a commitment requires being signed in (requireSignIn, below, and the
 // matching RLS policies on entries). It's still the same honour system once
-// signed in: any authenticated member can add or edit any entry by typed
-// name (see saveEntry) — sign-in isn't tied to ownership, only to being
-// someone. A signed-in profile's display_name seeds state.user once, but
+// signed in: any authenticated member can edit or rename any entry they've
+// opened via the roster's Edit link (see saveEntry, renameEntry) — sign-in
+// isn't tied to ownership, only to being someone. What it doesn't cover is
+// typing an existing member's name into a fresh commitment instead of using
+// Edit: addEntry refuses that outright rather than silently taking over
+// their row. A signed-in profile's display_name seeds state.user once, but
 // never overwrites a name someone's already typed in this browser.
 // ---------------------------------------------------------------------------
 let session = null;
@@ -518,6 +521,11 @@ async function addEvent(raceId, event) {
   if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length) throw new Error('This action is for approved members only.');
 }
+// Only for a name already loaded into the form as the entry being edited
+// (state.form.editingName), via the Edit button or picking up your own
+// existing entry — never for a first-time commitment, where an upsert would
+// silently take over any existing member's row of the same name. That case
+// is addEntry, below.
 async function saveEntry(raceId, name, events, level) {
   const { data, error } = await db
     .from('entries')
@@ -525,6 +533,21 @@ async function saveEntry(raceId, name, events, level) {
     .select('id');
   if (error) throw friendlyWriteError(error.message);
   if (!data || !data.length) throw new Error('This action is for approved members only.');
+}
+// A first-time commitment (no entry was loaded into the form to begin with)
+// is an INSERT, not an upsert: typing a name already on the roster must be
+// refused, not silently take over that member's row and commitment level.
+// The unique (race_id, name) constraint does the refusing; an INSERT can't
+// upsert by definition, so this gets it for free the way saveEntry can't.
+async function addEntry(raceId, name, events, level) {
+  const { error } = await db.from('entries').insert({ race_id: raceId, name, events, level });
+  if (error) {
+    if (error.code === '23505')
+      throw new Error(
+        `${name} is already on this race. If that's you, use their "Edit" link on the roster instead of adding a new entry.`,
+      );
+    throw friendlyWriteError(error.message);
+  }
 }
 // Renaming an existing commitment is one UPDATE of that row, never
 // saveEntry(new name) + removeEntry(old name). That pair was two requests, and
@@ -1337,7 +1360,8 @@ function makeDetails(race) {
         }
         if (previousEditingName && previousEditingName !== name)
           await renameEntry(race.id, previousEditingName, name, events, state.form.level);
-        else await saveEntry(race.id, name, events, state.form.level);
+        else if (previousEditingName) await saveEntry(race.id, name, events, state.form.level);
+        else await addEntry(race.id, name, events, state.form.level);
         state.form.editingName = name;
         state.user = name;
         persist();
