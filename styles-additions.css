@@ -603,7 +603,7 @@
   color: var(--ink);
   border-radius: 22px 22px 0 0;
   margin-top: 20px;
-  padding: 24px 20px 22px;
+  padding: 28px 22px 26px;
 }
 .auth-sheet-panel-inner {
   width: 100%;
@@ -660,10 +660,13 @@
   color: var(--ink);
 }
 .auth-sheet .auth-sheet-hint {
-  margin: 0 0 4px;
-  font-size: 12px;
-  line-height: 1.4;
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
   color: rgba(24, 37, 66, 0.72);
+}
+.auth-sheet .auth-sheet-hint:last-of-type {
+  margin-bottom: 18px;
 }
 .auth-sheet .auth-sheet-hint a {
   color: var(--ink);
