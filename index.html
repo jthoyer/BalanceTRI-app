@@ -239,7 +239,12 @@
       <p class="empty-state hidden" id="emptyState">
         No races here yet. Add a race or switch back to all races.
       </p>
-      <section id="raceList" class="race-list" aria-live="polite"></section>
+      <!-- The list itself isn't aria-live: it's fully rebuilt on every
+           keystroke in the athlete filter, and a live region announces
+           its whole contents on every change, not just the change. The
+           count in raceListStatus below is the live region instead. -->
+      <section id="raceList" class="race-list" tabindex="-1"></section>
+      <p id="raceListStatus" class="sr-only" role="status"></p>
     </main>
 
     <div class="auth-sheet-backdrop hidden" id="authSheetBackdrop">
@@ -314,6 +319,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026092401"></script>
-    <script src="app.js?v=2026092403"></script>
+    <script src="app.js?v=2026092404"></script>
   </body>
 </html>

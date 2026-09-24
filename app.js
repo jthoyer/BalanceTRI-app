@@ -107,6 +107,10 @@ let races = [];
 let loadError = null;
 let editingId = null;
 let openId = null;
+// Who to give focus back to when the race/edit screen closes: whatever was
+// focused right before it opened (usually the race card that was clicked).
+let raceScreenReturnFocus = null;
+let editScreenReturnFocus = null;
 let toast = null;
 let toastTimer = null;
 function showToast(msg) {
@@ -385,6 +389,25 @@ let authSheetMode = null; // 'nudge' | 'gate' | null
 // the email form — so a box checked before that swap must still be honoured
 // if the visitor then cancels out of the email step instead of finishing it.
 let authSheetSnoozeWanted = false;
+// Who to give focus back to on close: whatever was focused right before the
+// sheet opened (the header's Sign In button, a write button behind the
+// gate, or nothing at all for the automatic nudge).
+let authSheetReturnFocus = null;
+function focusableElements(container) {
+  return [
+    ...container.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter(el => el.offsetParent !== null);
+}
+// Moves focus into the sheet once its content for this open/step exists.
+// Called after building the nudge, and after openSignInForm/showCodeStep
+// build their step — those already focus a specific input where it matters
+// more (e.g. the code field); this is the fallback for everything else.
+function focusAuthSheet() {
+  const focusables = focusableElements($('.auth-sheet'));
+  (focusables[0] || $('#authSheetClose')).focus();
+}
 function closeAuthSheet() {
   if (authSheetMode === 'nudge') {
     if (authSheetSnoozeWanted) {
@@ -396,9 +419,13 @@ function closeAuthSheet() {
   authSheetMode = null;
   authSheetSnoozeWanted = false;
   $('#authSheetBackdrop').classList.add('hidden');
+  if (authSheetReturnFocus && document.body.contains(authSheetReturnFocus))
+    authSheetReturnFocus.focus();
+  authSheetReturnFocus = null;
 }
 function showAuthSheetNudge() {
   if (session || authSheetDismissed || Date.now() < state.authDismissedUntil) return;
+  authSheetReturnFocus = document.activeElement;
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
   // Same wording as openSignInForm's intro (a bare literal here too, for the
@@ -418,14 +445,17 @@ function showAuthSheetNudge() {
     });
   $('#authSheetBrowseButton').onclick = closeAuthSheet;
   $('#authSheetBackdrop').classList.remove('hidden');
+  focusAuthSheet();
 }
 // Called before a write; opens the gate and returns false if signed out
 // (callers must return immediately), or returns true if already signed in.
 function requireSignIn(title) {
   if (session) return true;
+  authSheetReturnFocus = document.activeElement;
   authSheetMode = 'gate';
   openSignInForm($('#authSheetBody'), { heading: title, cancel: closeAuthSheet });
   $('#authSheetBackdrop').classList.remove('hidden');
+  focusAuthSheet();
   return false;
 }
 async function initAuth() {
@@ -686,6 +716,7 @@ function openRaceScreen(raceId, opts = {}) {
   const race = races.find(r => r.id === raceId);
   if (!race) return false;
   const mine = myEntry(race);
+  raceScreenReturnFocus = document.activeElement;
   openId = raceId;
   state.form = {
     events: mine ? mine.events.slice() : [],
@@ -710,6 +741,10 @@ function openRaceScreen(raceId, opts = {}) {
   if (opts.history !== 'none') navigate(racePath(race), { replace: opts.history === 'replace' });
   if (opts.scroll !== false) window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
+  // Hiding #raceList doesn't move a keyboard user anywhere; land them on the
+  // new screen's back button rather than stranding focus on a now-hidden
+  // element (or nothing, on a fresh page load).
+  $('#raceScreenBackButton').focus();
   return true;
 }
 function closeRaceScreen(opts = {}) {
@@ -720,6 +755,15 @@ function closeRaceScreen(opts = {}) {
   $('#raceList').classList.remove('hidden');
   if (opts.history !== 'none') navigate(BASE_PATH, { replace: opts.history === 'replace' });
   render();
+  // Return focus to whatever opened this screen (the race's card, usually);
+  // if that's gone — filtered out, or this was a deep link — #raceList has
+  // tabindex="-1" for exactly this fallback.
+  const target =
+    raceScreenReturnFocus && document.body.contains(raceScreenReturnFocus)
+      ? raceScreenReturnFocus
+      : $('#raceList');
+  target.focus({ preventScroll: true });
+  raceScreenReturnFocus = null;
 }
 // After a reload, keep the URL pointing at the open race — a rename changes the
 // slug, so the address bar would otherwise still hold the old one.
@@ -743,6 +787,7 @@ function applyEventTypeFields(form) {
 function openEditScreen(raceId) {
   const race = races.find(r => r.id === raceId);
   if (!race) return;
+  editScreenReturnFocus = document.activeElement;
   editingId = raceId;
   $('#editBackLabel').textContent = `Back to ${race.name}`;
   $('#editScreenTitle').textContent = race.name;
@@ -763,6 +808,7 @@ function openEditScreen(raceId) {
   $('#raceScreen').classList.add('hidden');
   $('#editScreen').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('#editBackButton').focus();
 }
 function closeEditScreen() {
   editingId = null;
@@ -775,6 +821,13 @@ function closeEditScreen() {
     $('#raceList').classList.remove('hidden');
   }
   render();
+  const fallback = openId ? $('#raceScreenEditButton') : $('#raceList');
+  const target =
+    editScreenReturnFocus && document.body.contains(editScreenReturnFocus)
+      ? editScreenReturnFocus
+      : fallback;
+  target.focus({ preventScroll: true });
+  editScreenReturnFocus = null;
 }
 async function loadRaces() {
   try {
@@ -929,6 +982,10 @@ function render() {
     container.append(node);
   };
   shown.forEach(race => appendRace(race, list));
+  // The one thing screen readers should hear after a filter change: not the
+  // whole rebuilt list (see the comment on #raceList in index.html), just
+  // how many races matched.
+  $('#raceListStatus').textContent = `${shown.length} race${shown.length === 1 ? '' : 's'} shown`;
   if (openId) {
     const openRace = races.find(r => r.id === openId);
     if (openRace) {
@@ -1441,4 +1498,26 @@ $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
 $('#authSheetClose').onclick = closeAuthSheet;
+// Escape backs out same as the × button; Tab is trapped inside the sheet so
+// a keyboard user can't tab into the page behind what's meant to be modal.
+$('#authSheetBackdrop').addEventListener('keydown', e => {
+  if ($('#authSheetBackdrop').classList.contains('hidden')) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeAuthSheet();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusables = focusableElements($('.auth-sheet'));
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
 initAuth();
