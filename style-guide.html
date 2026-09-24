@@ -342,14 +342,14 @@
                   border
                 </td>
                 <td>#e3a3a3</td>
-                <td><code>.roster-remove:hover</code> border</td>
+                <td><code>.remove-commit-button:hover</code> border</td>
               </tr>
               <tr>
                 <td>
                   <span class="swatch-chip" style="background: #fdecec"></span>Destructive hover bg
                 </td>
                 <td>#fdecec</td>
-                <td><code>.roster-remove:hover</code> background</td>
+                <td><code>.remove-commit-button:hover</code> background</td>
               </tr>
               <tr>
                 <td>
@@ -357,7 +357,7 @@
                   text
                 </td>
                 <td>#b3261e</td>
-                <td><code>.roster-remove:hover</code> text</td>
+                <td><code>.remove-commit-button:hover</code> text</td>
               </tr>
               <tr>
                 <td><span class="swatch-chip" style="background: #285ba8"></span>Focus ring</td>
@@ -511,15 +511,25 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
 
         <div class="guide-block">
           <h3>Save / utility buttons</h3>
+          <p class="block-note">
+            The roster's per-entry <code>.roster-edit</code> button opens that entry in the
+            commitment form below it — it never deletes anything itself, so its hover is neutral.
+            Removing is a separate, explicit action inside the form:
+            <code>.remove-commit-button</code>, which only appears while editing an existing entry,
+            carries the destructive red hover. Adding a first commitment starts collapsed behind
+            <code>.commit-toggle-button</code> rather than showing the form open by default.
+          </p>
           <div class="specimen row">
             <button class="save-button">Save commitment</button>
-            <button class="roster-remove">Remove</button>
-            <button class="old-races-toggle">Show 3 races more than 60 days old</button>
+            <button class="commit-toggle-button">Add your commitment</button>
+            <button class="roster-edit">Edit</button>
+            <button class="remove-commit-button">Remove commitment</button>
           </div>
           <pre class="code">
 &lt;button class="save-button"&gt;Save commitment&lt;/button&gt;
-&lt;button class="roster-remove"&gt;Remove&lt;/button&gt;                 &lt;!-- hover: red --&gt;
-&lt;button class="old-races-toggle"&gt;Show 3 races more than 60 days old&lt;/button&gt;</pre>
+&lt;button class="commit-toggle-button"&gt;Add your commitment&lt;/button&gt;      &lt;!-- collapses the form until clicked --&gt;
+&lt;button class="roster-edit"&gt;Edit&lt;/button&gt;                             &lt;!-- per roster entry; neutral hover --&gt;
+&lt;button class="remove-commit-button"&gt;Remove commitment&lt;/button&gt;       &lt;!-- inside the form only; hover: red --&gt;</pre>
         </div>
       </section>
 
@@ -637,10 +647,13 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
         <p class="section-intro">Composite pieces built from the tokens and primitives above.</p>
 
         <div class="guide-block">
-          <h3>Race card — collapsed</h3>
+          <h3>Race list card</h3>
           <p class="block-note">
-            <code>.race-summary</code> uses <code>--brand-blue</code> as its own background,
-            independent of the ink/navy used for the page header.
+            <code>.race-summary</code> uses <code>--brand-blue</code> as its own background (<code
+              >.club-focus</code
+            >
+            only — a non-club-focus race stays white), independent of the ink/navy used for the page
+            header.
           </p>
           <p class="block-note">
             <strong>It is an <code>&lt;a&gt;</code>, not a <code>&lt;button&gt;</code>.</strong>
@@ -654,37 +667,54 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             <code>text-decoration:none</code> — colour, layout and focus ring are already
             element-agnostic.
           </p>
+          <p class="block-note">
+            There's no inline-expanding state: a click navigates to a full <code>#raceScreen</code>
+            (below), not an in-place expansion of the card.
+          </p>
           <div
             class="specimen demo-card-width"
             style="padding: 0; background: transparent; border: 0"
           >
             <article class="race-card">
-              <a class="race-summary" href="#race-card-specimen" onclick="return false;">
+              <a class="race-summary club-focus" href="#race-card-specimen" onclick="return false;">
                 <time class="date-tile"><strong>31</strong><span>AUG</span></time>
                 <div class="race-info">
-                  <h2>Future Race</h2>
-                  <p class="race-meta">Location TBC · 2 locked in of 4</p>
+                  <h2>Future Race <span class="event-type-badge">Triathlon</span></h2>
+                  <p class="race-meta">2 locked in of 4</p>
                 </div>
-                <div class="race-people">2 going</div>
-                <span class="chevron" aria-hidden="true">⌄</span>
+                <span class="chevron" aria-hidden="true">›</span>
               </a>
             </article>
           </div>
+          <pre class="code">
+&lt;article class="race-card"&gt;
+  &lt;a class="race-summary" href="/race/berlin-marathon-2026"&gt;
+    &lt;time class="date-tile"&gt;&lt;strong&gt;31&lt;/strong&gt;&lt;span&gt;AUG&lt;/span&gt;&lt;/time&gt;
+    &lt;div class="race-info"&gt;
+      &lt;h2&gt;Berlin Marathon &lt;span class="event-type-badge"&gt;Run&lt;/span&gt;&lt;/h2&gt;
+      &lt;p class="race-meta"&gt;2 locked in of 4&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;span class="chevron" aria-hidden="true"&gt;›&lt;/span&gt;
+  &lt;/a&gt;
+&lt;/article&gt;</pre>
         </div>
 
         <div class="guide-block">
-          <h3>Race card — expanded, with race website</h3>
+          <h3>Race screen — race details</h3>
           <p class="block-note">
-            Details sections run the full width and height of the card — no nested panel, no inset
-            margin — with grey <code>.card-header</code> labels as the only separators. Roster
-            entries are grouped by distance (alpha), and names within each group are alpha-sorted
-            too. Each distance label (<code>.roster-group-label</code>) uses
-            <code>--brand-blue</code> — the same blue as the card's own summary bar — set at the
+            Opening a race hides the list and toolbar and shows <code>#raceScreen</code> in their
+            place — a dedicated screen with its own back link, not an inline expansion of the card
+            above. Its body (<code>.details-card</code>) uses grey <code>.card-header</code> labels
+            as the only separators, full width and height, no nested panel. Roster entries are
+            grouped by distance (alpha), and names within each group are alpha-sorted too. Each
+            distance label (<code>.roster-group-label</code>) uses <code>--brand-blue</code> at the
             same 12px size as <code>.card-header</code>. Commitment level is kept separate from
-            distance: it shows as a small pill (<code>.roster-level</code>) next to each name,
-            rather than being folded into the distance grouping. In "Your commitment," each group —
-            commitment level, participation type, and the add-a-distance field — gets its own
-            <code>.choice-label</code>: the same bold/uppercase/12px treatment as
+            distance: it shows as a small pill (<code>.roster-level</code>) next to each name.
+            Clicking a roster entry's <code>.roster-edit</code> button (never a delete — see
+            Buttons, above) opens it in the commitment form below; that form starts collapsed behind
+            <code>.commit-toggle-button</code> for a member with no entry yet. In "Your commitment,"
+            each group — commitment level, participation type, the add-a-distance field — gets its
+            own <code>.choice-label</code>: the same bold/uppercase/12px treatment as
             <code>.card-header</code>, but in <code>--brand-blue</code> rather than grey, so it
             reads as a sub-heading within the section instead of another top-level header.
           </p>
@@ -692,75 +722,104 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             class="specimen demo-card-width"
             style="padding: 0; background: transparent; border: 0"
           >
-            <article class="race-card open">
-              <a class="race-summary" href="#race-card-specimen" onclick="return false;">
-                <time class="date-tile"><strong>31</strong><span>AUG</span></time>
-                <div class="race-info">
-                  <h2>Future Race</h2>
-                  <p class="race-meta">Location TBC · 1 locked in of 3</p>
+            <div class="edit-screen" style="margin: 0">
+              <button type="button" class="back-link">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 18 9 12l6-6" /></svg
+                ><span>Back to races</span>
+              </button>
+              <div class="commit-header" style="margin-bottom: 14px">
+                <div>
+                  <p class="eyebrow">31 AUG 2026</p>
+                  <h2 style="margin: 0">Future Race</h2>
                 </div>
-                <div class="race-people">1 going</div>
-                <span class="chevron" aria-hidden="true" style="transform: rotate(180deg)">⌄</span>
-              </a>
-              <section class="race-details">
-                <div class="details-card">
-                  <div class="card-header">Race website</div>
-                  <div class="card-body">
-                    <a class="race-link" href="#" onclick="return false;"
-                      >https://example.com/future-race</a
-                    >
+                <button type="button" class="edit-race-button">Edit race</button>
+              </div>
+              <div class="details-card">
+                <div class="card-header">Race website</div>
+                <div class="card-body">
+                  <a class="race-link" href="#" onclick="return false;"
+                    >https://example.com/future-race</a
+                  >
+                </div>
+                <div class="card-header">Club commitments</div>
+                <div class="card-body roster-body">
+                  <div class="roster-group">
+                    <p class="roster-group-label">Olympic</p>
+                    <div class="roster-entry">
+                      <div class="roster-who">
+                        <span class="roster-name">Nadia</span
+                        ><span class="roster-level level-planning">Planning</span>
+                      </div>
+                      <button
+                        type="button"
+                        class="roster-edit"
+                        aria-label="Edit Nadia's commitment for this race"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    <div class="roster-entry">
+                      <div class="roster-who">
+                        <span class="roster-name">Priya</span
+                        ><span class="roster-level level-considering">Considering</span>
+                      </div>
+                      <button
+                        type="button"
+                        class="roster-edit"
+                        aria-label="Edit Priya's commitment for this race"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
-                  <div class="card-header">Club commitments</div>
-                  <div class="card-body roster-body">
-                    <div class="roster-group">
-                      <p class="roster-group-label">Olympic</p>
-                      <div class="roster-entry">
-                        <div class="roster-who">
-                          <span class="roster-name">Nadia</span
-                          ><span class="roster-level level-planning">Planning</span>
-                        </div>
-                        <button type="button" class="roster-remove">Remove</button>
+                  <div class="roster-group">
+                    <p class="roster-group-label">Sprint</p>
+                    <div class="roster-entry">
+                      <div class="roster-who">
+                        <span class="roster-name">Amy</span
+                        ><span class="roster-level level-locked">Locked in</span>
                       </div>
-                      <div class="roster-entry">
-                        <div class="roster-who">
-                          <span class="roster-name">Priya</span
-                          ><span class="roster-level level-considering">Considering</span>
-                        </div>
-                        <button type="button" class="roster-remove">Remove</button>
-                      </div>
-                    </div>
-                    <div class="roster-group">
-                      <p class="roster-group-label">Sprint</p>
-                      <div class="roster-entry">
-                        <div class="roster-who">
-                          <span class="roster-name">Amy</span
-                          ><span class="roster-level level-locked">Locked in</span>
-                        </div>
-                        <button type="button" class="roster-remove">Remove</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="card-header">Your commitment</div>
-                  <div class="card-body">
-                    <p class="choice-label">Commitment level</p>
-                    <div class="choices">
-                      <button class="choice">Considering</button
-                      ><button class="choice selected">Planning</button
-                      ><button class="choice level-locked">Locked in</button>
-                    </div>
-                    <p class="choice-label">Participation type</p>
-                    <div class="choices">
-                      <button class="choice selected">Sprint</button
-                      ><button class="choice">Olympic</button>
-                    </div>
-                    <p class="choice-label">Add an event or distance</p>
-                    <div class="input-add">
-                      <input placeholder="Add an event or distance" /><button>+ Add</button>
+                      <button
+                        type="button"
+                        class="roster-edit"
+                        aria-label="Edit Amy's commitment for this race"
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 </div>
-              </section>
-            </article>
+                <div class="card-header">Your commitment</div>
+                <div class="card-body">
+                  <p class="choice-label">Commitment level</p>
+                  <div class="choices">
+                    <button class="choice">Considering</button
+                    ><button class="choice selected">Planning</button
+                    ><button class="choice level-locked">Locked in</button>
+                  </div>
+                  <p class="choice-label">Participation type</p>
+                  <div class="choices">
+                    <button class="choice selected">Sprint</button
+                    ><button class="choice">Olympic</button>
+                  </div>
+                  <p class="choice-label">Add an event or distance</p>
+                  <div class="input-add">
+                    <input placeholder="Add an event or distance" /><button>+ Add</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <pre class="code">
 &lt;div class="card-header"&gt;Race website&lt;/div&gt;
@@ -775,21 +834,10 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
         &lt;span class="roster-name"&gt;Nadia&lt;/span&gt;                        &lt;!-- name: alpha order within group --&gt;
         &lt;span class="roster-level level-planning"&gt;Planning&lt;/span&gt;       &lt;!-- level: its own pill, not merged with distance --&gt;
       &lt;/div&gt;
-      &lt;button class="roster-remove"&gt;Remove&lt;/button&gt;
+      &lt;button class="roster-edit"&gt;Edit&lt;/button&gt;                       &lt;!-- opens this entry in the commitment form; never deletes --&gt;
     &lt;/div&gt;
   &lt;/div&gt;
 &lt;/div&gt;</pre>
-        </div>
-
-        <div class="guide-block">
-          <h3>Collapsed "older races" toggle</h3>
-          <p class="block-note">
-            Races more than 60 days old (relative to today) are grouped behind this toggle instead
-            of showing by default.
-          </p>
-          <div class="specimen demo-card-width" style="text-align: center">
-            <button class="old-races-toggle">Show 2 races more than 60 days old</button>
-          </div>
         </div>
 
         <div class="guide-block">
@@ -800,6 +848,92 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
           >
             <p class="empty-state">No races here yet. Add a race to get started.</p>
           </div>
+        </div>
+
+        <div class="guide-block">
+          <h3>View toggle</h3>
+          <p class="block-note">
+            <code>.view-toggle</code> sits in the hero, over the dark ink background, so its
+            unselected state is a translucent white rather than the light-surface tones used
+            everywhere else. The selected segment always shows — it's a toggle between "Club races"
+            and "View all," never a state where nothing is selected.
+          </p>
+          <div class="specimen" style="background: var(--ink); padding: 22px">
+            <div class="view-toggle" role="group" aria-label="Race view">
+              <button type="button" class="view-toggle-btn selected">Club races</button
+              ><button type="button" class="view-toggle-btn">View all</button>
+            </div>
+          </div>
+          <pre class="code">
+&lt;div class="view-toggle" role="group" aria-label="Race view"&gt;
+  &lt;button class="view-toggle-btn selected" data-view="club"&gt;Club races&lt;/button&gt;
+  &lt;button class="view-toggle-btn" data-view="all"&gt;View all&lt;/button&gt;
+&lt;/div&gt;</pre>
+        </div>
+
+        <div class="guide-block">
+          <h3>Event-type &amp; club-focus badges</h3>
+          <p class="block-note">
+            Both sit inline after the race title in <code>.race-info h2</code>, on the race card and
+            the race screen alike. <code>.event-type-badge</code> (navy) names the discipline — Run,
+            Bike, Swim, Multi-sport, Triathlon, or Balance Bolt; it's omitted when a race has no
+            event type set. <code>.club-focus-badge</code> (yellow) marks a race the committee has
+            flagged as a priority club race — the same flag that puts it under "Club races" in the
+            view toggle above and gives its card the brand-blue background.
+          </p>
+          <div class="specimen row">
+            <h2 style="margin: 0; font: 600 18px Outfit">
+              Berlin Marathon <span class="event-type-badge">Run</span>
+              <span class="club-focus-badge">Club focus</span>
+            </h2>
+          </div>
+          <pre class="code">
+&lt;h2&gt;Berlin Marathon &lt;span class="event-type-badge"&gt;Run&lt;/span&gt; &lt;span class="club-focus-badge"&gt;Club focus&lt;/span&gt;&lt;/h2&gt;</pre>
+        </div>
+
+        <div class="guide-block">
+          <h3>Race embed</h3>
+          <p class="block-note">
+            Balance Bolt races replace the usual "Club commitments"/"Your commitment" sections
+            entirely with an embedded iframe of the BalanceBolt sign-up page
+            (<code>.race-embed</code>, under a "Race details" <code>.card-header</code>) — there's
+            no roster or commitment form for these, since sign-up happens on BalanceBolt itself. The
+            iframe resizes to its own content height via a same-origin <code>ResizeObserver</code>,
+            and hides BalanceBolt's own topbar chrome once loaded, rather than showing a
+            fixed-height scrollbar-in-a-scrollbar. Not shown live here — the specimen below is a
+            static stand-in — because embedding an iframe of another origin's page inside this guide
+            would need that page's own cooperation.
+          </p>
+          <div
+            class="specimen demo-card-width"
+            style="padding: 0; background: transparent; border: 0"
+          >
+            <div class="details-card">
+              <div class="card-header">Race details</div>
+              <div class="card-body race-embed-body">
+                <div
+                  class="race-embed"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 160px;
+                    min-height: 0;
+                    background: var(--guide-code-bg);
+                    color: var(--muted);
+                    font-size: 13px;
+                  "
+                >
+                  &lt;iframe class="race-embed"&gt; — BalanceBolt sign-up, embedded
+                </div>
+              </div>
+            </div>
+          </div>
+          <pre class="code">
+&lt;div class="card-header"&gt;Race details&lt;/div&gt;
+&lt;div class="card-body race-embed-body"&gt;
+  &lt;iframe class="race-embed" src="…" loading="lazy" title="…"&gt;&lt;/iframe&gt;
+&lt;/div&gt;</pre>
         </div>
       </section>
 
@@ -816,7 +950,79 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
         </div>
         <div class="guide-block">
           <h3>Destructive hover</h3>
-          <div class="specimen row"><button class="roster-remove">Hover me: Remove</button></div>
+          <div class="specimen row">
+            <button class="remove-commit-button">Hover me: Remove commitment</button>
+          </div>
+        </div>
+        <div class="guide-block">
+          <h3>Update banner</h3>
+          <p class="block-note">
+            <code>.update-banner</code> is a persistent success banner — green, with a checkmark —
+            shown above the race list after a save. It isn't a toast: it doesn't time out or dismiss
+            itself, and stays until the next action re-renders the page. Text comes from
+            <code>showToast(msg)</code> in <code>app.js</code>, which despite the function name
+            drives this banner, not a floating toast.
+          </p>
+          <div class="specimen demo-card-width">
+            <p class="update-banner" style="margin: 0">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span>Commitment saved.</span>
+            </p>
+          </div>
+        </div>
+        <div class="guide-block">
+          <h3>Auth sheet</h3>
+          <p class="block-note">
+            The one overlay behind every sign-in entry point — the header button, the automatic
+            signed-out nudge, and the write gate (attempting to save, edit, or remove without being
+            signed in) all open this same <code>role="dialog" aria-modal="true"</code> sheet, never
+            three different ones. A bottom sheet on desktop, full screen on mobile
+            (<code>styles-additions.css</code>). As a "nudge" it's self-dismissing — tapping
+            outside, the × , or "View Calendar" all close it the same way. As a "gate" the × just
+            backs out of that specific save attempt. Either way it traps Tab within its own
+            focusable elements, closes on Escape, and returns focus to whatever opened it.
+          </p>
+          <div
+            class="specimen demo-card-width"
+            style="padding: 0; background: transparent; border: 0"
+          >
+            <div class="auth-sheet">
+              <button type="button" class="icon-button auth-sheet-close" aria-label="Close">
+                ×
+              </button>
+              <div class="auth-sheet-hero">
+                <div class="auth-sheet-handle" aria-hidden="true"></div>
+                <img class="auth-sheet-logo" src="assets/balance-logo.png" alt="Balance Tri Club" />
+              </div>
+              <div class="auth-sheet-panel">
+                <div class="auth-sheet-panel-inner">
+                  <p class="auth-sheet-eyebrow">Balance Tri Club</p>
+                  <h1 class="auth-sheet-title">Racing Calendar</h1>
+                  <p class="auth-sheet-hint">
+                    Sign in as a Balance Tri Club member with your Triathlon Australia registered
+                    email address to add or edit race information. You can view the calendar anytime
+                    without signing in.
+                  </p>
+                  <div class="auth-sheet-actions">
+                    <button type="button" class="primary-button">Sign In</button>
+                    <button type="button" class="secondary-button">View Calendar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="guide-block">
           <h3>Reduced motion</h3>
@@ -856,7 +1062,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
                 Everything rectangular: <code>.hero</code>, <code>.race-card</code>,
                 <code>.add-panel</code>, <code>dialog</code>, <code>.empty-state</code>,
                 <code>.primary-button</code>/<code>.secondary-button</code>,
-                <code>.roster-remove</code>, <code>.save-button</code>, text inputs
+                <code>.remove-commit-button</code>, <code>.save-button</code>, text inputs
               </td>
             </tr>
             <tr>
@@ -867,7 +1073,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
                   style="display: inline-block; width: 40px; height: 24px; border-radius: 999px"
                 ></span>
               </td>
-              <td><code>.choice</code>, <code>.old-races-toggle</code></td>
+              <td><code>.choice</code>, <code>.view-toggle-btn</code>, badges</td>
             </tr>
           </tbody>
         </table>
@@ -878,7 +1084,9 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             Every interactive element (<code>.text-button</code>, <code>.icon-button</code>,
             <code>.primary-button</code>, <code>.secondary-button</code>, inputs,
             <code>.choice</code>, <code>.save-button</code>) enforces
-            <code>min-height: 44px</code> for accessible tap sizing.
+            <code>min-height: 44px</code> for accessible tap sizing — with one deliberate exception:
+            the roster's per-entry <code>.roster-edit</code> button is 32px, sized to sit quietly
+            next to a name rather than dominate the row.
           </p>
         </div>
       </section>
@@ -906,8 +1114,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
               <td>≤ 700px</td>
               <td>
                 Shell margins tighten; <code>.text-button</code> (Refresh) hides; toolbar wraps;
-                <code>.race-people</code> ("N going") hides on the race summary; dialog footer
-                buttons stack full-width; add-form grid drops to 1 column
+                dialog footer buttons stack full-width; add-form grid drops to 1 column
               </td>
             </tr>
             <tr>
