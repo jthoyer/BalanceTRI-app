@@ -5,6 +5,15 @@
 //
 // Everything is built as DOM with textContent, never innerHTML: most of what
 // this page shows (names, race titles, emails) was typed by members.
+// Same guard as app.js: without supabase-js nothing here can run, so say so
+// rather than leave an empty page.
+if (!window.supabase?.createClient) {
+  const adminRoot = document.getElementById('adminRoot');
+  if (adminRoot)
+    adminRoot.textContent =
+      'The admin console could not load. Check your connection and try refreshing.';
+  throw new Error('supabase-js did not load (vendor/supabase-js-*.js); admin.js stopped.');
+}
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const root = document.getElementById('adminRoot');
 const headerActions = document.getElementById('adminHeaderActions');
