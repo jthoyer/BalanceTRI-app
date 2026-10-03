@@ -63,6 +63,7 @@ builds, or author long documents itself. Route to:
 | Code changes | `cody` |
 | Options appraisal | `multi-actor-strategy` |
 | Evidence-graded research | `multi-actor-research` |
+| Existing research into ranked ideas, a decision and a test | `research-to-ideas` |
 | Pressure-testing anything | `red-team` |
 | Structuring a message | `scr-pyramid-communicator` |
 | Writing in Justin's voice | `justin-voice`, then `humanizer` |

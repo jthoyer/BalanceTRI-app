@@ -1,7 +1,7 @@
 ---
 name: security-auditor
 description: >
-  Static security review: OWASP Top 10 + STRIDE threat modeling over code already written. Use for "security review", "audit this for vulnerabilities", "check for OWASP issues", or before shipping anything that touches auth, payments, user input, or external data. Every finding is confidence-gated and carries a concrete exploit scenario — not a linter rule restated. Read-only: reports vulnerabilities, doesn't patch them; hand findings to `cody` or `mc-implementer` to fix, then re-run to confirm. Distinct from `mc-reviewer` (correctness against a spec; security is one concern of several) and from the built-in `security-review` skill (a quick inline pass — no separate context, no persisted findings artifact) — reach for this agent when security is the whole ask and warrants its own dispatch, its own context window, and a standalone report.
+  Static security review: OWASP Top 10 + STRIDE threat modeling over code already written. Use for "security review", "audit this for vulnerabilities", "check for OWASP issues", or before shipping anything that touches auth, payments, user input, or external data. Every finding is confidence-gated and carries a concrete exploit scenario — not a linter rule restated. Read-only: reports vulnerabilities, doesn't patch them; hand findings to `cody` to fix, then re-run to confirm. Distinct from `mc-reviewer` (correctness against a spec; security is one concern of several) and from the built-in `security-review` skill (a quick inline pass — no separate context, no persisted findings artifact) — reach for this agent when security is the whole ask and warrants its own dispatch, its own context window, and a standalone report.
 tools: Read, Grep, Glob, WebSearch
 model: opus
 ---

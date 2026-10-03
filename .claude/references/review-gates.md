@@ -6,6 +6,8 @@
 
 **Who deliberately does not:** `investigator`. Its Iron Law (no fix without a demonstrated root cause, every claim backed by evidence you produced) is a stricter gate than §1, and §4 is a catalogue of reasons *not to report* — the wrong instinct to hand an agent chasing a defect that is already known to be real. Pointing it here would add a weaker rule and a contrary instinct. If that judgement is ever revisited, revisit it here.
 
+**Who reads the *output* of this gate without applying it:** `mc-integrator`. It never writes a finding, so §1–§4 do not bind it directly — but it lays `mc-reviewer`'s coverage close against `mc-verifier`'s per-AC verdicts to decide what blocks merge, which means every finding it arbitrates was produced under this gate. It is named here so the relationship is explicit rather than left to be inferred from `mc-reviewer.md`/`mc-verifier.md` alone.
+
 **Why it is one file.** Four agents applying four drifting copies of the same gate is the duplication `watchdog` exists to catch. One file, four pointers. When the gate changes, it changes once. (The reference library this was drawn from gets this exactly backwards: it pastes an identical eight-line *defence boilerplate* into 67 of its 68 agent files, while the material below — the part worth propagating — appears in two files and one file respectively. Duplicated where it costs, absent where it pays.)
 
 ---

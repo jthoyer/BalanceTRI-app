@@ -18,7 +18,7 @@ changed in between:
 | What was asked | Turn 1 | Turn 2 |
 |---|---|---|
 | Which agents are available? (fresh cloud session on a repo carrying 16) | **none** | all 16, 22 types total |
-| Is the declared plugin loaded? (`enabledPlugins` in user settings) | **no** | yes, all 16 agents |
+| Is the declared plugin loaded? (`enabledPlugins` in user settings) | **no** | yes, all 21 agents |
 
 The first of those very nearly became a published finding that "committed agents don't
 reach cloud sessions" — the opposite of the truth.
