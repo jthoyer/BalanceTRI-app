@@ -1,0 +1,27 @@
+# Supabase pauses free projects after 7 days without activity. This reads one
+# row from the public API every few days so the project never goes quiet.
+# The URL and publishable key are the same public values shipped in
+# shared.js, so no secrets are needed.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '17 3 */3 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query the races table
+        env:
+          SUPABASE_URL: https://shkfwuogrldbqldpipxd.supabase.co
+          SUPABASE_KEY: sb_publishable_Tyz3dga_yS3hmKugZcFmTQ_GrWohBiV
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 10 \
+            -H "apikey: $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/races?select=id&limit=1"
+          echo
