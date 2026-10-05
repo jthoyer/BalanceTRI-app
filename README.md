@@ -149,6 +149,17 @@ The logo is loaded from the live site (`https://jthoyer.github.io/BalanceTRI-app
 
 **The sender still says Supabase.** Emails go out as `Supabase Auth <noreply@mail.app.supabase.io>`, which no member recognises and which spam filters treat accordingly — and the shared sender is capped at a handful of emails per hour, so a club-wide push would silently hit the limit. The template can't fix any of that. Configuring custom SMTP (Resend, Postmark, SendGrid) under Authentication → Settings, with a verified `balancetriclub.com.au` sender and SPF/DKIM records, is the single biggest remaining lever on sign-in rates.
 
+### Keeping the free project awake
+
+Supabase pauses free projects after 7 days without activity, and a paused project takes the whole app down. `.github/workflows/keep-alive.yml` reads one row from `races` every three days, which counts as activity. It uses only the public URL and key, so it needs no secrets. Run it by hand from the Actions tab to test it.
+
+Two limits to know about:
+
+- GitHub switches off scheduled workflows after 60 days without repository activity. Any commit re-enables it, but check the Actions tab now and then.
+- This is a workaround, not a Supabase guarantee. Upgrading to Pro removes the pausing, and adds backups.
+
+If the project is already paused, restore it from the dashboard first. The ping can't wake it.
+
 Use **Refresh** to reload the latest data from Supabase.
 
 ## Shareable race URLs
