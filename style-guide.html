@@ -1012,15 +1012,15 @@ showToast('Could not save: ' + err.message, 'error');</pre>
           <h3>Confirm dialog</h3>
           <p class="block-note">
             A native <code>&lt;dialog&gt;</code>, opened with <code>showModal()</code>, for every
-            destructive confirm (remove a commitment, remove a race) — see
-            <code>confirmDialog()</code> in <code>app.js</code>. It replaced
-            <code>window.confirm()</code>, and gets a real focus trap and Escape-to-close for free
-            from the browser rather than needing the auth sheet's hand-rolled version. Resolves true
-            only on Confirm; Cancel, ×, Escape, and a backdrop click all resolve false, the same as
-            a plain "no" from <code>confirm()</code>. The confirm button reuses
-            <code>.secondary-button.danger-button</code> — the same quiet-until-hovered destructive
-            styling as <code>#removeRaceButton</code> in the edit-race form, not a bold red button,
-            so it doesn't invite a reflex tap.
+            destructive confirm (remove a commitment or a race; in the admin console, undo a change
+            or remove an allow-list address) — see <code>confirmDialog()</code> in
+            <code>shared.js</code>. It replaced <code>window.confirm()</code>, and gets a real focus
+            trap and Escape-to-close for free from the browser rather than needing the auth sheet's
+            hand-rolled version. Resolves true only on Confirm; Cancel, ×, Escape, and a backdrop
+            click all resolve false, the same as a plain "no" from <code>confirm()</code>. The
+            confirm button reuses <code>.secondary-button.danger-button</code> — the same
+            quiet-until-hovered destructive styling as <code>#removeRaceButton</code> in the
+            edit-race form, not a bold red button, so it doesn't invite a reflex tap.
           </p>
           <div
             class="specimen demo-card-width"

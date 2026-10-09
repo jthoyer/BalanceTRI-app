@@ -13,7 +13,7 @@
     />
     <!-- Same cache-busting rule as index.html: bump on any stylesheet change. -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="admin.css?v=2026092402" />
+    <link rel="stylesheet" href="admin.css?v=2026100901" />
   </head>
   <body>
     <main class="shell">
@@ -29,9 +29,27 @@
         <p class="admin-loading">Loading…</p>
       </div>
     </main>
+    <!-- Same markup as index.html's: confirmDialog() in shared.js drives both. -->
+    <dialog id="confirmDialog">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <h2 id="confirmDialogTitle"></h2>
+          <button type="button" class="icon-button" id="confirmDialogClose" aria-label="Cancel">
+            ×
+          </button>
+        </div>
+        <p id="confirmDialogBody"></p>
+        <div class="dialog-footer">
+          <button type="button" class="secondary-button" id="confirmDialogCancel">Cancel</button>
+          <button type="button" class="secondary-button danger-button" id="confirmDialogConfirm">
+            Remove
+          </button>
+        </div>
+      </div>
+    </dialog>
     <script src="vendor/supabase-js-2.117.1.js"></script>
     <!-- Same cache-busting rule as index.html's scripts. -->
-    <script src="shared.js?v=2026092401"></script>
-    <script src="admin.js?v=2026092402"></script>
+    <script src="shared.js?v=2026100901"></script>
+    <script src="admin.js?v=2026100901"></script>
   </body>
 </html>

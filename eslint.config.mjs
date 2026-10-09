@@ -44,6 +44,7 @@ export default [
         SUPABASE_URL: 'readonly',
         SUPABASE_ANON_KEY: 'readonly',
         getCaptchaToken: 'readonly',
+        confirmDialog: 'readonly',
       },
     },
   },

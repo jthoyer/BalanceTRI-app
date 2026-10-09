@@ -132,32 +132,6 @@ function showToast(msg, kind = 'success') {
 }
 const $ = s => document.querySelector(s);
 const persist = () => localStorage.setItem('balance-race-ui', JSON.stringify(state));
-// Replaces window.confirm() for destructive actions (remove a commitment,
-// remove a race) — unstyled, blocking, and looks broken on mobile, unlike
-// this native <dialog>: showModal() gives a real focus trap and
-// Escape-to-close for free, the same way the auth sheet's own trap does by
-// hand. Resolves true only if Confirm was clicked; every other way out —
-// Cancel, ×, Escape, a backdrop click — resolves false, same as a plain
-// "no" from window.confirm().
-function confirmDialog({ title, body, confirmLabel = 'Remove' }) {
-  const dialog = $('#confirmDialog');
-  $('#confirmDialogTitle').textContent = title;
-  $('#confirmDialogBody').textContent = body;
-  $('#confirmDialogConfirm').textContent = confirmLabel;
-  return new Promise(resolve => {
-    const confirmBtn = $('#confirmDialogConfirm');
-    const onConfirm = () => dialog.close('confirm');
-    const onClose = () => {
-      confirmBtn.removeEventListener('click', onConfirm);
-      dialog.removeEventListener('close', onClose);
-      resolve(dialog.returnValue === 'confirm');
-    };
-    confirmBtn.addEventListener('click', onConfirm);
-    dialog.addEventListener('close', onClose);
-    dialog.returnValue = '';
-    dialog.showModal();
-  });
-}
 function dateParts(date) {
   const d = new Date(date + 'T12:00:00');
   return {
@@ -1605,16 +1579,6 @@ $('#resetButton').onclick = () => {
   loadRaces();
 };
 loadRaces();
-$('#confirmDialogCancel').onclick = () => $('#confirmDialog').close();
-$('#confirmDialogClose').onclick = () => $('#confirmDialog').close();
-// Native <dialog> backdrop clicks land on the dialog element itself (its
-// ::backdrop pseudo-element isn't part of the DOM click target), so this is
-// the same "click landed on the overlay, not the card" check the auth
-// sheet uses. Escape needs no handler at all: showModal() closes on it
-// natively, firing this same 'close' event confirmDialog() is listening for.
-$('#confirmDialog').addEventListener('click', e => {
-  if (e.target === e.currentTarget) e.currentTarget.close();
-});
 $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
