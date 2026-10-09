@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026092404" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026100901" />
   </head>
   <body>
     <main class="shell">
@@ -253,8 +253,47 @@
            keystroke in the athlete filter, and a live region announces
            its whole contents on every change, not just the change. The
            count in raceListStatus below is the live region instead. -->
-      <section id="raceList" class="race-list" tabindex="-1"></section>
-      <p id="raceListStatus" class="sr-only" role="status"></p>
+      <section id="raceList" class="race-list" tabindex="-1">
+        <!-- Shown until the first load finishes: render() empties #raceList,
+             and loadRaces() removes it too in case a deep link opens a race
+             screen without rendering the list. The bars tell the same story
+             as the club's "race day will not go to plan" graphic: the plan,
+             the bad patch, and it passing. -->
+        <div class="race-loading" id="raceLoading">
+          <p class="race-loading-title">Loading the race calendar.</p>
+          <p class="race-loading-sub">Race day won't go to plan. This bit should.</p>
+          <div class="race-loading-chart" aria-hidden="true">
+            <div class="race-loading-group plan">
+              <div class="race-loading-bars">
+                <span style="--i: 0"></span>
+                <span style="--i: 1"></span>
+                <span style="--i: 2"></span>
+                <span style="--i: 3"></span>
+              </div>
+              <p>The plan</p>
+            </div>
+            <div class="race-loading-group patch">
+              <div class="race-loading-bars">
+                <span style="--i: 4"></span>
+                <span style="--i: 5"></span>
+                <span style="--i: 6"></span>
+                <span style="--i: 7"></span>
+              </div>
+              <p>The bad patch</p>
+            </div>
+            <div class="race-loading-group passes">
+              <div class="race-loading-bars">
+                <span style="--i: 8"></span>
+                <span style="--i: 9"></span>
+                <span style="--i: 10"></span>
+                <span style="--i: 11"></span>
+              </div>
+              <p>It passes</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <p id="raceListStatus" class="sr-only" role="status">Loading races…</p>
     </main>
 
     <!-- A native <dialog> for destructive confirms (remove a commitment,
@@ -384,6 +423,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026100901"></script>
-    <script src="app.js?v=2026100901"></script>
+    <script src="app.js?v=2026100902"></script>
   </body>
 </html>
