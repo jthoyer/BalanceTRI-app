@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026100902" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026100903" />
   </head>
   <body>
     <main class="shell">
@@ -257,8 +257,8 @@
         <!-- Shown until the first load finishes: render() empties #raceList,
              and loadRaces() removes it too in case a deep link opens a race
              screen without rendering the list. The bars tell the same story
-             as Tri Momentum's "race day will not go to plan" graphic, whose
-             words it carries: the plan, the bad patch, and it passing. The
+             as the "race day will not go to plan" graphic, whose words it
+             carries: the plan, the bad patch, and it passing. The
              sr-only #raceListStatus below says it's loading. -->
         <div class="race-loading" id="raceLoading">
           <p class="race-loading-eyebrow">Triathlon thought of the day</p>
@@ -296,9 +296,6 @@
               <p>It passes</p>
             </div>
           </div>
-          <p class="race-loading-credit">
-            <strong>Tri Momentum</strong> · Helping Triathletes shift gear
-          </p>
         </div>
       </section>
       <p id="raceListStatus" class="sr-only" role="status">Loading races…</p>
