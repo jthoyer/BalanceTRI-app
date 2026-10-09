@@ -43,7 +43,6 @@ export default [
       globals: {
         SUPABASE_URL: 'readonly',
         SUPABASE_ANON_KEY: 'readonly',
-        TURNSTILE_SITE_KEY: 'readonly',
         getCaptchaToken: 'readonly',
       },
     },
