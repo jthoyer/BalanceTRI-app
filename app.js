@@ -948,17 +948,12 @@ function render() {
     $('#emptyState').textContent =
       'Could not reach the Supabase backend. Check your connection and try refreshing.';
     $('#emptyState').classList.remove('hidden');
-    $('#allCount').textContent = '0';
-    $('#clubCount').textContent = '0';
     $('#nextRace').classList.add('hidden');
     return;
   }
   renderNextRace();
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const futureRaces = races.filter(r => r.date >= todayStr);
-  $('#allCount').textContent = futureRaces.filter(r => r.clubFocus !== 'Y').length;
-  $('#clubCount').textContent = futureRaces.filter(r => r.clubFocus === 'Y').length;
   const byType = r => !state.eventTypeFilter || r.eventType === state.eventTypeFilter;
   const sorted = [...races]
     .filter(r => r.date >= todayStr)
