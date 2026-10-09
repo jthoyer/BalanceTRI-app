@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026100901" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026100902" />
   </head>
   <body>
     <main class="shell">
@@ -257,11 +257,16 @@
         <!-- Shown until the first load finishes: render() empties #raceList,
              and loadRaces() removes it too in case a deep link opens a race
              screen without rendering the list. The bars tell the same story
-             as the club's "race day will not go to plan" graphic: the plan,
-             the bad patch, and it passing. -->
+             as Tri Momentum's "race day will not go to plan" graphic, whose
+             words it carries: the plan, the bad patch, and it passing. The
+             sr-only #raceListStatus below says it's loading. -->
         <div class="race-loading" id="raceLoading">
-          <p class="race-loading-title">Loading the race calendar.</p>
-          <p class="race-loading-sub">Race day won't go to plan. This bit should.</p>
+          <p class="race-loading-eyebrow">Triathlon thought of the day</p>
+          <p class="race-loading-title">Race day will not go to plan.</p>
+          <p class="race-loading-sub">
+            Plan for the flat tyre, the upset stomach and the bad patch. Then
+            <strong>keep moving</strong>.
+          </p>
           <div class="race-loading-chart" aria-hidden="true">
             <div class="race-loading-group plan">
               <div class="race-loading-bars">
@@ -291,6 +296,9 @@
               <p>It passes</p>
             </div>
           </div>
+          <p class="race-loading-credit">
+            <strong>Tri Momentum</strong> · Helping Triathletes shift gear
+          </p>
         </div>
       </section>
       <p id="raceListStatus" class="sr-only" role="status">Loading races…</p>

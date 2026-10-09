@@ -937,17 +937,36 @@
   border-radius: 9px;
   background: #fff;
 }
+.race-loading-eyebrow {
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .race-loading-title {
   margin: 0;
   font-family: Outfit, sans-serif;
-  font-size: 24px;
+  font-size: 32px;
   font-weight: 700;
   line-height: 1.2;
   color: var(--ink);
 }
 .race-loading-sub {
-  margin: 6px 0 24px;
+  margin: 8px 0 24px;
   color: var(--muted);
+}
+.race-loading-sub strong {
+  color: var(--ink);
+}
+.race-loading-credit {
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.race-loading-credit strong {
+  color: var(--ink);
 }
 .race-loading-chart {
   display: grid;
@@ -1020,7 +1039,7 @@
     padding: 20px;
   }
   .race-loading-title {
-    font-size: 20px;
+    font-size: 24px;
   }
   .race-loading-bars {
     height: 64px;
