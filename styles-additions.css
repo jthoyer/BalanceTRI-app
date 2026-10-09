@@ -926,3 +926,117 @@
 .captcha-slot:not(:empty) {
   margin-top: 12px;
 }
+
+/* First-load state in #raceList (see index.html). Three groups of bars: the
+   plan (full, yellow), the bad patch (low, grey) and it passing (rising back
+   to full, green). A slow shimmer runs left to right across all twelve;
+   reduced motion stops it and leaves the chart still. */
+.race-loading {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.race-loading-eyebrow {
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.race-loading-title {
+  margin: 0;
+  font-family: Outfit, sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.race-loading-sub {
+  margin: 8px 0 24px;
+  color: var(--muted);
+}
+.race-loading-sub strong {
+  color: var(--ink);
+}
+.race-loading-chart {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(12px, 4vw, 32px);
+}
+.race-loading-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(4px, 1vw, 8px);
+  height: 96px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--ink);
+}
+.race-loading-group p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.race-loading-group span {
+  flex: 1;
+  border-radius: 5px 5px 0 0;
+  animation: race-loading-shimmer 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.12s);
+}
+.race-loading-group.plan span {
+  height: 100%;
+  background: var(--yellow);
+}
+.race-loading-group.patch span {
+  background: #c9d1de;
+}
+.race-loading-group.patch span:nth-child(1) {
+  height: 55%;
+}
+.race-loading-group.patch span:nth-child(2),
+.race-loading-group.patch span:nth-child(3) {
+  height: 30%;
+}
+.race-loading-group.patch span:nth-child(4) {
+  height: 50%;
+}
+.race-loading-group.passes span {
+  background: var(--green);
+}
+.race-loading-group.passes span:nth-child(1) {
+  height: 70%;
+}
+.race-loading-group.passes span:nth-child(2) {
+  height: 82%;
+}
+.race-loading-group.passes span:nth-child(3),
+.race-loading-group.passes span:nth-child(4) {
+  height: 100%;
+}
+@keyframes race-loading-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (max-width: 700px) {
+  .race-loading {
+    padding: 20px;
+  }
+  .race-loading-title {
+    font-size: 24px;
+  }
+  .race-loading-bars {
+    height: 64px;
+  }
+  .race-loading-group p {
+    font-size: 11px;
+  }
+}

@@ -917,6 +917,7 @@ async function loadRaces() {
     loadError = 'fetch-failed';
     races = [];
   }
+  $('#raceLoading')?.remove();
   // Only a load that actually returned races can resolve a deep link: until
   // then a valid /race/<slug> is indistinguishable from a stale one.
   bootstrapped = true;
@@ -929,6 +930,10 @@ async function loadRaces() {
   render();
 }
 function render() {
+  // Supabase fires its start-up auth event, which re-renders, before the
+  // first load returns. Rendering then would swap the loader for "No races
+  // here yet". loadRaces renders as soon as it finishes.
+  if (!bootstrapped) return;
   const list = $('#raceList');
   list.innerHTML = '';
   document
