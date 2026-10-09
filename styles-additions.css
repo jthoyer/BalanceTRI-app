@@ -291,22 +291,6 @@
     gap: 6px;
   }
 }
-.hero-copy .race-count-group {
-  margin-top: 22px;
-}
-.hero-copy .race-count-group .race-count {
-  margin: 0;
-  color: #fff;
-}
-.hero-copy .race-count-sub {
-  margin: 2px 0 0;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 15px;
-  font-weight: 600;
-}
-.race-count .race-count-highlight {
-  color: var(--brand-blue);
-}
 .toolbar {
   justify-content: space-between;
 }
@@ -1041,7 +1025,7 @@
   }
 }
 /* Next race countdown in the hero (renderNextRace in app.js). Stacked under
-   the race counts on phones; a right-hand column beside the hero copy from
+   the intro on phones; a right-hand column beside the hero copy from
    900px up. */
 .next-race {
   display: flex;
@@ -1146,12 +1130,12 @@
   .hero-copy > p:not(.eyebrow) {
     margin-bottom: 0;
   }
-  .hero-copy .race-count-group {
+  .hero-copy .view-toggle {
     margin-top: 26px;
   }
   .hero-copy > .next-race {
     grid-column: 2;
-    grid-row: 1 / span 6;
+    grid-row: 1 / span 4;
     align-self: center;
     margin-top: 0;
     padding: 26px;
