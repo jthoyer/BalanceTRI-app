@@ -1062,12 +1062,15 @@
   outline: 3px solid var(--yellow);
   outline-offset: 2px;
 }
-.next-race-top,
-.next-race-foot {
+.next-race-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.next-race-foot {
+  display: flex;
+  justify-content: flex-end;
 }
 .next-race-eyebrow {
   color: #f6cf69;
@@ -1120,51 +1123,9 @@
     600 20px/1.2 Outfit,
     sans-serif;
 }
-.next-race-meta,
-.next-race-crew {
+.next-race-meta {
   color: #edf0f7;
   font-size: 15px;
-}
-.next-race-crew {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-/* The avatar row is 32px tall: hold that height in "View all", which has no
-   avatars, so the toggle below doesn't jump when the view switches. */
-.next-race-foot {
-  min-height: 32px;
-}
-.next-race-avatars {
-  display: flex;
-}
-.next-race-avatars:empty {
-  display: none;
-}
-.next-race-avatars span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  background: var(--blue-tint);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-}
-.next-race-avatars span + span {
-  margin-left: -8px;
-}
-.next-race-avatars span:nth-child(2) {
-  background: var(--green-bg);
-}
-.next-race-avatars span:nth-child(3) {
-  background: var(--navy-bg);
-}
-.next-race-avatars .more {
-  background: var(--yellow);
 }
 .next-race-open {
   font-size: 15px;

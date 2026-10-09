@@ -1450,14 +1450,6 @@ function sydneyToday() {
 function daysBetween(from, to) {
   return Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
 }
-function initials(name) {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  return words
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toLocaleUpperCase();
-}
 // The hero's next race card. Follows the view toggle only, not the type or
 // name filters: "Club races" counts down to the next club focus race, "View
 // all" to the next race of any type. Every string goes in via textContent.
@@ -1473,7 +1465,6 @@ function renderNextRace() {
   const days = daysBetween(today, race.date);
   const count = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : String(days);
   const unit = days > 1 ? 'days to go' : '';
-  const locked = race.entries.filter(e => e.level === 'locked');
   const eyebrow = club ? 'NEXT CLUB RACE' : 'NEXT ON THE CALENDAR';
   $('#nextRaceEyebrow').textContent = eyebrow;
   const badge = $('#nextRaceBadge');
@@ -1492,26 +1483,10 @@ function renderNextRace() {
     month: 'short',
   });
   $('#nextRaceMeta').textContent = race.location ? `${when} · ${race.location}` : when;
-  const avatars = $('#nextRaceAvatars');
-  avatars.textContent = '';
-  if (club) {
-    locked.slice(0, locked.length > 4 ? 3 : 4).forEach(e => {
-      const a = document.createElement('span');
-      a.textContent = initials(e.name);
-      avatars.append(a);
-    });
-    if (locked.length > 4) {
-      const more = document.createElement('span');
-      more.className = 'more';
-      more.textContent = `+${locked.length - 3}`;
-      avatars.append(more);
-    }
-  }
-  $('#nextRaceLocked').textContent = `${locked.length} locked in`;
   const label = days > 1 ? `${days} days to go` : count;
   card.setAttribute(
     'aria-label',
-    `${club ? 'Next club race' : 'Next on the calendar'}: ${race.name}, ${label}, ${when}, ${locked.length} locked in`,
+    `${club ? 'Next club race' : 'Next on the calendar'}: ${race.name}, ${label}, ${when}`,
   );
   card.href = racePath(race);
   card.onclick = e => {
