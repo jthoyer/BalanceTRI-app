@@ -52,6 +52,15 @@ function message(title, text, ...extra) {
     ),
   );
 }
+// An inline error under whatever failed, in place of a blocking alert().
+// Empty until set(); role="alert" so a screen reader hears it straight away.
+function errorLine() {
+  const node = el('p', { class: 'admin-error', role: 'alert' });
+  node.set = text => {
+    node.textContent = text;
+  };
+  return node;
+}
 async function rpc(name, args) {
   const { data, error } = await db.rpc(name, args);
   if (error) throw new Error(error.message);
@@ -149,9 +158,11 @@ function showSignIn() {
   });
   const button = el('button', { class: 'primary-button', type: 'submit' }, 'Send code');
   const form = el('form', { class: 'admin-form' }, email, button);
+  const sendError = errorLine();
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const address = email.value.trim();
+    sendError.set('');
     setBusy(button, 'Sending…');
     try {
       const captchaToken = await getCaptchaToken(form);
@@ -162,7 +173,7 @@ function showSignIn() {
       if (error) throw error;
       showCodeStep(address);
     } catch (err) {
-      alert('Could not send the code: ' + err.message);
+      sendError.set('Could not send the code: ' + err.message);
       clearBusy(button);
     }
   });
@@ -171,6 +182,7 @@ function showSignIn() {
       'Admin sign-in',
       el('p', { class: 'admin-hint' }, "Enter your admin email. We'll send a 6-digit code."),
       form,
+      sendError,
     ),
   );
   email.focus();
@@ -179,12 +191,14 @@ function showCodeStep(address) {
   const code = codeInput('6-digit code from your email');
   const button = el('button', { class: 'primary-button', type: 'submit' }, 'Sign in');
   const form = el('form', { class: 'admin-form' }, code, button);
+  const codeError = errorLine();
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    codeError.set('');
     setBusy(button, 'Signing in…');
     const { error } = await db.auth.verifyOtp({ email: address, token: code.value, type: 'email' });
     if (error) {
-      alert("That code didn't work: " + error.message);
+      codeError.set("That code didn't work: " + error.message);
       clearBusy(button);
       code.select();
       return;
@@ -203,6 +217,7 @@ function showCodeStep(address) {
         '. The link in the email works too.',
       ),
       form,
+      codeError,
     ),
   );
   code.focus();
@@ -298,19 +313,21 @@ function showFactorCode(factorId, title, text, extra) {
   const code = codeInput('6-digit code from your authenticator app');
   const button = el('button', { class: 'primary-button', type: 'submit' }, 'Verify');
   const form = el('form', { class: 'admin-form' }, code, button);
+  const codeError = errorLine();
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    codeError.set('');
     setBusy(button, 'Checking…');
     const { error } = await db.auth.mfa.challengeAndVerify({ factorId, code: code.value });
     if (error) {
-      alert("That code didn't work: " + error.message);
+      codeError.set("That code didn't work: " + error.message);
       clearBusy(button);
       code.select();
       return;
     }
     start();
   });
-  show(card(title, el('p', { class: 'admin-hint' }, text), extra, form));
+  show(card(title, el('p', { class: 'admin-hint' }, text), extra, form, codeError));
   code.focus();
 }
 
@@ -508,6 +525,7 @@ function activitySection(activity, raceNames) {
 }
 function activityItem(change, raceNames) {
   const text = describe(change, raceNames);
+  const error = errorLine();
   const who =
     change.changed_by_label || (change.changed_role ? change.changed_role : 'Dashboard or system');
   let action;
@@ -520,14 +538,18 @@ function activityItem(change, raceNames) {
         class: 'secondary-button admin-small-button',
         type: 'button',
         onclick: async e => {
-          if (!confirm(`Undo this change?\n\n${text}`)) return;
           const button = e.currentTarget;
+          if (
+            !(await confirmDialog({ title: 'Undo this change?', body: text, confirmLabel: 'Undo' }))
+          )
+            return;
+          error.set('');
           setBusy(button, 'Undoing…');
           try {
             await rpc('admin_undo', { p_change_id: change.id });
             showConsole();
           } catch (err) {
-            alert("Couldn't undo: " + err.message);
+            error.set("Couldn't undo: " + err.message);
             clearBusy(button);
           }
         },
@@ -544,6 +566,7 @@ function activityItem(change, raceNames) {
       el('p', { class: 'admin-change-text' }, text),
       diffList(change),
       el('p', { class: 'admin-change-meta' }, `${who} · ${when(change.changed_at)}`),
+      error,
     ),
     action,
   );
@@ -552,47 +575,47 @@ function activityItem(change, raceNames) {
 // ----- Removed races -----
 function removedSection(removed) {
   const body = removed.length
-    ? el(
-        'ul',
-        { class: 'admin-list' },
-        removed.map(r =>
-          el(
-            'li',
-            {},
-            el(
-              'div',
-              {},
-              el('p', { class: 'admin-change-text' }, `${r.name} (${day(r.date)})`),
-              el(
-                'p',
-                { class: 'admin-change-meta' },
-                `Removed ${when(r.deleted_at)}${r.removed_by_label ? ` by ${r.removed_by_label}` : ''} · ${r.entry_count} commitment${Number(r.entry_count) === 1 ? '' : 's'}`,
-              ),
-            ),
-            el(
-              'button',
-              {
-                class: 'secondary-button admin-small-button',
-                type: 'button',
-                onclick: async e => {
-                  const button = e.currentTarget;
-                  setBusy(button, 'Restoring…');
-                  try {
-                    await rpc('admin_restore_race', { p_race_id: r.id });
-                    showConsole();
-                  } catch (err) {
-                    alert("Couldn't restore: " + err.message);
-                    clearBusy(button);
-                  }
-                },
-              },
-              'Restore',
-            ),
-          ),
-        ),
-      )
+    ? el('ul', { class: 'admin-list' }, removed.map(removedItem))
     : el('p', { class: 'admin-empty' }, 'No removed races.');
   return card('Removed races', body);
+}
+function removedItem(r) {
+  const error = errorLine();
+  return el(
+    'li',
+    {},
+    el(
+      'div',
+      {},
+      el('p', { class: 'admin-change-text' }, `${r.name} (${day(r.date)})`),
+      el(
+        'p',
+        { class: 'admin-change-meta' },
+        `Removed ${when(r.deleted_at)}${r.removed_by_label ? ` by ${r.removed_by_label}` : ''} · ${r.entry_count} commitment${Number(r.entry_count) === 1 ? '' : 's'}`,
+      ),
+      error,
+    ),
+    el(
+      'button',
+      {
+        class: 'secondary-button admin-small-button',
+        type: 'button',
+        onclick: async e => {
+          const button = e.currentTarget;
+          error.set('');
+          setBusy(button, 'Restoring…');
+          try {
+            await rpc('admin_restore_race', { p_race_id: r.id });
+            showConsole();
+          } catch (err) {
+            error.set("Couldn't restore: " + err.message);
+            clearBusy(button);
+          }
+        },
+      },
+      'Restore',
+    ),
+  );
 }
 
 // ----- Accounts -----
@@ -685,11 +708,14 @@ function allowListSection() {
         ? `Added ${a}. They can edit as soon as they next sign in.`
         : `${a} was already on the allow-list.`,
     );
-  remove.onclick = () => {
+  remove.onclick = async () => {
+    const address = email.value.trim();
+    if (!address) return email.focus();
     if (
-      !confirm(
-        `Remove ${email.value.trim()} from the allow-list? They lose edit access straight away.`,
-      )
+      !(await confirmDialog({
+        title: 'Remove from the allow-list?',
+        body: `Remove ${address} from the allow-list? They lose edit access straight away.`,
+      }))
     )
       return;
     act(remove, 'admin_allow_list_remove', 'Removing…', (r, a) =>

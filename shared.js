@@ -1,7 +1,8 @@
 // Shared by index.html and admin.html, loaded after vendor/supabase-js and
 // before each page's own script. It holds what both pages need to talk to
-// Supabase and to send a sign-in email the same way.
-/* exported SUPABASE_URL, SUPABASE_ANON_KEY, HCAPTCHA_SITE_KEY, getCaptchaToken */
+// Supabase, to send a sign-in email the same way, and to ask before a
+// destructive action.
+/* exported SUPABASE_URL, SUPABASE_ANON_KEY, HCAPTCHA_SITE_KEY, getCaptchaToken, confirmDialog */
 
 // Backed by Supabase — see README.md for the project and schema.
 const SUPABASE_URL = 'https://shkfwuogrldbqldpipxd.supabase.co';
@@ -63,4 +64,45 @@ async function getCaptchaToken(form) {
     if (widgetId !== undefined) hcaptcha.remove(widgetId);
     slot.remove();
   }
+}
+
+// Replaces window.confirm() for destructive actions on both pages (remove a
+// commitment or a race; undo a change or remove an allow-list address in the
+// admin console). window.confirm() is unstyled, blocks the page, and looks
+// broken on mobile, unlike this native <dialog>: showModal() gives a real
+// focus trap and Escape-to-close for free. Each page carries the same
+// #confirmDialog markup. Resolves true only if Confirm was clicked; every
+// other way out (Cancel, ×, Escape, a backdrop click) resolves false, same
+// as a plain "no" from window.confirm().
+function confirmDialog({ title, body, confirmLabel = 'Remove' }) {
+  const dialog = document.getElementById('confirmDialog');
+  const confirmBtn = document.getElementById('confirmDialogConfirm');
+  if (!dialog.dataset.wired) {
+    dialog.dataset.wired = 'true';
+    document.getElementById('confirmDialogCancel').onclick = () => dialog.close();
+    document.getElementById('confirmDialogClose').onclick = () => dialog.close();
+    // Native <dialog> backdrop clicks land on the dialog element itself (its
+    // ::backdrop pseudo-element isn't part of the DOM click target), so this
+    // is a "click landed on the overlay, not the card" check. Escape needs
+    // no handler: showModal() closes on it natively, firing the same 'close'
+    // event listened for below.
+    dialog.addEventListener('click', e => {
+      if (e.target === dialog) dialog.close();
+    });
+  }
+  document.getElementById('confirmDialogTitle').textContent = title;
+  document.getElementById('confirmDialogBody').textContent = body;
+  confirmBtn.textContent = confirmLabel;
+  return new Promise(resolve => {
+    const onConfirm = () => dialog.close('confirm');
+    const onClose = () => {
+      confirmBtn.removeEventListener('click', onConfirm);
+      dialog.removeEventListener('close', onClose);
+      resolve(dialog.returnValue === 'confirm');
+    };
+    confirmBtn.addEventListener('click', onConfirm);
+    dialog.addEventListener('close', onClose);
+    dialog.returnValue = '';
+    dialog.showModal();
+  });
 }

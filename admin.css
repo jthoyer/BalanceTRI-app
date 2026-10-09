@@ -90,6 +90,26 @@
     700 18px/1 'DM Sans',
     monospace;
 }
+/* Inline error under a form or list item, in place of alert(). Same
+   destructive palette as the calendar's .update-banner.error. */
+.admin-error {
+  margin: 8px 0 0;
+  color: #b3261e;
+  font-size: 14px;
+  font-weight: 600;
+}
+.admin-error:empty {
+  display: none;
+}
+/* The confirm dialog's red action. styles-additions.css has the calendar's
+   copy, but this page doesn't load that file. */
+.danger-button {
+  margin-right: auto;
+  color: #b3261e;
+}
+.danger-button:hover {
+  background: #fdecec;
+}
 .admin-result {
   min-height: 1.5em;
   margin: 12px 0 0;
