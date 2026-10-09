@@ -950,8 +950,10 @@ function render() {
     $('#emptyState').classList.remove('hidden');
     $('#allCount').textContent = '0';
     $('#clubCount').textContent = '0';
+    $('#nextRace').classList.add('hidden');
     return;
   }
+  renderNextRace();
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const futureRaces = races.filter(r => r.date >= todayStr);
@@ -1436,6 +1438,89 @@ function toggleAdd(open) {
   const panel = $('#addPanel');
   panel.classList.toggle('hidden', !open);
   if (open) panel.querySelector('input').focus();
+}
+// Today's date as YYYY-MM-DD in Sydney, whatever the device's time zone: the
+// countdown counts club days, so a race tomorrow reads "Tomorrow" at 11:30 pm
+// Sydney time even on a phone still set to another zone.
+function sydneyToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
+}
+// Whole days between two YYYY-MM-DD dates. Both parse as UTC midnight, so
+// daylight saving never makes a day 23 or 25 hours long.
+function daysBetween(from, to) {
+  return Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
+}
+function initials(name) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toLocaleUpperCase();
+}
+// The hero's next race card. Follows the view toggle only, not the type or
+// name filters: "Club races" counts down to the next club focus race, "View
+// all" to the next race of any type. Every string goes in via textContent.
+function renderNextRace() {
+  const card = $('#nextRace');
+  const today = sydneyToday();
+  const club = state.viewFilter === 'club';
+  const race = races
+    .filter(r => r.date >= today && (!club || r.clubFocus === 'Y'))
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  card.classList.toggle('hidden', !race);
+  if (!race) return;
+  const days = daysBetween(today, race.date);
+  const count = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : String(days);
+  const unit = days > 1 ? 'days to go' : '';
+  const locked = race.entries.filter(e => e.level === 'locked');
+  const eyebrow = club ? 'NEXT CLUB RACE' : 'NEXT ON THE CALENDAR';
+  $('#nextRaceEyebrow').textContent = eyebrow;
+  const badge = $('#nextRaceBadge');
+  const badgeText = club ? 'Club focus' : race.eventType;
+  badge.textContent = badgeText;
+  badge.classList.toggle('hidden', !badgeText);
+  badge.classList.toggle('club-focus', club);
+  $('#nextRaceDays').textContent = count;
+  $('#nextRaceUnit').textContent = unit;
+  $('#nextRaceUnit').classList.toggle('hidden', !unit);
+  card.querySelector('.next-race-count').classList.toggle('is-word', days < 2);
+  $('#nextRaceName').textContent = race.name;
+  const when = new Date(race.date + 'T12:00:00').toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  $('#nextRaceMeta').textContent = race.location ? `${when} · ${race.location}` : when;
+  const avatars = $('#nextRaceAvatars');
+  avatars.textContent = '';
+  if (club) {
+    locked.slice(0, locked.length > 4 ? 3 : 4).forEach(e => {
+      const a = document.createElement('span');
+      a.textContent = initials(e.name);
+      avatars.append(a);
+    });
+    if (locked.length > 4) {
+      const more = document.createElement('span');
+      more.className = 'more';
+      more.textContent = `+${locked.length - 3}`;
+      avatars.append(more);
+    }
+  }
+  $('#nextRaceLocked').textContent = `${locked.length} locked in`;
+  const label = days > 1 ? `${days} days to go` : count;
+  card.setAttribute(
+    'aria-label',
+    `${club ? 'Next club race' : 'Next on the calendar'}: ${race.name}, ${label}, ${when}, ${locked.length} locked in`,
+  );
+  card.href = racePath(race);
+  card.onclick = e => {
+    // Same as the race cards: let the browser handle new-tab and copy-link.
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+      return;
+    e.preventDefault();
+    openRaceScreen(race.id);
+  };
 }
 document.querySelectorAll('.view-toggle-btn').forEach(
   b =>
