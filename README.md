@@ -237,3 +237,47 @@ psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db>
 ```
 
 The first set covers the secret check (T7), what the caller can and cannot influence, the daily-limit message (T8), and Telegram failures. The second runs against a throwaway Postgres with stand-ins for Supabase and B3. It covers the trigger, the claim and release rules, the daily cap of 20 across the Sydney day, and who may call what.
+
+## Access requests (gated member accounts)
+
+Migration `20261011230000_add_access_requests.sql` is the database side of "sign up with email, password and display name, then wait for the club admin". It is step B3 of the plan. **It is not applied to the live project yet**, and it is safe with "Confirm email" still on: it only adds.
+
+**The allow-list stays the only gate.** The RLS policies on `entries` and `races` still check `private.is_allow_listed()` and nothing else. `private.access_requests` is the workflow and the record; it never grants anything by itself. `admin_decide_request()` moves the two together in one transaction. A write stops the moment an address leaves the allow-list, because the policies check it on every write.
+
+**Tables** (`private`, so invisible to the API; RLS on, no policies, every grant revoked):
+
+- `access_requests` — one row per person (the primary key on `user_id`): display name, note, status (`pending`, `approved`, `rejected`, `revoked`), who decided and when, an admin-only reason, and `notified_at` (set by the notifier below).
+- `password_resets` — the "must change password" flag and its 7-day expiry. Written by the admin reset function (B5); cleared by `password_changed()`. In phase 1 the app enforces the expiry, not the server.
+
+**Member functions** (signed-in only; each acts on the caller and takes no user id):
+
+- `my_access_status()` — `none`, `pending`, `approved`, `rejected` or `revoked`, plus whether a password change is due. Anyone on the allow-list is `approved` with or without a request row, so existing members need no backfill.
+- `request_access(name, note)` — once per account, only if not listed. Writes `profiles.display_name` and a `pending` row. Errors are worded for the member.
+- `password_changed()` — clears the caller's reset flag.
+
+**Admin functions** (admins with a two-factor session; every decision is logged in `private.admin_actions` as `access_approve`, `access_reject`, `access_revoke` or `access_reapprove`): `admin_requests(status)`, `admin_decide_request(user, decision, reason)` and `admin_pending_count()`. Transitions: approve and reject act on `pending`; revoke on `approved`; reapprove on `revoked` or `rejected`. An admin can't decide on their own account.
+
+**Display names.** 2 to 40 characters; letters in any language, spaces, apostrophes, hyphens and full stops; at least one letter. Names are unique among pending and approved people, ignoring case, because `entries` is unique on `(race_id, name)` and two "Sam"s would collide on a race. A member who joined before requests existed counts if their address is on the allow-list. The rules also apply when a member renames their own profile (a `BEFORE UPDATE` trigger), and every profile change lands in `private.change_history`. Letter matching uses `[[:alpha:]]`, which needs a UTF-8 database; the live project's is `en_US.UTF-8` and was checked.
+
+**Guards for "Confirm email" off.** With confirmation off, an address proves nothing, so a hash left on the allow-list is a pre-approval anyone can claim by signing up with that address.
+
+- **G2.** `admin_allow_list_add()` refuses an address with no account ("No account uses that address."). Listing an address also approves its request, and `admin_allow_list_remove()` revokes it, so the Requests panel and the list never disagree.
+- **G3.** Triggers on `auth.users`: deleting an account removes its hash; changing its email removes the old hash and sets an approved request to `revoked` so the owner approves the new address. A change of letter case alone is the same address and is ignored. These fail closed: if the Vault key is missing, the delete or email change is refused.
+- **G1 is not in the migration.** It is a one-off for cutover (B9) and must run immediately before "Confirm email" goes off. It deletes every hash that has no account, and **cannot be undone**: the deleted hashes were never readable.
+
+  ```sql
+  delete from private.allowed_emails
+   where email_hash not in (
+     select private.email_hash(email) from auth.users where email is not null
+   );
+  ```
+
+**Profiles.** Members could edit every column of their own `profiles` row, including `justgo_status`. They can now change `display_name` and nothing else (a table-wide `UPDATE` grant was replaced with a column grant; revoking only the `justgo_*` columns would have done nothing).
+
+**SQL tests.** `supabase/tests/run.sh` replays every migration on a scratch Postgres, with stand-ins for `auth`, `vault` and `pg_net` in `stubs.sql`, then runs each `*.test.sql`. It never touches a real project.
+
+```
+PGHOST=/tmp/pgtest PGUSER=nobody supabase/tests/run.sh
+```
+
+It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can create databases and roles. `b3_access_requests.test.sql` covers spec tests T1 to T6 and T10, the request state machine, the name rules and the profile changes. `b3_b4_notifier.test.sql` checks that a real `request_access()` call fires the notifier trigger.
