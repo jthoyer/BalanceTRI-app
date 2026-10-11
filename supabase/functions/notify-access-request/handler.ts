@@ -1,29 +1,29 @@
 // The logic behind the notify-access-request Edge Function, kept free of Deno
 // globals so the tests can run it under plain Node with a fake fetch.
 //
-// A Database Webhook on INSERT into public.access_requests calls this. It sends
-// the club admin one Telegram message: the person's display name and a link to
-// the admin console. Nothing else crosses the wire.
+// Flow (spec 6.4): an AFTER INSERT trigger on private.access_requests calls
+// this through pg_net, sending only the user_id and a shared secret header.
+// The function asks the database to claim that request (the database checks it
+// is still pending, not yet announced, and under the daily cap), builds the
+// text itself, and sends one plain-text Telegram message to a fixed chat.
+// If Telegram fails, it hands the claim back so the console can show
+// "notification not sent".
 //
-// Why it is built the way it is (the plan's "notifier as an open relay" test):
-//   - The chat ID comes from a secret, never from the request. A caller cannot
-//     aim the bot at anyone else.
-//   - The request must carry the shared secret. Anyone who finds the URL still
-//     cannot trigger a message.
-//   - The message is plain text with fixed wording, so a display name can't
-//     inject markup or links.
-//   - A daily cap bounds the damage if the table is ever flooded.
+// Why it is not an open relay (spec F8, test T7):
+//   - No shared secret, no work. The anon key proves nothing here.
+//   - The chat ID comes from a secret, never from the request.
+//   - Nothing the caller sends reaches the message. The name is read from the
+//     database, not the request body.
 
-export const ACCESS_REQUEST_TABLE = 'access_requests';
+export const DAILY_CAP_NOTICE = 'Daily limit reached. Check the console for more.';
+export const DEFAULT_CONSOLE_URL = 'https://jthoyer.github.io/BalanceTRI-app/admin.html#requests';
 export const MAX_NAME_LENGTH = 60;
-export const DEFAULT_DAILY_CAP = 20;
-const MAX_BODY_BYTES = 10_000;
-const DEFAULT_CONSOLE_URL = 'https://jthoyer.github.io/BalanceTRI-app/admin.html';
+const MAX_BODY_BYTES = 1_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface Deps {
   env: (name: string) => string | undefined;
   fetch: typeof fetch;
-  now: () => Date;
 }
 
 const json = (status: number, body: Record<string, unknown>): Response =>
@@ -47,8 +47,9 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
-// Strip control and direction-override characters, squash whitespace, cap the
-// length. The name is user-typed, so it is treated as hostile.
+// The database already limits names to 2..40 characters. This is a second
+// line of defence: strip control and direction-override characters, squash
+// whitespace, cap the length.
 export function cleanName(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   const cleaned = raw
@@ -58,24 +59,30 @@ export function cleanName(raw: unknown): string {
   return Array.from(cleaned).slice(0, MAX_NAME_LENGTH).join('');
 }
 
-// How many requests arrived in the last 24 hours, this one included. Returns
-// null if it can't be worked out; the caller then sends rather than going quiet.
-async function requestsLastDay(deps: Deps): Promise<number | null> {
+interface Claim {
+  send?: boolean;
+  display_name?: string;
+  last_of_day?: boolean;
+}
+
+// Calls a service-role-only database function. Returns null on any failure.
+async function rpc(deps: Deps, name: string, args: object): Promise<unknown | null> {
   const url = deps.env('SUPABASE_URL');
   const key = deps.env('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return null;
-  const since = new Date(deps.now().getTime() - 24 * 60 * 60 * 1000).toISOString();
   try {
-    const res = await deps.fetch(
-      `${url}/rest/v1/${ACCESS_REQUEST_TABLE}?select=id&created_at=gte.${encodeURIComponent(since)}`,
-      {
-        method: 'HEAD',
-        headers: { apikey: key, authorization: `Bearer ${key}`, prefer: 'count=exact' },
+    const res = await deps.fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify(args),
+    });
     if (!res.ok) return null;
-    const total = Number((res.headers.get('content-range') ?? '').split('/')[1]);
-    return Number.isFinite(total) ? total : null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
   } catch {
     return null;
   }
@@ -85,6 +92,7 @@ async function sendTelegram(deps: Deps, token: string, chatId: string, text: str
   return deps.fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    // Plain text, and no link preview, so Telegram never fetches the console.
     body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
   });
 }
@@ -92,61 +100,61 @@ async function sendTelegram(deps: Deps, token: string, chatId: string, text: str
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
 
-  const expected = deps.env('NOTIFY_WEBHOOK_SECRET');
+  const expected = deps.env('NOTIFY_SHARED_SECRET');
   const token = deps.env('TELEGRAM_BOT_TOKEN');
-  const chatId = deps.env('TELEGRAM_CHAT_ID');
+  const chatId = deps.env('TELEGRAM_ADMIN_CHAT_ID');
   // Fail closed: with any secret missing, do nothing rather than guess.
   if (!expected || !token || !chatId) {
     console.error('notify-access-request: a required secret is not set');
     return json(500, { error: 'not configured' });
   }
 
-  const given = req.headers.get('x-webhook-secret') ?? '';
+  const given = req.headers.get('x-notify-secret') ?? '';
   if (!(await sameSecret(given, expected))) return json(401, { error: 'unauthorised' });
 
   const text = await req.text();
   if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) {
     return json(413, { error: 'payload too large' });
   }
-  let payload: { type?: unknown; schema?: unknown; table?: unknown; record?: unknown };
+  let userId: unknown;
   try {
-    payload = JSON.parse(text);
+    userId = JSON.parse(text)?.user_id;
   } catch {
     return json(400, { error: 'invalid json' });
   }
-
-  // A webhook for some other table or event is not an error, just not ours.
-  if (
-    payload.type !== 'INSERT' ||
-    payload.schema !== 'public' ||
-    payload.table !== ACCESS_REQUEST_TABLE
-  ) {
-    return json(200, { ignored: true });
+  if (typeof userId !== 'string' || !UUID.test(userId)) {
+    return json(400, { error: 'user_id must be a uuid' });
   }
 
-  const record = (payload.record ?? {}) as { display_name?: unknown };
-  const name = cleanName(record.display_name) || 'Someone';
+  // The database decides whether this request may be announced: still pending,
+  // not announced before, and under the daily cap. It also stamps notified_at.
+  const claim = (await rpc(deps, 'notifier_claim', { p_user_id: userId })) as Claim | null;
+  if (claim === null) {
+    console.error('notify-access-request: could not claim the request');
+    return json(502, { error: 'database unavailable' });
+  }
+  if (!claim.send) return json(200, { skipped: true });
+
+  const name = cleanName(claim.display_name) || 'Someone';
   const consoleUrl = deps.env('ADMIN_CONSOLE_URL') || DEFAULT_CONSOLE_URL;
+  let message = `New Balance Tri request: ${name}. Review it in the console: ${consoleUrl}`;
+  if (claim.last_of_day) message += `\n${DAILY_CAP_NOTICE}`;
 
-  const cap = Number(deps.env('DAILY_ALERT_CAP')) || DEFAULT_DAILY_CAP;
-  const count = await requestsLastDay(deps);
-  let message = `New access request: ${name}\nReview it in the admin console: ${consoleUrl}`;
-  if (count !== null && count > cap) {
-    if (count > cap + 1) return json(200, { skipped: 'daily cap reached' });
-    // The first request over the cap gets one notice, then silence.
-    message = `Access requests have passed ${cap} in 24 hours. Alerts are paused until the count drops. Check the admin console: ${consoleUrl}`;
-  }
-
+  let sent = false;
   try {
     const res = await sendTelegram(deps, token, chatId, message);
-    if (!res.ok) {
-      // Log the status only. The URL holds the bot token.
-      console.error(`notify-access-request: Telegram answered ${res.status}`);
-      return json(502, { error: 'telegram rejected the message' });
-    }
+    sent = res.ok;
+    // Log the status only. The URL holds the bot token.
+    if (!sent) console.error(`notify-access-request: Telegram answered ${res.status}`);
   } catch {
     console.error('notify-access-request: could not reach Telegram');
-    return json(502, { error: 'telegram unreachable' });
+  }
+
+  if (!sent) {
+    // Hand the claim back, so notified_at stays empty and the console shows
+    // "notification not sent". The queue never depends on Telegram.
+    await rpc(deps, 'notifier_release', { p_user_id: userId });
+    return json(502, { error: 'telegram did not accept the message' });
   }
   return json(200, { sent: true });
 }

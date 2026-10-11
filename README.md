@@ -199,28 +199,41 @@ distinguished from an unloaded one.
 
 ## Access-request alerts
 
-`supabase/functions/notify-access-request/` is an Edge Function that sends the club admin one Telegram message when someone asks to join: the person's display name and a link to the admin console, nothing more. It is step B4 of the gated member accounts plan.
+`supabase/functions/notify-access-request/` is an Edge Function that sends the club admin one Telegram message when someone asks to join: the person's display name and a link to the admin console, nothing more. It is step B4 of the gated member accounts plan. Nothing in this section is live until the owner says go.
 
-**It depends on B3.** The function expects a `public.access_requests` table with `display_name` and `created_at` columns (`ACCESS_REQUEST_TABLE` in `handler.ts`). If the B3 migration names them differently, change the constant and the tests together. The alert fires on a row in that table, never on a raw `auth.users` signup, so bots and abandoned sign-ups can't page the admin.
+**How it works.**
 
-**Secrets** (Supabase dashboard → Edge Functions → Secrets). The owner sets these; they never go in the repo or in chat:
+1. An `AFTER INSERT` trigger on `private.access_requests` posts the new row's `user_id` to the function through `pg_net`. It sends nothing else, plus a shared secret in the `x-notify-secret` header. It fires on the request row, not on a raw `auth.users` signup, so a half-finished sign-up never pings the admin.
+2. The function calls `public.notifier_claim(user_id)`. The database checks the request is still `pending`, has not been announced, and that fewer than 20 requests were announced today (Sydney time). If so it stamps `notified_at` and returns the display name.
+3. The function builds the text itself, from fixed wording and the name the database returned. It never uses text from the caller. It sends it as plain text, with link previews off, to a fixed chat.
+4. If Telegram refuses, the function calls `public.notifier_release(user_id)`, which clears `notified_at`. The console then shows "notification not sent" for that request. The 20th message of the day ends with "Daily limit reached. Check the console for more.", and the 21st sends nothing.
 
-- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` — from BotFather (step B1).
-- `NOTIFY_WEBHOOK_SECRET` — a long random string. The webhook sends it as the `x-webhook-secret` header; the function refuses anything without it.
-- `ADMIN_CONSOLE_URL` — optional. Defaults to `https://jthoyer.github.io/BalanceTRI-app/admin.html`.
-- `DAILY_ALERT_CAP` — optional. Defaults to 20 alerts per 24 hours.
+**Why it is not an open relay.** No shared secret, no work, and the anon key proves nothing. The chat ID comes from a secret, never from the request. The name comes from the database, never from the request body. The claim and release functions are callable by `service_role` only. The trigger never blocks a sign-up: if `pg_net` or Vault fails, the request is still saved, and the console's pending count is the backstop. The token is never logged.
 
-**Switching it on — in this order:**
+**It depends on B3.** The migration `20261011231500_add_access_request_notifier.sql` expects `private.access_requests` with `user_id`, `display_name`, `status` and `notified_at` (spec section 6.1). Apply it after the B3 migration. Then rename the file to the version Supabase records.
 
-1. Set the secrets above.
-2. Deploy: `supabase functions deploy notify-access-request`. `config.toml` sets `verify_jwt = false` because the caller is a database webhook, not a user.
-3. In the dashboard, go to Database → Webhooks and create a webhook on `public.access_requests`, event **Insert**, type HTTP Request, method POST, URL of the function. Add the header `x-webhook-secret` with the same value as `NOTIFY_WEBHOOK_SECRET`. Create it in the dashboard, not a migration, so the secret stays out of git.
-4. Make a test request. Only your chat gets the alert.
+**Switching it on — in this order, each step with the owner's go:**
 
-**Why it is built this way.** The chat ID comes from a secret, never from the request, so a caller can't aim the bot elsewhere. The message is fixed wording sent as plain text, so a display name can't add links or markup. Names are stripped of control characters and cut to 60. Once more than `DAILY_ALERT_CAP` requests arrive in 24 hours, the function sends one "alerts paused" notice and then goes quiet, so a flooded table can't flood the phone. If it can't read the count, it sends anyway. The admin console's pending badge is the backstop for any alert that doesn't arrive. The token is never logged.
+1. Set the Edge Function secrets (dashboard → Edge Functions → Secrets). They never go in the repo or in chat:
+   - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID`, from BotFather (step B1).
+   - `NOTIFY_SHARED_SECRET`, a long random string.
+   - `ADMIN_CONSOLE_URL`, optional. Defaults to `https://jthoyer.github.io/BalanceTRI-app/admin.html#requests`.
+2. Create the matching Vault secret in the SQL editor, never in a migration file. The value is the same string as `NOTIFY_SHARED_SECRET`:
+   `select vault.create_secret('<the same string>', 'notify_access_request_secret');`
+3. Apply the B3 migration, then the notifier migration. It runs `create extension pg_net`.
+4. Deploy: `supabase functions deploy notify-access-request`. `config.toml` sets `verify_jwt = false`, because the caller is a database trigger, not a signed-in user.
+5. Make a test request. Exactly one message arrives, with the display name and the console link, and no email address.
 
-**Tests.** They run under plain Node, with no Deno needed:
+Until step 2 is done the trigger stays silent. Until the function is deployed, a request still saves, and the console shows it as not announced.
+
+**Tests.** Two sets, neither needs Deno or the live project:
 
 ```
 node --experimental-strip-types --test supabase/functions/notify-access-request/handler.test.ts
+
+sed '/^create extension/d' supabase/migrations/20261011231500_add_access_request_notifier.sql > /tmp/notifier_migration.sql
+psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db> \
+     -f supabase/functions/notify-access-request/notifier.test.sql
 ```
+
+The first set covers the secret check (T7), what the caller can and cannot influence, the daily-limit message (T8), and Telegram failures. The second runs against a throwaway Postgres with stand-ins for Supabase and B3. It covers the trigger, the claim and release rules, the daily cap of 20 across the Sydney day, and who may call what.
