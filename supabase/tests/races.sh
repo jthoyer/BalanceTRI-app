@@ -29,19 +29,20 @@ id3=$(q -c "insert into auth.users (email, email_confirmed_at) values ('race3@ex
 q -c "insert into private.access_requests (user_id, display_name, status) values ('$id1', 'Race One', 'pending')" >/dev/null
 
 # 1. The admin approves; the member changes email while the approval is open.
-admin_slow "select public.admin_decide_request('$id1', 'approve')" &
+admin_slow "select public.admin_decide_request('$id1', 'approve')" & pid=$!
 sleep 0.5
 q -c "update auth.users set email = 'race1.new@example.com' where id = '$id1'" >/dev/null
-wait
+wait "$pid" || { echo "FAILED: scenario 1: the approval itself failed"; exit 1; }
 check "$(listed race1@example.com)" f "approve then email change: the old address is not left listed"
 check "$(q -c "select status from private.access_requests where user_id = '$id1'")" revoked "approve then email change: the request ends revoked"
 
 # 2. The same with the Allow-list box, for an account with no request row.
-admin_slow "select public.admin_allow_list_add('race2@example.com')" &
+admin_slow "select public.admin_allow_list_add('race2@example.com')" & pid=$!
 sleep 0.5
 q -c "update auth.users set email = 'race2.new@example.com' where id = '$id2'" >/dev/null
-wait
+wait "$pid" || { echo "FAILED: scenario 2: the add itself failed"; exit 1; }
 check "$(listed race2@example.com)" f "add then email change: the old address is not left listed"
+check "$(q -c "select status from private.access_requests where user_id = '$id2'")" revoked "add then email change: the existing member ends revoked"
 
 # 3. The email change starts first; the admin adds the old address meanwhile.
 q >/dev/null <<SQL &
@@ -62,5 +63,16 @@ case "$out" in
   *) echo "FAILED: email change then add: expected 'just changed', got: $out"; exit 1 ;;
 esac
 check "$(listed race3@example.com)" f "email change then add: nothing is listed"
+
+# 4. The admin approves; the account is deleted meanwhile. No deadlock, no
+#    hash left behind.
+id4=$(q -c "insert into auth.users (email, email_confirmed_at) values ('race4@example.com', now()) returning id")
+q -c "insert into private.access_requests (user_id, display_name, status) values ('$id4', 'Race Four', 'pending')" >/dev/null
+admin_slow "select public.admin_decide_request('$id4', 'approve')" & pid=$!
+sleep 0.5
+del=$(q -c "delete from auth.users where id = '$id4'" 2>&1 || true)
+wait "$pid" || { echo "FAILED: scenario 4: the approval itself failed"; exit 1; }
+case "$del" in *deadlock*) echo "FAILED: approve then delete: deadlock: $del"; exit 1 ;; esac
+check "$(listed race4@example.com)" f "approve then delete: the address is not left listed"
 
 echo "race checks passed"

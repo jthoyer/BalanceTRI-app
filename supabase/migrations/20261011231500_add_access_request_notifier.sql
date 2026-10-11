@@ -68,9 +68,13 @@ $$;
 
 revoke all on function private.notify_access_request() from public, anon, authenticated;
 
+-- Pending rows only: the revoked rows B3 makes for existing members who lose
+-- their listing are not requests and need no message.
 create trigger access_requests_notify
   after insert on private.access_requests
-  for each row execute function private.notify_access_request();
+  for each row
+  when (new.status = 'pending')
+  execute function private.notify_access_request();
 
 -- Claim the right to announce one request. Called by the Edge Function with
 -- the service role. Returns {"send": false, ...} or

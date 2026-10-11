@@ -58,7 +58,7 @@ select t.ok((select count(*) from private.access_requests where user_id = t.id('
 select t.ok((select display_name from public.profiles where id = t.id('carol')) = 'zoë o''neil-smith jr.', 'request_access writes the profile name');
 select t.ok((select status from private.access_requests where user_id = t.id('carol')) = 'pending', 'the request is pending');
 select t.ok((select note from private.access_requests where user_id = t.id('carol')) = 'squad B, invited by Jo', 'the note is kept');
-select t.ok(exists (select 1 from private.change_history where table_name = 'profiles' and op = 'UPDATE' and row_id = t.id('carol')), 'the rename is in the change history');
+select t.ok(not exists (select 1 from private.change_history where table_name = 'profiles' and row_id = t.id('carol')), 'choosing a name when asking to join is not logged as a rename');
 
 select t.as_user('dave');
 select t.ok(t.msg($$select public.request_access('ZOË O''NEIL-SMITH JR.')$$) like 'Someone at the club already uses that name.%', 'a name clash ignores case');

@@ -104,7 +104,7 @@ revoke all on private.password_resets from public, anon, authenticated;
 create function private.clean_display_name(p_name text)
 returns text
 language plpgsql
-immutable
+stable
 set search_path = ''
 as $$
 declare
@@ -112,6 +112,9 @@ declare
   -- is the same name to the uniqueness check.
   v text := normalize(trim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), NFC);
 begin
+  -- U+034F is a combining mark that draws nothing, so "Sam" + U+034F would
+  -- look exactly like "Sam" yet pass the uniqueness check. Drop it.
+  v := trim(regexp_replace(v, '\u034f', '', 'g'));
   if char_length(v) < 2 or char_length(v) > 40 then
     raise exception 'Your name needs to be 2 to 40 characters.';
   end if;
@@ -139,14 +142,14 @@ as $$
            select 1 from private.access_requests r
             where r.user_id is distinct from p_except
               and r.status in ('pending', 'approved')
-              and lower(r.display_name) = lower(p_name)
+              and lower(normalize(r.display_name, NFC)) = lower(p_name)
          )
       or exists (
            select 1
              from public.profiles p
              join auth.users u on u.id = p.id
             where p.id is distinct from p_except
-              and lower(p.display_name) = lower(p_name)
+              and lower(normalize(p.display_name, NFC)) = lower(p_name)
               and exists (
                     select 1 from private.allowed_emails a
                      where a.email_hash = private.email_hash(u.email)
@@ -199,6 +202,12 @@ begin
   if private.display_name_taken(new.display_name, new.id) then
     raise exception 'Someone at the club already uses that name. Add a surname or initial.';
   end if;
+  -- request_access() replaces the seeded name (the email's local part) with
+  -- the chosen one. That is joining, not renaming: no cap, and no history row
+  -- (see the history trigger's WHEN clause).
+  if current_setting('app.naming', true) = 'request_access' then
+    return new;
+  end if;
   -- Each rename writes a history row, so cap them. Without a cap any signed-up
   -- account could fill the database by renaming itself in a loop. The
   -- dashboard and the service role (no auth.uid()) are not capped.
@@ -232,7 +241,8 @@ create trigger profiles_rename_biu
 create trigger profiles_history_au
   after update of display_name on public.profiles
   for each row
-  when (old.display_name is distinct from new.display_name)
+  when (old.display_name is distinct from new.display_name
+        and current_setting('app.naming', true) is distinct from 'request_access')
   execute function private.record_change();
 
 -- F6: the update policy covers every column, so a member could mark their own
@@ -300,6 +310,26 @@ create trigger on_auth_user_deleted
   after delete on auth.users
   for each row execute function private.forget_deleted_account();
 
+-- The foreign-key cascade to access_requests runs before the AFTER trigger
+-- above. Taking the account lock in a BEFORE trigger keeps the lock order the
+-- same as the admin functions (lock, then request row), so a deletion and an
+-- admin decision wait for each other instead of deadlocking.
+create function private.lock_deleted_account()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform private.lock_account(old.id);
+  return old;
+end;
+$$;
+
+create trigger before_auth_user_deleted
+  before delete on auth.users
+  for each row execute function private.lock_deleted_account();
+
 create trigger on_auth_user_email_changed
   after update of email on auth.users
   for each row
@@ -312,6 +342,7 @@ revoke execute on function private.check_profile_rename() from public, anon, aut
 revoke execute on function private.forget_deleted_account() from public, anon, authenticated;
 revoke execute on function private.forget_changed_email() from public, anon, authenticated;
 revoke execute on function private.lock_account(uuid) from public, anon, authenticated;
+revoke execute on function private.lock_deleted_account() from public, anon, authenticated;
 revoke execute on function private.fallback_name(uuid) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -401,7 +432,11 @@ begin
     raise exception 'Someone at the club already uses that name. Add a surname or initial.';
   end if;
 
+  -- Transaction-local, and the API can't set it: PostgREST exposes no way to
+  -- call set_config, so a member can't use it to dodge the cap or the history.
+  perform set_config('app.naming', 'request_access', true);
   update public.profiles set display_name = v_name where id = uid;
+  perform set_config('app.naming', '', true);
   if not found then
     insert into public.profiles (id, display_name) values (uid, v_name);
   end if;
@@ -525,6 +560,11 @@ begin
   if v_email is null then
     raise exception 'That account no longer exists.';
   end if;
+  -- As in admin_allow_list_add: an unconfirmed account proves nothing.
+  if p_decision in ('approve', 'reapprove')
+     and not exists (select 1 from auth.users where id = p_user_id and email_confirmed_at is not null) then
+    raise exception 'That account hasn''t confirmed its email address, so it can''t be approved.';
+  end if;
 
   v_new := case
     when p_decision = 'approve'   and req.status = 'pending'               then 'approved'
@@ -627,6 +667,12 @@ begin
   if req.status is not null and req.status <> 'approved'
      and private.display_name_taken(req.display_name, v_uid) then
     raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+  end if;
+  -- No request row (signed up but never asked, or listed before requests
+  -- existed): listing them makes their profile name an approved name.
+  if req.user_id is null and private.display_name_taken(
+       (select p.display_name from public.profiles p where p.id = v_uid), v_uid) then
+    raise exception 'Another member uses this account''s name. Rename the account before adding it.';
   end if;
 
   h := private.email_hash(p_email);

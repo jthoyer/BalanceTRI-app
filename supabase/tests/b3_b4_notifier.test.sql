@@ -30,6 +30,12 @@ select t.ok(public.notifier_claim(t.id('ben')) ->> 'display_name' = 'Ben Bishop'
 select t.ok((select notified_at is not null from private.access_requests where user_id = t.id('ben')), 'and stamps notified_at');
 select t.ok(public.notifier_claim(t.id('ben')) ->> 'send' = 'false', 'a second claim is refused');
 
+-- A revoked row made for an existing member is not a request: no call.
+select count(*) as c0 from net.calls \gset
+select t.mk('dan');
+insert into private.access_requests (user_id, display_name, status, reason) values (t.id('dan'), 'Dan Dixon', 'revoked', 'Removed from the allow-list');
+select t.ok((select count(*) from net.calls) = :c0, 'a revoked placeholder row sends nothing');
+
 -- A request decided before the call lands is not announced.
 select t.mk('cat');
 select t.as_user('cat');
