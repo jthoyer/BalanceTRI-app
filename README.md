@@ -257,19 +257,29 @@ Migration `20261011230000_add_access_requests.sql` is the database side of "sign
 
 **Admin functions** (admins with a two-factor session; every decision is logged in `private.admin_actions` as `access_approve`, `access_reject`, `access_revoke` or `access_reapprove`): `admin_requests(status)`, `admin_decide_request(user, decision, reason)` and `admin_pending_count()`. Transitions: approve and reject act on `pending`; revoke on `approved`; reapprove on `revoked` or `rejected`. An admin can't decide on their own account.
 
-**Display names.** 2 to 40 characters; letters in any language, spaces, apostrophes, hyphens and full stops; at least one letter. Names are unique among pending and approved people, ignoring case, because `entries` is unique on `(race_id, name)` and two "Sam"s would collide on a race. A member who joined before requests existed counts if their address is on the allow-list. The rules also apply when a member renames their own profile (a `BEFORE UPDATE` trigger), and every profile change lands in `private.change_history`. Letter matching uses `[[:alpha:]]`, which needs a UTF-8 database; the live project's is `en_US.UTF-8` and was checked.
+**Display names.** 2 to 40 characters; letters in any language, spaces, apostrophes, hyphens and full stops; at least one letter. Names are stored in Unicode NFC form, so "Zoë" typed two different ways is one name. Names are unique among pending and approved people, ignoring case, because `entries` is unique on `(race_id, name)` and two "Sam"s would collide on a race. A member who joined before requests existed counts if their address is on the allow-list. Approving or reapproving re-checks the name, in case such a member has taken it since. Letter matching uses `[[:alpha:]]`, which needs a UTF-8 database; the live project's is `en_US.UTF-8` and was checked. Look-alike letters from other scripts (a Cyrillic "а" for a Latin "a") are not caught.
+
+**Renames.** The same rules apply when a member renames their own profile (a `BEFORE UPDATE` trigger). A pending member's request follows the rename, so the name guard covers the new name and frees the old one. Each rename is logged in `private.change_history` and shows in the console's activity feed as "Renamed A to B", with no Undo. Renames are capped at 5 a day per member, because each one writes a history row and an uncapped loop could fill the database; the dashboard and the service role are not capped.
 
 **Guards for "Confirm email" off.** With confirmation off, an address proves nothing, so a hash left on the allow-list is a pre-approval anyone can claim by signing up with that address.
 
-- **G2.** `admin_allow_list_add()` refuses an address with no account ("No account uses that address."). Listing an address also approves its request, and `admin_allow_list_remove()` revokes it, so the Requests panel and the list never disagree.
-- **G3.** Triggers on `auth.users`: deleting an account removes its hash; changing its email removes the old hash and sets an approved request to `revoked` so the owner approves the new address. A change of letter case alone is the same address and is ignored. These fail closed: if the Vault key is missing, the delete or email change is refused.
-- **G1 is not in the migration.** It is a one-off for cutover (B9) and must run immediately before "Confirm email" goes off. It deletes every hash that has no account, and **cannot be undone**: the deleted hashes were never readable.
+- **G2.** `admin_allow_list_add()` refuses an address with no account ("No account uses that address."), and an account that hasn't confirmed its email. Listing an address also approves its request, and `admin_allow_list_remove()` revokes it, so the Requests panel and the list never disagree. A member who joined before requests existed and is removed gets a `revoked` row, so they see "access removed" rather than the join form.
+- **G3.** Triggers on `auth.users`: deleting an account removes its hash; changing its email removes the old hash and sets the request to `revoked` (or makes a `revoked` row for an existing member) so the owner approves the new address. A change of letter case alone is the same address and is ignored. These fail closed: if the Vault key is missing, the delete or email change is refused.
+- **One change per account at a time.** Admin decisions, `request_access()` and the G3 triggers all take a per-account advisory lock first (`private.lock_account`). Without it, an approval and an email change landing together could leave the old address listed with no account behind it.
+- **G1 is not in the migration.** It is a one-off for cutover (B9) and must run immediately before "Confirm email" goes off. It deletes every hash that has no **confirmed** account, and **cannot be undone**: the deleted hashes were never readable. Unconfirmed accounts don't count, because anyone can create one on any address while confirmation is on and confirm it later by signing up again.
 
   ```sql
   delete from private.allowed_emails
    where email_hash not in (
-     select private.email_hash(email) from auth.users where email is not null
+     select private.email_hash(email) from auth.users
+      where email is not null and email_confirmed_at is not null
    );
+  ```
+
+  Straight after G1, delete the accounts that are still unconfirmed. None of them can be listed by then, and one sitting on a member's address would stop that member joining:
+
+  ```sql
+  delete from auth.users where email_confirmed_at is null;
   ```
 
 **Profiles.** Members could edit every column of their own `profiles` row, including `justgo_status`. They can now change `display_name` and nothing else (a table-wide `UPDATE` grant was replaced with a column grant; revoking only the `justgo_*` columns would have done nothing).
@@ -280,4 +290,4 @@ Migration `20261011230000_add_access_requests.sql` is the database side of "sign
 PGHOST=/tmp/pgtest PGUSER=nobody supabase/tests/run.sh
 ```
 
-It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can create databases and roles. `b3_access_requests.test.sql` covers spec tests T1 to T6 and T10, the request state machine, the name rules and the profile changes. `b3_b4_notifier.test.sql` checks that a real `request_access()` call fires the notifier trigger.
+It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can create databases and roles (the scratch `service_role` is made with `BYPASSRLS`, as on Supabase). `b3_access_requests.test.sql` covers spec tests T1 to T6 and T10, the request state machine, the name rules and the profile changes. `b3_review_fixes.test.sql` covers the fixes from the code and security reviews. `b3_b4_notifier.test.sql` checks that a real `request_access()` call fires the notifier trigger. `races.sh` runs two sessions at once to show the per-account lock holds when an approval and an email change collide.

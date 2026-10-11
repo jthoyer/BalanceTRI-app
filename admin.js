@@ -453,6 +453,10 @@ const HIDDEN_FIELDS = new Set([
 ]);
 function describe(change, raceNames) {
   const row = change.new_row || change.old_row || {};
+  // Profiles are logged on a rename only (add_access_requests migration).
+  if (change.table_name === 'profiles') {
+    return `Renamed ${change.old_row?.display_name || 'someone'} to ${row.display_name || 'someone'}`;
+  }
   if (change.table_name === 'entries') {
     const race = raceNames.get(row.race_id) || 'a race that no longer exists';
     const who = row.name || 'someone';
@@ -493,6 +497,7 @@ function activitySection(activity, raceNames) {
     el('option', { value: '' }, 'Everything'),
     el('option', { value: 'entries' }, 'Commitments'),
     el('option', { value: 'races' }, 'Races'),
+    el('option', { value: 'profiles' }, 'Name changes'),
   );
   const deletesOnly = el('input', { type: 'checkbox' });
   function render() {
@@ -528,8 +533,11 @@ function activityItem(change, raceNames) {
   const error = errorLine();
   const who =
     change.changed_by_label || (change.changed_role ? change.changed_role : 'Dashboard or system');
-  let action;
-  if (change.undone_at) {
+  let action = null;
+  if (change.table_name === 'profiles') {
+    // admin_undo handles entries and races only. A rename is put right by
+    // asking the member, or in the dashboard.
+  } else if (change.undone_at) {
     action = el('span', { class: 'admin-badge' }, `Undone ${when(change.undone_at)}`);
   } else {
     action = el(

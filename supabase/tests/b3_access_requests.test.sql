@@ -292,7 +292,8 @@ insert into private.allowed_emails (email_hash) values (private.email_hash('ghos
 -- The G1 cleanup, as given in the migration header.
 delete from private.allowed_emails
  where email_hash not in (
-   select private.email_hash(email) from auth.users where email is not null
+   select private.email_hash(email) from auth.users
+    where email is not null and email_confirmed_at is not null
  );
 select t.ok(not t.listed('ghost@example.com'), 'G1 removes a hash with no account');
 select t.ok(t.listed('alice@example.com') and t.listed('carol@example.com'), 'G1 keeps hashes that have accounts');
@@ -343,7 +344,9 @@ reset role;
 select t.ok((select display_name from public.profiles where id = t.id('alice')) = 'Alice A. Archer', 'the rename was cleaned');
 select t.ok((select new_row ->> 'display_name' from private.change_history where table_name = 'profiles' and row_id = t.id('alice') order by id desc limit 1) = 'Alice A. Archer', 'the rename is in the change history');
 select t.ok((select old_row ->> 'display_name' from private.change_history where table_name = 'profiles' and row_id = t.id('alice') order by id desc limit 1) = 'Alice Archer', 'with the old name beside it');
-select t.ok(t.rows($$update public.profiles set justgo_status = 'verified' where id = t.id('alice')$$) = 1, 'the service role (here, the owner of the tables) can still set justgo_status');
+set local role service_role;
+select t.ok(t.rows($$update public.profiles set justgo_status = 'verified' where id = t.id('alice')$$) = 1, 'the service role can still set justgo_status');
+reset role;
 
 -- ---------------------------------------------------------------------------
 -- T10: every admin function, as anon, as a member and as an admin without

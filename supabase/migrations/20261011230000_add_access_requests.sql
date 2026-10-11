@@ -34,8 +34,20 @@
 --
 --       delete from private.allowed_emails
 --        where email_hash not in (
---          select private.email_hash(email) from auth.users where email is not null
+--          select private.email_hash(email) from auth.users
+--           where email is not null and email_confirmed_at is not null
 --        );
+--
+--     Only CONFIRMED accounts count. An unconfirmed account proves nothing:
+--     anyone can create one on any address while "Confirm email" is on, then
+--     confirm it by signing up again once it is off. So a hash whose only
+--     account is unconfirmed is an orphan too.
+--
+--     Straight after G1, delete the accounts that are still unconfirmed (none
+--     of them can be listed by then). They are bots or abandoned sign-ups, and
+--     one sitting on a member's address would stop that member joining:
+--
+--       delete from auth.users where email_confirmed_at is null;
 --
 --     It cannot be undone: the deleted hashes were never readable.
 --   * Anything that sends a message. That is B4.
@@ -85,7 +97,9 @@ revoke all on private.password_resets from public, anon, authenticated;
 
 -- Trim, collapse repeated spaces, and check the rules: 2 to 40 characters;
 -- letters in any language, spaces, apostrophes, hyphens and full stops; at
--- least one letter. [[:alpha:]] follows the database's locale, so this relies on
+-- least one letter. Look-alike letters from other scripts (a Cyrillic "а" for
+-- a Latin "a") are not caught; entry names are an honour system anyway.
+-- [[:alpha:]] follows the database's locale, so this relies on
 -- a UTF-8 database (Supabase's is). Raises a message fit to show the member.
 create function private.clean_display_name(p_name text)
 returns text
@@ -94,7 +108,9 @@ immutable
 set search_path = ''
 as $$
 declare
-  v text := trim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  -- NFC first, so "Zoë" typed as one character or as "e" plus an accent mark
+  -- is the same name to the uniqueness check.
+  v text := normalize(trim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')), NFC);
 begin
   if char_length(v) < 2 or char_length(v) > 40 then
     raise exception 'Your name needs to be 2 to 40 characters.';
@@ -138,6 +154,35 @@ as $$
          );
 $$;
 
+-- One account's access changes one at a time. Admin decisions, request_access
+-- and the G3 triggers all take this lock first, so an approval can't interleave
+-- with an email change or a deletion and leave a hash behind for an address no
+-- account uses (that would be the 5.2 attack again). An advisory lock, because
+-- locking rows in auth.users needs privileges this project may not grant.
+create function private.lock_account(p_user_id uuid)
+returns void
+language sql
+set search_path = ''
+as $$
+  select pg_advisory_xact_lock(hashtext('account:' || p_user_id::text));
+$$;
+
+-- A name for a request row made on someone's behalf (an existing member who
+-- loses their listing). Their profile name if it fits the column, else "Member".
+create function private.fallback_name(p_user_id uuid)
+returns text
+language sql
+security definer
+stable
+set search_path = ''
+as $$
+  select coalesce(
+    (select left(p.display_name, 40) from public.profiles p
+      where p.id = p_user_id and char_length(p.display_name) >= 2),
+    'Member'
+  );
+$$;
+
 -- F7: profiles.display_name was freely editable by its owner, so a rename could
 -- impersonate another member. Renames now follow the sign-up rules.
 create function private.check_profile_rename()
@@ -148,9 +193,29 @@ set search_path = ''
 as $$
 begin
   new.display_name := private.clean_display_name(new.display_name);
+  if new.display_name is not distinct from old.display_name then
+    return new;
+  end if;
   if private.display_name_taken(new.display_name, new.id) then
     raise exception 'Someone at the club already uses that name. Add a surname or initial.';
   end if;
+  -- Each rename writes a history row, so cap them. Without a cap any signed-up
+  -- account could fill the database by renaming itself in a loop. The
+  -- dashboard and the service role (no auth.uid()) are not capped.
+  if auth.uid() is not null and (
+    select count(*) from private.change_history h
+     where h.table_name = 'profiles' and h.row_id = new.id
+       and h.changed_at > now() - interval '1 day'
+  ) >= 5 then
+    raise exception 'You can change your name 5 times a day. Try again tomorrow.';
+  end if;
+  -- Keep the request on the same name as the profile, so the unique index on
+  -- active requests guards renames too, and the console shows the real name.
+  begin
+    update private.access_requests set display_name = new.display_name where user_id = new.id;
+  exception when unique_violation then
+    raise exception 'Someone at the club already uses that name. Add a surname or initial.';
+  end;
   return new;
 end;
 $$;
@@ -161,10 +226,14 @@ create trigger profiles_rename_biu
   when (new.display_name is distinct from old.display_name)
   execute function private.check_profile_rename();
 
--- F7: keep who renamed whom, the way entries and races are kept.
-create trigger profiles_history_aiud
-  after insert or update or delete on public.profiles
-  for each row execute function private.record_change();
+-- F7: keep who renamed whom, the way entries and races are kept. Renames
+-- only: sign-ups and deletions are not profile edits, and logging them would
+-- crowd the console's activity feed.
+create trigger profiles_history_au
+  after update of display_name on public.profiles
+  for each row
+  when (old.display_name is distinct from new.display_name)
+  execute function private.record_change();
 
 -- F6: the update policy covers every column, so a member could mark their own
 -- profiles.justgo_status as verified. Members may change their display name
@@ -185,6 +254,7 @@ security definer
 set search_path = ''
 as $$
 begin
+  perform private.lock_account(old.id);
   if old.email is not null then
     delete from private.allowed_emails where email_hash = private.email_hash(old.email);
   end if;
@@ -194,21 +264,34 @@ $$;
 
 -- The old address loses its hash, and an approved request becomes revoked so
 -- the owner has to approve the new address. The new address is not added. A
--- change of letter case alone is the same address and is ignored.
+-- change of letter case alone is the same address and is ignored. A member who
+-- joined before requests existed gets a revoked row, so they see "access
+-- removed" rather than the join form.
 create function private.forget_changed_email()
 returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  was_listed boolean := false;
 begin
+  -- The lock comes first, and each statement below takes a fresh snapshot, so a
+  -- hash an admin inserted while this waited is seen and removed.
+  perform private.lock_account(new.id);
   if old.email is not null then
     delete from private.allowed_emails where email_hash = private.email_hash(old.email);
+    was_listed := found;
   end if;
   update private.access_requests
      set status = 'revoked', decided_by = null, decided_at = now(),
          reason = 'Email address changed'
    where user_id = new.id and status = 'approved';
+  if was_listed and not found then
+    insert into private.access_requests (user_id, display_name, status, decided_at, reason)
+    values (new.id, private.fallback_name(new.id), 'revoked', now(), 'Email address changed')
+    on conflict (user_id) do nothing;
+  end if;
   return null;
 end;
 $$;
@@ -228,6 +311,8 @@ revoke execute on function private.display_name_taken(text, uuid) from public, a
 revoke execute on function private.check_profile_rename() from public, anon, authenticated;
 revoke execute on function private.forget_deleted_account() from public, anon, authenticated;
 revoke execute on function private.forget_changed_email() from public, anon, authenticated;
+revoke execute on function private.lock_account(uuid) from public, anon, authenticated;
+revoke execute on function private.fallback_name(uuid) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Member functions. Signed-in users only; each acts on the caller (auth.uid())
@@ -291,10 +376,13 @@ declare
   existing text;
   v_name text;
   v_note text := nullif(trim(coalesce(p_note, '')), '');
+  v_constraint text;
 begin
   if uid is null then
     raise exception 'Sign in first.' using errcode = '42501';
   end if;
+  -- A double tap sends two calls; the second waits here, then finds the first's row.
+  perform private.lock_account(uid);
   if private.is_allow_listed() then
     raise exception 'You already have access.';
   end if;
@@ -322,6 +410,10 @@ begin
 
   return jsonb_build_object('state', 'pending', 'display_name', v_name);
 exception when unique_violation then
+  get stacked diagnostics v_constraint = constraint_name;
+  if v_constraint = 'access_requests_pkey' then
+    raise exception 'Your request is already waiting for the club admin.';
+  end if;
   -- Two people asked for the same name at the same moment.
   raise exception 'Someone at the club already uses that name. Add a surname or initial.';
 end;
@@ -422,6 +514,9 @@ begin
     raise exception 'Keep the reason to 200 characters or fewer.';
   end if;
 
+  -- Taken before the email is read, so an email change or deletion either
+  -- finishes first (and is seen below) or waits for this decision to commit.
+  perform private.lock_account(p_user_id);
   select * into req from private.access_requests where user_id = p_user_id for update;
   if not found then
     raise exception 'No request from that account.';
@@ -442,6 +537,12 @@ begin
       raise exception 'Unknown decision.';
     end if;
     raise exception 'That request is %, so you can''t % it.', req.status, p_decision;
+  end if;
+
+  -- The unique index covers requests only. A member who joined before requests
+  -- existed may have taken this name since it was rejected or revoked.
+  if v_new = 'approved' and private.display_name_taken(req.display_name, p_user_id) then
+    raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
   end if;
 
   v_hash := private.email_hash(v_email);
@@ -496,15 +597,38 @@ declare
   h text;
   added boolean;
   v_uid uuid;
+  v_confirmed boolean;
+  req private.access_requests;
 begin
   perform private.require_admin();
   if coalesce(trim(p_email), '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
     raise exception 'That doesn''t look like an email address.';
   end if;
-  select id into v_uid from auth.users where lower(trim(email)) = lower(trim(p_email));
+  select id, email_confirmed_at is not null into v_uid, v_confirmed
+    from auth.users where lower(trim(email)) = lower(trim(p_email));
   if v_uid is null then
     raise exception 'No account uses that address.';
   end if;
+  -- An unconfirmed account proves nothing: anyone can make one on any address.
+  if not v_confirmed then
+    raise exception 'That account hasn''t confirmed its email address, so it can''t be approved.';
+  end if;
+  -- Lock, then check the address still belongs to that account: an email
+  -- change that finished while this waited must not leave a hash behind.
+  perform private.lock_account(v_uid);
+  if not exists (
+    select 1 from auth.users
+     where id = v_uid and lower(trim(email)) = lower(trim(p_email)) and email_confirmed_at is not null
+  ) then
+    raise exception 'That account''s email address just changed. Try again.';
+  end if;
+
+  select * into req from private.access_requests where user_id = v_uid for update;
+  if req.status is not null and req.status <> 'approved'
+     and private.display_name_taken(req.display_name, v_uid) then
+    raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+  end if;
+
   h := private.email_hash(p_email);
   insert into private.allowed_emails (email_hash) values (h) on conflict do nothing;
   added := found;
@@ -512,12 +636,16 @@ begin
      set status = 'approved', decided_by = auth.uid(), decided_at = now()
    where user_id = v_uid and status <> 'approved';
   insert into private.admin_actions (admin_id, action, target)
-  values (auth.uid(), 'allow_list_add', jsonb_build_object('email_hash', h, 'added', added));
+  values (auth.uid(), 'allow_list_add', jsonb_build_object(
+    'email_hash', h, 'added', added, 'user_id', v_uid, 'request_from', req.status
+  ));
   return jsonb_build_object('added', added);
+exception when unique_violation then
+  raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
 end;
 $$;
 
--- The mirror of the above: removing a listing revokes an approved request.
+-- The mirror of the above: removing a listing revokes the account's access.
 create or replace function public.admin_allow_list_remove(p_email text)
 returns jsonb
 language plpgsql
@@ -527,18 +655,30 @@ as $$
 declare
   h text;
   removed boolean;
+  v_uid uuid;
 begin
   perform private.require_admin();
+  select id into v_uid from auth.users where lower(trim(email)) = lower(trim(p_email));
+  if v_uid is not null then
+    perform private.lock_account(v_uid);
+  end if;
   h := private.email_hash(p_email);
   delete from private.allowed_emails where email_hash = h;
   removed := found;
-  update private.access_requests r
-     set status = 'revoked', decided_by = auth.uid(), decided_at = now()
-    from auth.users u
-   where r.user_id = u.id and r.status = 'approved'
-     and lower(trim(u.email)) = lower(trim(p_email));
+  if v_uid is not null then
+    update private.access_requests
+       set status = 'revoked', decided_by = auth.uid(), decided_at = now()
+     where user_id = v_uid and status = 'approved';
+    -- A member who joined before requests existed has no row: give them a
+    -- revoked one, so they see "access removed" rather than the join form.
+    if removed and not found then
+      insert into private.access_requests (user_id, display_name, status, decided_by, decided_at, reason)
+      values (v_uid, private.fallback_name(v_uid), 'revoked', auth.uid(), now(), 'Removed from the allow-list')
+      on conflict (user_id) do nothing;
+    end if;
+  end if;
   insert into private.admin_actions (admin_id, action, target)
-  values (auth.uid(), 'allow_list_remove', jsonb_build_object('email_hash', h, 'removed', removed));
+  values (auth.uid(), 'allow_list_remove', jsonb_build_object('email_hash', h, 'removed', removed, 'user_id', v_uid));
   return jsonb_build_object('removed', removed);
 end;
 $$;

@@ -28,4 +28,6 @@ for t in supabase/tests/*.test.sql; do
   echo "test: $(basename "$t")"
   run -f "$t"
 done
+echo "test: races.sh"
+PGDATABASE="$db" supabase/tests/races.sh "$db"
 echo "all SQL tests passed"
