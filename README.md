@@ -196,3 +196,31 @@ A slug that matches no race falls back to the race list with an explanatory
 banner, and rewrites the URL so the dead link isn't re-shared. If Supabase is
 unreachable the URL is left untouched, since an unmatched slug can't be
 distinguished from an unloaded one.
+
+## Access-request alerts
+
+`supabase/functions/notify-access-request/` is an Edge Function that sends the club admin one Telegram message when someone asks to join: the person's display name and a link to the admin console, nothing more. It is step B4 of the gated member accounts plan.
+
+**It depends on B3.** The function expects a `public.access_requests` table with `display_name` and `created_at` columns (`ACCESS_REQUEST_TABLE` in `handler.ts`). If the B3 migration names them differently, change the constant and the tests together. The alert fires on a row in that table, never on a raw `auth.users` signup, so bots and abandoned sign-ups can't page the admin.
+
+**Secrets** (Supabase dashboard → Edge Functions → Secrets). The owner sets these; they never go in the repo or in chat:
+
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` — from BotFather (step B1).
+- `NOTIFY_WEBHOOK_SECRET` — a long random string. The webhook sends it as the `x-webhook-secret` header; the function refuses anything without it.
+- `ADMIN_CONSOLE_URL` — optional. Defaults to `https://jthoyer.github.io/BalanceTRI-app/admin.html`.
+- `DAILY_ALERT_CAP` — optional. Defaults to 20 alerts per 24 hours.
+
+**Switching it on — in this order:**
+
+1. Set the secrets above.
+2. Deploy: `supabase functions deploy notify-access-request`. `config.toml` sets `verify_jwt = false` because the caller is a database webhook, not a user.
+3. In the dashboard, go to Database → Webhooks and create a webhook on `public.access_requests`, event **Insert**, type HTTP Request, method POST, URL of the function. Add the header `x-webhook-secret` with the same value as `NOTIFY_WEBHOOK_SECRET`. Create it in the dashboard, not a migration, so the secret stays out of git.
+4. Make a test request. Only your chat gets the alert.
+
+**Why it is built this way.** The chat ID comes from a secret, never from the request, so a caller can't aim the bot elsewhere. The message is fixed wording sent as plain text, so a display name can't add links or markup. Names are stripped of control characters and cut to 60. Once more than `DAILY_ALERT_CAP` requests arrive in 24 hours, the function sends one "alerts paused" notice and then goes quiet, so a flooded table can't flood the phone. If it can't read the count, it sends anyway. The admin console's pending badge is the backstop for any alert that doesn't arrive. The token is never logged.
+
+**Tests.** They run under plain Node, with no Deno needed:
+
+```
+node --experimental-strip-types --test supabase/functions/notify-access-request/handler.test.ts
+```
