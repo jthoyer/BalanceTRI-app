@@ -293,3 +293,25 @@ PGHOST=/tmp/pgtest PGUSER=nobody supabase/tests/run.sh
 ```
 
 It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can create databases and roles (the scratch `service_role` is made with `BYPASSRLS`, as on Supabase). `b3_access_requests.test.sql` covers spec tests T1 to T6 and T10, the request state machine, the name rules and the profile changes. `b3_review_fixes.test.sql` covers the fixes from the code and security reviews. `b3_b4_notifier.test.sql` checks that a real `request_access()` call fires the notifier trigger. `races.sh` runs two sessions at once to show the per-account lock holds when an approval and an email change collide.
+
+## Password resets
+
+Members get no email, so Supabase's own "reset password" email isn't used. The owner resets a password from the console instead (step B5). **Not deployed or applied yet.**
+
+1. The console's **Reset password** button calls the Edge Function `admin-reset-password` with the owner's own session.
+2. The function calls `public.admin_password_reset_begin(user_id)` **as the owner**, so the usual admin check decides: an admin, signed in with two-factor. Anyone else gets 401 or 403, and nothing changes. The owner can't reset their own password this way.
+3. That function flags "must change password" in `private.password_resets` for 7 days, signs the member out on every device (it deletes their sessions and refresh tokens), and logs `password_reset` in `private.admin_actions`.
+4. The Edge Function makes a temporary password (four random words and two digits, such as `maple-river-swift-cloud-47`) and sets it with the service role through the Auth admin API.
+5. It returns the password once. It is never stored, logged or emailed. The owner passes it on by text or in person.
+
+When the member signs in with it, the app sends them straight to "Set a new password" (B7), and `password_changed()` clears the flag. The 7-day expiry is enforced by the app in phase 1, not the server (spec R6).
+
+If setting the password fails after step 3, the member is still signed out and flagged, and their old password still works: they'll be asked for a new one when they next sign in. The owner sees an error and can try again.
+
+**Strength.** Four words from a list of 407 and two digits give about 41 bits. That's enough for a one-time password that the member replaces at once, behind Supabase's sign-in rate limit and hCaptcha. The words are in `supabase/functions/admin-reset-password/words.ts`.
+
+**Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+
+**Switching it on**, each step with the owner's go: apply `20261011232000_add_admin_password_reset.sql` after the B3 migration, then `supabase functions deploy admin-reset-password`. The console button comes in B6.
+
+**Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.

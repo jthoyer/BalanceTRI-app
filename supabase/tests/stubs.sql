@@ -30,6 +30,10 @@ create table auth.users (
   last_sign_in_at timestamptz,
   raw_user_meta_data jsonb
 );
+-- Sign-in sessions, as GoTrue keeps them (refresh_tokens.user_id is text there).
+create table auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users on delete cascade);
+create table auth.refresh_tokens (id bigserial primary key, token text, user_id varchar(255), session_id uuid references auth.sessions on delete cascade, revoked boolean default false);
+
 -- As Supabase defines them: read the JWT the API put in a session setting.
 create function auth.uid() returns uuid language sql stable as $$
   select coalesce(

@@ -152,7 +152,7 @@ select t.as_user('erin');
 select public.request_access('bob');
 reset role;
 select t.as_user('owner', 'aal2');
-select t.ok(t.msg($$select public.admin_decide_request(t.id('bob'), 'reapprove')$$) = 'Another member now uses that name, so this account can''t be approved as it is.', 'reapprove into a taken name is refused');
+select t.ok(t.msg($$select public.admin_decide_request(t.id('bob'), 'reapprove')$$) = 'Another member now uses that name. Rename this account in the dashboard, then try again.', 'reapprove into a taken name is refused');
 reset role;
 select t.ok((select status from private.access_requests where user_id = t.id('bob')) = 'rejected', 'the refused reapprove changed nothing');
 
@@ -367,7 +367,8 @@ insert into admin_calls values
   ('select * from public.admin_requests()'),
   ('select * from public.admin_requests(''pending'')'),
   ('select public.admin_decide_request(gen_random_uuid(), ''approve'')'),
-  ('select public.admin_pending_count()');
+  ('select public.admin_pending_count()'),
+  ('select public.admin_password_reset_begin(gen_random_uuid())');
 grant select on admin_calls to anon, authenticated;
 select t.ok((select count(*) from admin_calls) = (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.proname <> 'admin_status') + 1, 'every admin function is in the list (admin_requests appears twice)');
 

@@ -582,7 +582,7 @@ begin
   -- The unique index covers requests only. A member who joined before requests
   -- existed may have taken this name since it was rejected or revoked.
   if v_new = 'approved' and private.display_name_taken(req.display_name, p_user_id) then
-    raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+    raise exception 'Another member now uses that name. Rename this account in the dashboard, then try again.';
   end if;
 
   v_hash := private.email_hash(v_email);
@@ -603,7 +603,7 @@ begin
 
   return jsonb_build_object('status', v_new);
 exception when unique_violation then
-  raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+  raise exception 'Another member now uses that name. Rename this account in the dashboard, then try again.';
 end;
 $$;
 
@@ -666,7 +666,7 @@ begin
   select * into req from private.access_requests where user_id = v_uid for update;
   if req.status is not null and req.status <> 'approved'
      and private.display_name_taken(req.display_name, v_uid) then
-    raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+    raise exception 'Another member now uses that name. Rename this account in the dashboard, then try again.';
   end if;
   -- No request row (signed up but never asked, or listed before requests
   -- existed): listing them makes their profile name an approved name.
@@ -687,7 +687,7 @@ begin
   ));
   return jsonb_build_object('added', added);
 exception when unique_violation then
-  raise exception 'Another member now uses that name, so this account can''t be approved as it is.';
+  raise exception 'Another member now uses that name. Rename this account in the dashboard, then try again.';
 end;
 $$;
 

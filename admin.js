@@ -511,7 +511,15 @@ function activitySection(activity, raceNames) {
     list.replaceChildren(
       ...(rows.length
         ? rows.map(c => activityItem(c, raceNames))
-        : [el('li', { class: 'admin-empty' }, 'No changes in the last 30 days.')]),
+        : [
+            el(
+              'li',
+              { class: 'admin-empty' },
+              tableFilter.value || deletesOnly.checked
+                ? 'Nothing matches these filters in the last 30 days.'
+                : 'No changes in the last 30 days.',
+            ),
+          ]),
     );
   }
   tableFilter.addEventListener('change', render);
