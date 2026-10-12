@@ -77,11 +77,11 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 
 `admin.html` is a page for club admins. It shows:
 
-- **Requests** (once the access-requests migration is applied): everyone who has asked to join, with their name, email and note. **Approve** or **Reject** a waiting request; **Remove access** from an approved one; **Approve after all** or **Give access back** for a rejected or removed one. An optional reason is kept for admins only. A request whose Telegram message never went out is marked "Telegram message not sent". The title shows how many are waiting, and so does the calendar's **Admin** link. Until the migration is applied, this panel says "Not set up yet" and the rest of the console works as before.
+- **Requests** (live since the access-requests migrations went in on 12 October 2026): everyone who has asked to join, with their name, email and note. **Approve** or **Reject** a waiting request; **Remove access** from an approved one; **Approve after all** or **Give access back** for a rejected or removed one. An optional reason is kept for admins only. A request whose Telegram message never went out is marked "Telegram message not sent". The title shows how many are waiting, and so does the calendar's **Admin** link. On a database without those migrations, this panel says "Not set up yet" and the rest of the console works as before.
 - **Stats:** upcoming races, commitments, accounts, accounts not on the allow-list, changes this week, and sign-ups over the last 14 days.
 - **Activity:** every change to commitments and races in the last 30 days, and every display-name change, with who made it and what changed. Filter by kind of change or by member. Commitment and race changes have an **Undo** button; a rename doesn't.
 - **Removed races,** each with a **Restore** button.
-- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Once the access-requests migration is applied, each non-admin account has **Reset password** (see "Password resets"). The temporary password shows once, in a dialog with a Copy button that only **Done** closes; nothing on the page can wipe it first. A request shows when a reset is pending, and marks it once the temporary password has expired.
+- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Each non-admin account has **Reset password** (see "Password resets"). The temporary password shows once, in a dialog with a Copy button that only **Done** closes; nothing on the page can wipe it first. A request shows when a reset is pending, and marks it once the temporary password has expired.
 - **Your password:** set a password for your own account, or change it.
 - **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
@@ -214,7 +214,7 @@ distinguished from an unloaded one.
 
 **Why it is not an open relay.** No shared secret, no work, and the anon key proves nothing. The chat ID comes from a secret, never from the request. The name comes from the database, never from the request body. The claim and release functions are callable by `service_role` only. The trigger never blocks a sign-up: if `pg_net` or Vault fails, the request is still saved, and the console's pending count is the backstop. The token is never logged.
 
-**It depends on B3.** The migration `20261011231500_add_access_request_notifier.sql` expects `private.access_requests` with `user_id`, `display_name`, `status` and `notified_at` (spec section 6.1). Apply it after the B3 migration. Then rename the file to the version Supabase records.
+**It depends on B3.** The migration `20261012050000_add_access_request_notifier.sql` expects `private.access_requests` with `user_id`, `display_name`, `status` and `notified_at` (spec section 6.1). B3 is live, so it can go in next. Then rename the file to the version Supabase records. Its name sorts after B3's parts for now, so the test replay runs them in order.
 
 **Switching it on — in this order, each step with the owner's go:**
 
@@ -224,7 +224,7 @@ distinguished from an unloaded one.
    - `ADMIN_CONSOLE_URL`, optional. Defaults to `https://jthoyer.github.io/BalanceTRI-app/admin.html#requests`.
 2. Create the matching Vault secret in the SQL editor, never in a migration file. The value is the same string as `NOTIFY_SHARED_SECRET`:
    `select vault.create_secret('<the same string>', 'notify_access_request_secret');`
-3. Apply the B3 migration, then the notifier migration. It runs `create extension pg_net`.
+3. Apply the notifier migration (B3 is already live). It runs `create extension pg_net`.
 4. Deploy: `supabase functions deploy notify-access-request`. `config.toml` sets `verify_jwt = false`, because the caller is a database trigger, not a signed-in user.
 5. Make a test request. Exactly one message arrives, with the display name and the console link, and no email address.
 
@@ -235,7 +235,7 @@ Until step 2 is done the trigger stays silent. Until the function is deployed, a
 ```
 node --experimental-strip-types --test supabase/functions/notify-access-request/handler.test.ts
 
-sed '/^create extension/d' supabase/migrations/20261011231500_add_access_request_notifier.sql > /tmp/notifier_migration.sql
+sed '/^create extension/d' supabase/migrations/20261012050000_add_access_request_notifier.sql > /tmp/notifier_migration.sql
 psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db> \
      -f supabase/functions/notify-access-request/notifier.test.sql
 ```
@@ -244,7 +244,7 @@ The first set covers the secret check (T7), what the caller can and cannot influ
 
 ## Access requests (gated member accounts)
 
-Migration `20261011230000_add_access_requests.sql` is the database side of "sign up with email, password and display name, then wait for the club admin". It is step B3 of the plan. **It is not applied to the live project yet**, and it is safe with "Confirm email" still on: it only adds.
+The B3 migrations are the database side of "sign up with email, password and display name, then wait for the club admin". **They are live** (applied 12 October 2026). The connector timed out on the whole file, so B3 went in as eight parts, `20261012042054_add_access_requests_1_tables.sql` to `20261012045350_add_access_requests_8_allow_list_remove.sql`, one file each, named after the version Supabase recorded. The design notes are at the top of part 1. They are safe with "Confirm email" still on: they only add.
 
 **The allow-list stays the only gate.** The RLS policies on `entries` and `races` still check `private.is_allow_listed()` and nothing else. `private.access_requests` is the workflow and the record; it never grants anything by itself. `admin_decide_request()` moves the two together in one transaction. A write stops the moment an address leaves the allow-list, because the policies check it on every write.
 
@@ -323,6 +323,6 @@ If setting the password fails after step 3, the function undoes the reset (`admi
 
 **Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
 
-**Switching it on**, each step with the owner's go: apply `20261011232000_add_admin_password_reset.sql` after the B3 migration, then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) appears once the access-requests migration is applied; until the function is deployed it says it can't reach the service.
+**Switching it on**, each step with the owner's go: apply `20261012050100_add_admin_password_reset.sql` (B3 is already live), then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) already shows, because B3 is live. Until the function is deployed, it says it can't reach the service.
 
 **Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.

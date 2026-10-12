@@ -2,8 +2,8 @@
 -- Admin password reset (step B5, spec 5.5): the database side of the
 -- admin-reset-password Edge Function.
 --
--- NOT APPLIED. Apply it only after the owner's go, and after the B3 migration
--- (20261011230000_add_access_requests), which makes private.password_resets
+-- NOT APPLIED. Apply it only after the owner's go, and after the B3 migrations
+-- (20261012042054_add_access_requests_1_tables onwards), which make private.password_resets
 -- and private.lock_account(). Then rename this file to the version Supabase
 -- recorded (list_migrations), as CLAUDE.md says.
 --
