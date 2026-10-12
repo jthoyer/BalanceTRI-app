@@ -120,7 +120,7 @@ let toastTimer = null;
 // page, and read as broken on mobile. Not for the auth sheet's own errors
 // (send-link/verify-code failures): its opaque backdrop sits above this
 // banner, so those stay inline in the sheet instead — see openSignInForm.
-function showToast(msg, kind = 'success') {
+function showToast(msg, kind = 'success', ms = 4000) {
   toast = msg;
   toastKind = kind;
   render();
@@ -128,7 +128,7 @@ function showToast(msg, kind = 'success') {
   toastTimer = setTimeout(() => {
     toast = null;
     render();
-  }, 4000);
+  }, ms);
 }
 const $ = s => document.querySelector(s);
 const persist = () => localStorage.setItem('balance-race-ui', JSON.stringify(state));
@@ -144,32 +144,39 @@ function myEntry(race) {
   return race.entries.find(e => e.name === state.user);
 }
 // ---------------------------------------------------------------------------
-// Auth. Magic-link sign-in via Supabase Auth. Browsing the calendar and every
-// roster stays open to everyone signed out — but saving, editing or removing
-// a commitment requires being signed in (requireSignIn, below, and the
-// matching RLS policies on entries). It's still the same honour system once
-// signed in: any authenticated member can edit or rename any entry they've
-// opened via the roster's Edit link (see saveEntry, renameEntry) — sign-in
-// isn't tied to ownership, only to being someone. What it doesn't cover is
-// typing an existing member's name into a fresh commitment instead of using
-// Edit: addEntry refuses that outright rather than silently taking over
-// their row. A signed-in profile's display_name seeds state.user once, but
-// never overwrites a name someone's already typed in this browser.
+// Auth. Email and password via Supabase Auth, behind an approval step.
+// Browsing the calendar and every roster stays open to everyone signed out —
+// but saving, editing or removing a commitment requires being signed in
+// (requireSignIn, below, and the matching RLS policies on entries) AND being
+// approved: anyone can make an account (Join), and the club admin approves it
+// in the console. It's still the same honour system once approved: any member
+// can edit or rename any entry they've opened via the roster's Edit link (see
+// saveEntry, renameEntry) — sign-in isn't tied to ownership, only to being
+// someone. What it doesn't cover is typing an existing member's name into a
+// fresh commitment instead of using Edit: addEntry refuses that outright
+// rather than silently taking over their row. A signed-in profile's
+// display_name seeds state.user once, but never overwrites a name someone's
+// already typed in this browser. Email-code sign-in is gone from this page
+// (the console keeps it as the owner's fallback); a member who forgets their
+// password asks the admin for a reset.
 // ---------------------------------------------------------------------------
 let session = null;
 let profile = null;
-// isMember mirrors the server-side private.is_allow_listed() check. It never
-// gates sign-in itself — that would mean testing an email against the list
-// before Supabase Auth has verified the caller owns it, which is exactly the
-// address-probing oracle private.is_allow_listed() was written to rule out
-// (see the migration). Instead a signed-in non-member is bounced straight
-// back out by rejectNonMember(), below, rather than left sitting in a
-// half-signed-in state with nothing they can do. RLS is the real boundary
-// either way (see friendlyWriteError); gateButton/applyMemberGating just
-// keep the write buttons from being clickable for the brief moment before
-// that sign-out completes. checkMembership() re-reads it right after sign-in
-// and again after sign-out (to false, with no RPC call needed).
+// isMember mirrors the server-side private.is_allow_listed() check, and stays
+// the only thing the write buttons look at: the allow-list is the one gate,
+// and `access` below is only the story of how someone gets on it. RLS is the
+// real boundary either way (see friendlyWriteError); gateButton/applyMemberGating
+// just keep the write buttons from being clickable. checkMembership()
+// re-reads it right after sign-in and again after sign-out (to false, with no
+// RPC call needed).
 let isMember = false;
+// What my_access_status() says: {state, display_name, password_change_due,
+// reset_expires_at, reset_expired}, where state is approved, none, pending,
+// rejected or revoked. Two stand-ins cover a database that can't answer:
+// 'legacy' (the function doesn't exist yet) and 'unknown' (it failed). Only
+// the first signs a non-member out, the way the app always has; an approved
+// member is never signed out or locked out for lack of this function.
+let access = null;
 // isAdmin only decides whether the header shows a link to admin.html. The
 // admin functions check for themselves; see the add_admin_console migration.
 let isAdmin = false;
@@ -177,20 +184,39 @@ let isAdmin = false;
 // a two-factor session gets a number back; anyone else, or an older database,
 // gets an error and no number is shown.
 let adminWaiting = 0;
+const CLUB_EMAIL = 'mail@balancetriclub.com';
+const PASSWORD_MIN = 12;
+const PASSWORD_MAX = 72;
 async function checkMembership() {
   if (!session) {
     isMember = false;
     isAdmin = false;
+    access = null;
     return;
   }
-  const [member, admin] = await Promise.all([db.rpc('is_allow_listed'), db.rpc('admin_status')]);
+  const [member, admin, status] = await Promise.all([
+    db.rpc('is_allow_listed'),
+    db.rpc('admin_status'),
+    db.rpc('my_access_status'),
+  ]);
   isMember = !member.error && member.data === true;
   isAdmin = !admin.error && admin.data?.admin === true;
+  if (!status.error && status.data?.state) access = status.data;
+  else if (isMember) access = { state: 'approved' };
+  else access = { state: status.error?.code === 'PGRST202' ? 'legacy' : 'unknown' };
   adminWaiting = 0;
   if (isAdmin && admin.data?.ready) {
     const waiting = await db.rpc('admin_pending_count');
     if (!waiting.error && Number.isInteger(waiting.data)) adminWaiting = waiting.data;
   }
+}
+function firstName() {
+  const name = access?.display_name || profile?.display_name || '';
+  return name.trim().split(/\s+/)[0];
+}
+function pendingMessage() {
+  const name = firstName();
+  return `Thanks${name ? ', ' + name : ''}. Your account is waiting for the club admin to approve it. This usually takes a day or two. You can look at races in the meantime. Nothing is emailed to you, so check back here.`;
 }
 // supabase-js warns against calling auth methods synchronously from inside
 // onAuthStateChange (it can deadlock the client), so the actual sign-out is
@@ -199,26 +225,35 @@ async function checkMembership() {
 // caller has already closed the auth sheet by this point (see
 // onAuthStateChange), so showToast()'s banner is actually visible — unlike
 // the auth sheet's own errors, which stay inline; see openSignInForm.
-function rejectNonMember() {
-  showToast(
-    "This app is for Balance Tri Club members only, so you've been signed " +
-      'out. Not a member? Email mail@balancetriclub.com to request access, ' +
-      'or visit balancetriclub.com.au for club info.',
-    'error',
-  );
+function signOutWithMessage(msg, ms) {
+  showToast(msg, 'error', ms);
   setTimeout(() => db.auth.signOut(), 0);
 }
-const MEMBER_ONLY_HINT = 'Club members only — email mail@balancetriclub.com to request access.';
+function rejectNonMember() {
+  signOutWithMessage(
+    "This app is for Balance Tri Club members only, so you've been signed " +
+      `out. Not a member? Email ${CLUB_EMAIL} to request access, ` +
+      'or visit balancetriclub.com.au for club info.',
+  );
+}
+const MEMBER_ONLY_HINT = `Club members only — email ${CLUB_EMAIL} to request access.`;
+function gateHint() {
+  if (access?.state === 'pending') return pendingMessage();
+  if (access?.state === 'none')
+    return 'Ask to join the club first, then the admin can approve you.';
+  return MEMBER_ONLY_HINT;
+}
 // Disables a write button for a signed-in non-member, leaving it untouched
 // for a signed-out visitor (clicking still opens the sign-in gate as before)
 // and for an approved member. A disabled button never fires its click
 // handler, so this only ever suppresses a request RLS would have rejected
-// anyway — it adds no new permission check of its own.
+// anyway — it adds no new permission check of its own. The hint says why:
+// waiting for approval, or not asked yet.
 function gateButton(btn) {
   if (!btn) return;
   const gated = session && !isMember;
   btn.disabled = gated;
-  btn.title = gated ? MEMBER_ONLY_HINT : '';
+  btn.title = gated ? gateHint() : '';
 }
 // Covers the write controls that are static DOM (always present, never torn
 // down by render()) — the header's Add-a-race button, the two form submit
@@ -244,6 +279,98 @@ async function loadProfile() {
     persist();
   }
 }
+// Small DOM builder for the auth sheet's forms. Everything here is built as
+// nodes, never innerHTML, so a typed address or a display name can only ever
+// be text.
+function elt(tag, props = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(props)) {
+    if (name === 'class') node.className = value;
+    else if (value === true) node.setAttribute(name, '');
+    else if (value !== false && value != null) node.setAttribute(name, value);
+  }
+  node.append(...kids);
+  return node;
+}
+function closeAccountMenu() {
+  const button = $('#accountMenuButton');
+  const menu = $('#accountMenu');
+  if (!button || !menu) return;
+  button.setAttribute('aria-expanded', 'false');
+  menu.classList.add('hidden');
+}
+function renderAccountMenu() {
+  const wrap = elt('div', { class: 'account-menu-wrap' });
+  const button = elt(
+    'button',
+    {
+      type: 'button',
+      class: 'text-button',
+      id: 'accountMenuButton',
+      'aria-haspopup': 'true',
+      'aria-expanded': 'false',
+      'aria-controls': 'accountMenu',
+    },
+    'Account',
+  );
+  const changePassword = elt(
+    'button',
+    { type: 'button', class: 'account-menu-item', id: 'changePasswordButton' },
+    'Change password',
+  );
+  const signOut = elt(
+    'button',
+    { type: 'button', class: 'account-menu-item', id: 'signOutButton' },
+    'Sign out',
+  );
+  const menu = elt(
+    'div',
+    { class: 'account-menu hidden', id: 'accountMenu' },
+    changePassword,
+    signOut,
+  );
+  button.onclick = () => {
+    const open = button.getAttribute('aria-expanded') !== 'true';
+    button.setAttribute('aria-expanded', String(open));
+    menu.classList.toggle('hidden', !open);
+    if (open) changePassword.focus();
+  };
+  wrap.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || menu.classList.contains('hidden')) return;
+    e.preventDefault();
+    closeAccountMenu();
+    button.focus();
+  });
+  changePassword.onclick = () => {
+    closeAccountMenu();
+    showPasswordSheet('change');
+  };
+  signOut.onclick = () => db.auth.signOut();
+  wrap.append(button, menu);
+  return wrap;
+}
+function renderMemberBanner() {
+  const banner = $('#memberBanner');
+  banner.textContent = '';
+  const st = access?.state;
+  const show = session && !isMember && st !== 'rejected' && st !== 'revoked';
+  banner.classList.toggle('hidden', !show);
+  if (!show) return;
+  if (st === 'pending') {
+    banner.append(pendingMessage());
+  } else if (st === 'none') {
+    const ask = elt('button', { type: 'button', class: 'member-banner-action' }, 'Ask to join');
+    ask.onclick = () => showNameSheet();
+    banner.append("You're signed in, but you haven't asked to join the club yet. ", ask);
+  } else {
+    const link = elt('a', { href: `mailto:${CLUB_EMAIL}` }, CLUB_EMAIL);
+    banner.append(
+      "You're signed in, but this account isn't a club member yet. Email ",
+      link,
+      ' to request access.',
+    );
+  }
+}
 function renderAuth() {
   const widget = $('#authWidget');
   widget.textContent = '';
@@ -254,13 +381,8 @@ function renderAuth() {
     const name = document.createElement('span');
     name.className = 'auth-name';
     name.textContent = profile?.display_name || session.user.email;
-    const signOut = document.createElement('button');
-    signOut.type = 'button';
-    signOut.className = 'text-button';
-    signOut.id = 'signOutButton';
-    signOut.textContent = 'Sign out';
-    // Name first, Sign out last: it ends the session, so it sits at the edge
-    // where it's easy to find and hard to hit by mistake.
+    // Name first, the account menu last: Sign out lives inside it, so it sits
+    // at the edge where it's easy to find and hard to hit by mistake.
     widget.append(name);
     if (isAdmin) {
       const adminLink = document.createElement('a');
@@ -269,8 +391,7 @@ function renderAuth() {
       adminLink.textContent = adminWaiting ? `Admin (${adminWaiting} waiting)` : 'Admin';
       widget.append(adminLink);
     }
-    widget.append(signOut);
-    $('#signOutButton').onclick = () => db.auth.signOut();
+    widget.append(renderAccountMenu());
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
     // Opens the same auth sheet the nudge/gate use, rather than expanding a
@@ -279,49 +400,220 @@ function renderAuth() {
     // not an overlay, competing for space in .header-actions).
     $('#signInButton').onclick = () => requireSignIn('Sign in');
   }
-  $('#memberBanner').classList.toggle('hidden', !session || isMember);
+  renderMemberBanner();
   applyMemberGating();
 }
-// heading: an <h2> to show above the email field. cancel: a handler for a
-// "Cancel" button shown below the form. skipIntro: true when the caller
-// (the nudge) already showed this same explanation a moment ago, so this
-// step should jump straight to the email field instead of repeating it.
-// Always targets the auth sheet now.
+// ---------------------------------------------------------------------------
+// Form pieces for the auth sheet: a labelled field, a password field with a
+// show/hide toggle, and the checks on names and passwords. The database is the
+// authority on all of them (private.clean_display_name, the Supabase password
+// settings); these only give the answer sooner.
+// ---------------------------------------------------------------------------
+function authField({ label, name, type = 'text', hint, control = 'input', ...attrs }) {
+  const id = `auth-${name}`;
+  const input = elt(control, { id, name, ...(control === 'input' ? { type } : {}), ...attrs });
+  const hintNode = hint ? elt('p', { class: 'auth-field-hint', id: `${id}-hint` }, hint) : null;
+  if (hintNode) input.setAttribute('aria-describedby', hintNode.id);
+  const field = elt('div', { class: 'auth-field' }, elt('label', { for: id }, label), input);
+  if (hintNode) field.append(hintNode);
+  return { field, input, hintNode };
+}
+// Both icons are in the markup and CSS shows one, by aria-pressed, so no
+// markup is built from a variable here. Paste is never blocked, so a password
+// manager or a pasted passphrase works.
+function passwordField({ label, name, autocomplete, hint }) {
+  const { field, input, hintNode } = authField({
+    label,
+    name,
+    type: 'password',
+    hint,
+    autocomplete,
+    required: true,
+    autocapitalize: 'none',
+    spellcheck: 'false',
+  });
+  const toggle = elt('button', {
+    type: 'button',
+    class: 'password-toggle',
+    'aria-label': 'Show password',
+    'aria-pressed': 'false',
+  });
+  toggle.innerHTML = `<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg><svg class="eye-shut" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /><path d="M4 4l16 16" /></svg>`;
+  toggle.onclick = () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    toggle.setAttribute('aria-pressed', String(show));
+    toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  };
+  input.parentElement.insertBefore(
+    elt('div', { class: 'password-input' }, input, toggle),
+    hintNode,
+  );
+  return { field, input };
+}
+const PASSWORD_HINT = `${PASSWORD_MIN} to ${PASSWORD_MAX} characters. Any characters are fine, and a few random words works well.`;
+// Passwords under 12 characters are already refused, so the bundled list holds
+// only the common ones of 12 to 72 characters. It loads the first time a new
+// password is checked (browsing never fetches it), and a failed load is
+// retried next time rather than remembered.
+let commonPasswords = null;
+function loadCommonPasswords() {
+  commonPasswords ||= fetch(`${BASE_PATH}assets/common-passwords.txt?v=2026101201`)
+    .then(res => {
+      if (!res.ok) throw new Error('common-password list ' + res.status);
+      return res.text();
+    })
+    .then(
+      text =>
+        new Set(
+          text
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#')),
+        ),
+    )
+    .catch(err => {
+      commonPasswords = null;
+      throw err;
+    });
+  return commonPasswords;
+}
+// Length is counted in characters; bcrypt's real limit is 72 bytes, so the top
+// end is checked in bytes (the same as Supabase does) and an accented letter or
+// emoji just uses up more of it. Returns the message to show, or null.
+async function passwordProblem(password) {
+  if ([...password].length < PASSWORD_MIN)
+    return `Your password needs at least ${PASSWORD_MIN} characters.`;
+  if (new TextEncoder().encode(password).length > PASSWORD_MAX)
+    return `Your password can be at most ${PASSWORD_MAX} characters.`;
+  let common;
+  try {
+    common = await loadCommonPasswords();
+  } catch {
+    return "We couldn't check that password against the list of common ones. Check your connection and try again.";
+  }
+  if (common.has(password.toLowerCase()))
+    return 'That password is too common. Try a few random words instead.';
+  return null;
+}
+// Mirrors private.clean_display_name: collapse spaces, 2 to 40 characters,
+// letters (any language), spaces, apostrophes, hyphens and full stops, at
+// least one letter. Returns {name} or {error}.
+function cleanDisplayName(raw) {
+  const name = raw.replace(/\s+/g, ' ').trim().normalize('NFC').replace(/͏/g, '').trim();
+  const length = [...name].length;
+  if (length < 2 || length > 40) return { error: 'Your name needs to be 2 to 40 characters.' };
+  if (!/^(?:[\p{L}̀-ͯ]|[ '.’-])+$/u.test(name))
+    return { error: 'Use letters, spaces, apostrophes, hyphens and full stops in your name.' };
+  if (!/\p{L}/u.test(name)) return { error: 'Your name needs at least one letter.' };
+  return { name };
+}
+function authErrorText(error, prefix) {
+  if (error.code === 'invalid_credentials')
+    return "That email and password don't match. Check them and try again.";
+  if (/rate_limit/.test(error.code || ''))
+    return 'Too many tries just now. Wait a few minutes, then try again.';
+  return prefix + error.message;
+}
+function showFormError(errorEl, message, focusEl) {
+  errorEl.textContent = message;
+  errorEl.classList.remove('hidden');
+  if (focusEl) focusEl.focus();
+}
+function setBusy(btn, busy, idleText, busyText) {
+  btn.disabled = busy;
+  btn.textContent = busy ? busyText : idleText;
+}
+// Swaps the sheet's contents for one step. aria-label follows the step, so a
+// screen reader announces "Join" or "Set a new password" rather than "Sign in".
+function showStep(host, label, nodes) {
+  host.textContent = '';
+  host.append(...nodes);
+  $('.auth-sheet').setAttribute('aria-label', label);
+}
+function stepCancelButton(text, onclick) {
+  const button = elt('button', { type: 'button', class: 'auth-sheet-cancel' }, text);
+  button.onclick = onclick;
+  return button;
+}
+function stepLinkButton(text, onclick) {
+  const button = elt('button', { type: 'button', class: 'auth-sheet-link' }, text);
+  button.onclick = onclick;
+  return button;
+}
+// Focus has to land somewhere in the sheet after a step swap: the button that
+// was clicked no longer exists, and the focus trap only sees keys from inside.
+function focusStep(host) {
+  (host.querySelector('input, textarea') || $('#authSheetClose')).focus();
+}
+// heading: an <h2> to show above the form. cancel: a handler for a "Cancel"
+// button shown below the form. skipIntro: true when the caller (the nudge)
+// already showed the explanation a moment ago, so this step should jump
+// straight to the fields instead of repeating it. Always targets the auth
+// sheet now.
 function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
-  // Every `heading` passed in today is one of this file's own literals, so
-  // this was never the live hole the roster was. It is written as DOM anyway
-  // so that no innerHTML sink in this file takes an argument at all — which
-  // is what lets the lint rule run with no suppressions, and makes the next
-  // one somebody adds fail the build. Two full literals rather than one
-  // built with an interpolated intro: `skipIntro` is a boolean, not
-  // untrusted text, but the rule flags any substitution into innerHTML, not
-  // just unsafe ones — so it has to stay a bare template literal either way.
-  if (skipIntro) {
-    host.innerHTML = `<form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form><p class="auth-sheet-error hidden" role="alert"></p>`;
-  } else {
-    host.innerHTML = `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><form class="sign-in-form"><input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /><button type="submit" class="send-link-button">Send link</button></form><p class="auth-sheet-error hidden" role="alert"></p>`;
+  const email = authField({
+    label: 'Email',
+    name: 'email',
+    type: 'email',
+    required: true,
+    maxlength: '254',
+    autocomplete: 'email',
+    autocapitalize: 'none',
+    placeholder: 'you@example.com',
+  });
+  const password = passwordField({
+    label: 'Password',
+    name: 'password',
+    autocomplete: 'current-password',
+  });
+  const button = elt('button', { type: 'submit', class: 'send-link-button' }, 'Sign in');
+  const form = elt(
+    'form',
+    { class: 'sign-in-form auth-form' },
+    email.field,
+    password.field,
+    button,
+  );
+  const formError = elt('p', { class: 'auth-sheet-error hidden', role: 'alert' });
+  const nodes = [];
+  if (heading) nodes.push(elt('h2', {}, heading));
+  if (!skipIntro) {
+    nodes.push(
+      elt(
+        'p',
+        { class: 'auth-sheet-hint' },
+        'Sign in to add or edit race information. You can view the calendar anytime without signing in.',
+      ),
+    );
   }
-  if (heading) {
-    const h2 = document.createElement('h2');
-    h2.textContent = heading;
-    host.prepend(h2);
-  }
-  if (cancel) {
-    const cancelButton = document.createElement('button');
-    cancelButton.type = 'button';
-    cancelButton.className = 'auth-sheet-cancel';
-    cancelButton.textContent = 'Cancel';
-    host.append(cancelButton);
-  }
-  const form = host.querySelector('form');
-  const formError = host.querySelector('.auth-sheet-error');
+  nodes.push(form, formError);
+  // R1: no "email me a reset link" button on purpose. Resets go through the
+  // club admin, who passes on a temporary password.
+  nodes.push(
+    elt(
+      'p',
+      { class: 'auth-sheet-hint auth-sheet-hint-muted' },
+      'Forgot your password? Ask the club admin to reset it. Email ',
+      elt('a', { href: `mailto:${CLUB_EMAIL}` }, CLUB_EMAIL),
+      '.',
+    ),
+    elt(
+      'p',
+      { class: 'auth-sheet-hint auth-sheet-hint-muted' },
+      'New here? ',
+      stepLinkButton('Join the club', () => {
+        openJoinForm(host, { cancel });
+        focusStep(host);
+      }),
+    ),
+  );
+  if (cancel) nodes.push(stepCancelButton('Cancel', cancel));
+  showStep(host, heading || 'Sign in', nodes);
   form.addEventListener('submit', async e => {
     e.preventDefault();
     formError.classList.add('hidden');
-    const email = new FormData(e.target).get('email').trim();
-    const btn = e.target.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Sending…';
+    setBusy(button, true, 'Sign in', 'Signing in…');
     let captchaToken;
     let error;
     try {
@@ -330,81 +622,253 @@ function openSignInForm(host, { heading, cancel, skipIntro } = {}) {
       error = captchaError;
     }
     if (!error) {
-      ({ error } = await db.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: location.href, captchaToken },
+      ({ error } = await db.auth.signInWithPassword({
+        email: email.input.value.trim().toLowerCase(),
+        password: password.input.value,
+        options: { captchaToken },
       }));
     }
+    // On success onAuthStateChange closes the sheet and re-renders; there's
+    // no page reload. Failures stay inline, not showToast(): the auth sheet's
+    // own opaque backdrop sits above the page banner (z-index 40 vs. the
+    // banner's place in normal flow), so a toast fired from here would be
+    // invisible until the member closed the sheet — exactly the wrong time to
+    // tell them why their sign-in attempt failed.
     if (error) {
-      // Inline, not showToast(): the auth sheet's own opaque backdrop sits
-      // above the page banner (z-index 40 vs. the banner's place in normal
-      // flow), so a toast fired from here would be invisible until the
-      // member closed the sheet — exactly the wrong time to tell them why
-      // their sign-in attempt failed.
-      formError.textContent = 'Could not send sign-in link: ' + error.message;
-      formError.classList.remove('hidden');
-      btn.disabled = false;
-      btn.textContent = 'Send link';
-      return;
+      showFormError(formError, authErrorText(error, 'Could not sign in: '), password.input);
+      password.input.select();
+      setBusy(button, false, 'Sign in', 'Signing in…');
     }
-    showCodeStep(host, email, cancel);
   });
-  if (cancel) host.querySelector('.auth-sheet-cancel').onclick = cancel;
 }
-// Step two: the email carries both a link and a 6-digit code, and this is the
-// box for the code. It exists because of how magic links fail on a phone —
-// tapping the link inside the Gmail or Outlook app opens an in-app browser,
-// which signs *that* browser in and leaves the tab they started in signed
-// out, form and all. Typing the code signs them in where they already are.
-// Supabase issues one token per request, so the link and the code are the
-// same credential: whichever they use, the other stops working.
-function showCodeStep(host, email, cancel) {
-  // A bare literal, like the form above it: nothing interpolated reaches
-  // innerHTML, which is what keeps no-unsanitized/property passing here with
-  // no suppression. The typed address and the Cancel button go in as DOM.
-  host.innerHTML = `<h2>Check your email</h2><p class="auth-sheet-hint">We've sent a sign-in link and a 6-digit code to <strong class="sent-to-address"></strong>. Tap the link, or type the code here — whichever is easier.</p><form class="sign-in-form code-form"><input class="code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="123456" required aria-label="6-digit code from your email" title="Six digits, from the email" /><button type="submit" class="send-link-button">Sign me in</button></form><p class="auth-sheet-error hidden" role="alert"></p><p class="auth-sheet-hint auth-sheet-hint-muted">No email yet? Give it a minute, then check your spam folder.</p>`;
-  host.querySelector('.sent-to-address').textContent = email;
-  if (cancel) {
-    const cancelButton = document.createElement('button');
-    cancelButton.type = 'button';
-    cancelButton.className = 'auth-sheet-cancel';
-    cancelButton.textContent = 'Cancel';
-    cancelButton.onclick = cancel;
-    host.append(cancelButton);
-  }
-  const form = host.querySelector('form');
-  const input = form.querySelector('.code-input');
-  const formError = host.querySelector('.auth-sheet-error');
-  // Phones paste the code with whatever spacing the mail app rendered, so
-  // strip anything that isn't a digit as they type rather than rejecting it.
-  // This is also why there's no maxlength: the attribute truncates a pasted
-  // "48 29 15" to "48 29 " before this handler ever sees it, and the strip
-  // then leaves four digits. Length is enforced here instead.
-  input.addEventListener('input', () => {
-    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+// The join form (S1 to S8): one screen, then signUp, then request_access. With
+// Confirm email off, signUp returns a session at once; request_access then
+// files the request and the account sits in 'pending'. If signUp works but
+// request_access doesn't (a name clash, say) the person stays signed in and
+// gets the name step again (S8), with the account in state 'none'.
+function openJoinForm(host, { cancel } = {}) {
+  const email = authField({
+    label: 'Email',
+    name: 'email',
+    type: 'email',
+    required: true,
+    maxlength: '254',
+    autocomplete: 'email',
+    autocapitalize: 'none',
+    placeholder: 'you@example.com',
   });
-  input.focus();
+  const echo = elt('p', { class: 'auth-field-hint', id: 'auth-email-echo' });
+  email.input.setAttribute('aria-describedby', 'auth-email-echo');
+  email.field.append(echo);
+  email.input.addEventListener('input', () => {
+    const address = email.input.value.trim().toLowerCase();
+    echo.textContent = '';
+    if (address && email.input.validity.valid)
+      echo.append(
+        "We'll use ",
+        elt('strong', {}, address),
+        " to sign you in. Check it's right, because nothing is emailed to you.",
+      );
+  });
+  const password = passwordField({
+    label: 'Password',
+    name: 'password',
+    autocomplete: 'new-password',
+    hint: PASSWORD_HINT,
+  });
+  const again = passwordField({
+    label: 'Confirm password',
+    name: 'confirm',
+    autocomplete: 'new-password',
+  });
+  const display = authField({
+    label: 'Display name',
+    name: 'display-name',
+    required: true,
+    maxlength: '60',
+    autocomplete: 'name',
+    hint: "This is how you'll appear on race rosters. Add a surname or initial if you share a first name with someone.",
+  });
+  const note = authField({
+    label: 'Note (optional)',
+    name: 'note',
+    control: 'textarea',
+    rows: '2',
+    maxlength: '280',
+    hint: 'How do you know the club? (for example, squad, JustGo number, who invited you)',
+  });
+  const button = elt('button', { type: 'submit', class: 'send-link-button' }, 'Join');
+  const form = elt(
+    'form',
+    { class: 'sign-in-form auth-form' },
+    email.field,
+    password.field,
+    again.field,
+    display.field,
+    note.field,
+    button,
+  );
+  const formError = elt('p', { class: 'auth-sheet-error hidden', role: 'alert' });
+  const nodes = [
+    elt('h2', {}, 'Join the club'),
+    elt(
+      'p',
+      { class: 'auth-sheet-hint' },
+      'Make an account and the club admin will approve it, usually within a day or two. You can look at races in the meantime.',
+    ),
+    form,
+    formError,
+    elt(
+      'p',
+      { class: 'auth-sheet-hint auth-sheet-hint-muted' },
+      'Already have an account? ',
+      stepLinkButton('Sign in', () => {
+        openSignInForm(host, { heading: 'Sign in', cancel });
+        focusStep(host);
+      }),
+    ),
+  ];
+  if (cancel) nodes.push(stepCancelButton('Cancel', cancel));
+  showStep(host, 'Join the club', nodes);
   form.addEventListener('submit', async e => {
     e.preventDefault();
     formError.classList.add('hidden');
-    const token = input.value.trim();
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Signing in…';
-    // type:'email' covers both halves of signInWithOtp — a brand-new address
-    // (signup) and a returning one (magiclink) — so one call handles both.
-    const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
-    // On success onAuthStateChange closes the sheet and re-renders; there's
-    // no page reload here, unlike the link, so nothing else to do. Inline,
-    // not showToast() — see the same note in openSignInForm's submit
-    // handler: the auth sheet's backdrop hides the page banner.
-    if (error) {
-      formError.textContent = "That code didn't work: " + error.message;
-      formError.classList.remove('hidden');
-      btn.disabled = false;
-      btn.textContent = 'Sign me in';
-      input.select();
+    // Off from the first tap, so a double tap can't send two sign-ups while
+    // the common-password list is still loading.
+    if (button.disabled) return;
+    button.disabled = true;
+    // authBusy holds back onAuthStateChange while this finishes the job: it
+    // would otherwise close this sheet the moment signUp returns a session,
+    // before request_access has been tried.
+    try {
+      const address = email.input.value.trim().toLowerCase();
+      const problem = await passwordProblem(password.input.value);
+      if (problem) return showFormError(formError, problem, password.input);
+      if (password.input.value !== again.input.value)
+        return showFormError(formError, "The two passwords don't match.", again.input);
+      const cleaned = cleanDisplayName(display.input.value);
+      if (cleaned.error) return showFormError(formError, cleaned.error, display.input);
+      setBusy(button, true, 'Join', 'Joining…');
+      authBusy = true;
+      let captchaToken;
+      try {
+        captchaToken = await getCaptchaToken(form);
+      } catch (captchaError) {
+        return showFormError(formError, 'Could not join: ' + captchaError.message);
+      }
+      // has_password marks an account that already has a password, so the
+      // "set a password" prompt for older accounts never shows for this one.
+      const { data, error } = await db.auth.signUp({
+        email: address,
+        password: password.input.value,
+        options: { captchaToken, data: { has_password: true } },
+      });
+      if (error || !data.session) {
+        // With Confirm email on, an existing address comes back as a fake
+        // user with no identities instead of an error; same message either way.
+        const exists =
+          error?.code === 'user_already_exists' ||
+          /already (registered|been registered)/i.test(error?.message || '') ||
+          (!error && data.user?.identities?.length === 0);
+        if (exists)
+          return showFormError(
+            formError,
+            "There's already an account for this email. Sign in, or ask the club admin to reset your password.",
+            email.input,
+          );
+        return showFormError(
+          formError,
+          error
+            ? authErrorText(error, 'Could not join: ')
+            : "We couldn't sign you in after making your account. Try signing in.",
+        );
+      }
+      session = data.session;
+      await requestAccess(host, cleaned.name, note.input.value, { cancel });
+    } finally {
+      authBusy = false;
+      if (host.contains(button)) setBusy(button, false, 'Join', 'Joining…');
     }
+  });
+}
+// True while the join form is mid-way through signUp then request_access.
+let authBusy = false;
+// Files the request for the signed-in account. On success the account is
+// pending: close the sheet and let the banner say so. On failure (S8) stay
+// signed in and show the name step again with the server's message, which is
+// worded for the member.
+async function requestAccess(host, displayName, note, { cancel } = {}) {
+  const { error } = await db.rpc('request_access', {
+    p_display_name: displayName,
+    p_note: note.trim() || null,
+  });
+  await loadProfile();
+  await checkMembership();
+  renderAuth();
+  render();
+  if (error) {
+    const message =
+      error.code === 'PGRST202'
+        ? "Joining isn't switched on yet. Please try again later."
+        : error.message;
+    openNameStep(host, { error: message, name: displayName, note, cancel });
+    focusStep(host);
+    return false;
+  }
+  closeAuthSheet({ force: true });
+  $('#memberBanner').focus();
+  return true;
+}
+// The name step: shown after a failed request_access (S8), and to a signed-in
+// account that never asked to join (state 'none').
+function openNameStep(host, { error, name = '', note = '', cancel } = {}) {
+  const display = authField({
+    label: 'Display name',
+    name: 'display-name',
+    required: true,
+    maxlength: '60',
+    autocomplete: 'name',
+    value: name,
+    hint: "This is how you'll appear on race rosters. Add a surname or initial if you share a first name with someone.",
+  });
+  const noteField = authField({
+    label: 'Note (optional)',
+    name: 'note',
+    control: 'textarea',
+    rows: '2',
+    maxlength: '280',
+    hint: 'How do you know the club? (for example, squad, JustGo number, who invited you)',
+  });
+  noteField.input.value = note;
+  const button = elt('button', { type: 'submit', class: 'send-link-button' }, 'Send request');
+  const form = elt(
+    'form',
+    { class: 'sign-in-form auth-form' },
+    display.field,
+    noteField.field,
+    button,
+  );
+  const formError = elt('p', { class: 'auth-sheet-error hidden', role: 'alert' });
+  const nodes = [
+    elt('h2', {}, 'Ask to join'),
+    elt(
+      'p',
+      { class: 'auth-sheet-hint' },
+      'Tell the club who you are and the admin can approve your account.',
+    ),
+    form,
+    formError,
+  ];
+  if (cancel) nodes.push(stepCancelButton('Not now', cancel));
+  showStep(host, 'Ask to join', nodes);
+  if (error) showFormError(formError, error);
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    formError.classList.add('hidden');
+    const cleaned = cleanDisplayName(display.input.value);
+    if (cleaned.error) return showFormError(formError, cleaned.error, display.input);
+    setBusy(button, true, 'Send request', 'Sending…');
+    await requestAccess(host, cleaned.name, noteField.input.value, { cancel });
   });
 }
 // ---------------------------------------------------------------------------
@@ -412,19 +876,22 @@ function showCodeStep(host, email, cancel) {
 // and the write gate) opens this one overlay — a bottom sheet on desktop,
 // full screen on mobile (styles-additions.css), never document flow that
 // could squeeze other layout. As a "nudge" it appears once per visit for a
-// signed-out browser (unless snoozed) offering Sign In or View Calendar;
+// signed-out browser (unless snoozed) offering Sign In, Join or View Calendar;
 // tapping outside it (desktop), the close button, or View Calendar all
 // dismiss it the same way — self-dismissing, never blocking. As a "gate"
 // requireSignIn() opens it to require sign-in before a write goes through
 // (saving, editing or removing a commitment); the close button there just
-// backs out.
+// backs out. The same sheet carries the signed-in steps too: 'account' for
+// ones a member can back out of (ask to join, set a password, change it) and
+// 'locked' for the one they can't, the forced set-password step after an
+// admin reset.
 // ---------------------------------------------------------------------------
 let authSheetDismissed = false; // this pageview only, independent of the snooze
-let authSheetMode = null; // 'nudge' | 'gate' | null
+let authSheetMode = null; // 'nudge' | 'gate' | 'account' | 'locked' | null
 // Tracks the nudge's checkbox live (via onchange, below) rather than reading
 // it at dismiss time, because clicking "Sign in" swaps the checkbox out for
-// the email form — so a box checked before that swap must still be honoured
-// if the visitor then cancels out of the email step instead of finishing it.
+// the sign-in form — so a box checked before that swap must still be honoured
+// if the visitor then cancels out of that step instead of finishing it.
 let authSheetSnoozeWanted = false;
 // Who to give focus back to on close: whatever was focused right before the
 // sheet opened (the header's Sign In button, a write button behind the
@@ -438,14 +905,15 @@ function focusableElements(container) {
   ].filter(el => el.offsetParent !== null);
 }
 // Moves focus into the sheet once its content for this open/step exists.
-// Called after building the nudge, and after openSignInForm/showCodeStep
-// build their step — those already focus a specific input where it matters
-// more (e.g. the code field); this is the fallback for everything else.
+// Called after building the nudge or the gate; the later steps focus their
+// first field themselves (focusStep).
 function focusAuthSheet() {
   const focusables = focusableElements($('.auth-sheet'));
   (focusables[0] || $('#authSheetClose')).focus();
 }
-function closeAuthSheet() {
+// force: closes the locked step too, which nothing a member does may do.
+function closeAuthSheet({ force = false } = {}) {
+  if (authSheetMode === 'locked' && !force) return;
   if (authSheetMode === 'nudge') {
     if (authSheetSnoozeWanted) {
       state.authDismissedUntil = Date.now() + 10 * 24 * 60 * 60 * 1000;
@@ -455,31 +923,43 @@ function closeAuthSheet() {
   }
   authSheetMode = null;
   authSheetSnoozeWanted = false;
+  $('.auth-sheet').classList.remove('is-locked');
   $('#authSheetBackdrop').classList.add('hidden');
   if (authSheetReturnFocus && document.body.contains(authSheetReturnFocus))
     authSheetReturnFocus.focus();
   authSheetReturnFocus = null;
+}
+function openSheet(mode) {
+  if (authSheetMode === null) authSheetReturnFocus = document.activeElement;
+  authSheetMode = mode;
+  $('.auth-sheet').classList.toggle('is-locked', mode === 'locked');
+  $('#authSheetBackdrop').classList.remove('hidden');
 }
 function showAuthSheetNudge() {
   if (session || authSheetDismissed || Date.now() < state.authDismissedUntil) return;
   authSheetReturnFocus = document.activeElement;
   authSheetMode = 'nudge';
   authSheetSnoozeWanted = false;
-  // Same wording as openSignInForm's intro (a bare literal here too, for the
-  // same no-unsanitized reason) so a visitor sees one consistent explanation
-  // rather than two different ones back to back; skipIntro on the click
-  // through below is what keeps it from repeating a second time.
+  // A bare literal (not built from a variable) for the no-unsanitized rule;
+  // the sign-in and join forms the buttons open are built as DOM instead.
   $('#authSheetBody').innerHTML =
-    `<p class="auth-sheet-hint">Sign in as a Balance Tri Club member with your Triathlon Australia registered email address to add or edit race information. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Not a member? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a> for club info.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetBrowseButton">View Calendar</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
+    `<p class="auth-sheet-hint">Sign in to add or edit race information. New here? Join, and the club admin will approve your account. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Want to know more about the club? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a>.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetJoinButton">Join</button><button type="button" class="secondary-button" id="authSheetBrowseButton">View Calendar</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
+  $('.auth-sheet').setAttribute('aria-label', 'Sign in');
   $('#authSheetSnooze').onchange = e => {
     authSheetSnoozeWanted = e.target.checked;
   };
-  $('#authSheetSignInButton').onclick = () =>
+  $('#authSheetSignInButton').onclick = () => {
     openSignInForm($('#authSheetBody'), {
       heading: 'Sign in',
       cancel: closeAuthSheet,
       skipIntro: true,
     });
+    focusStep($('#authSheetBody'));
+  };
+  $('#authSheetJoinButton').onclick = () => {
+    openJoinForm($('#authSheetBody'), { cancel: closeAuthSheet });
+    focusStep($('#authSheetBody'));
+  };
   $('#authSheetBrowseButton').onclick = closeAuthSheet;
   $('#authSheetBackdrop').classList.remove('hidden');
   focusAuthSheet();
@@ -495,6 +975,144 @@ function requireSignIn(title) {
   focusAuthSheet();
   return false;
 }
+// The name step for a signed-in account that hasn't asked to join.
+function showNameSheet() {
+  if (authSheetMode === 'locked') return;
+  openSheet('account');
+  openNameStep($('#authSheetBody'), { cancel: closeAuthSheet });
+  focusStep($('#authSheetBody'));
+}
+// Set or change a password while signed in. kind:
+//   'forced'  after an admin reset (R5): can't be closed, only signed out of
+//   'prompt'  the one-time nudge for older accounts without a password (E1)
+//   'change'  "Change password" in the account menu (P8)
+// The database clears the reset flag when told to (password_changed), and in
+// phase 1 it trusts this step to have actually changed the password (R6).
+function showPasswordSheet(kind) {
+  if (authSheetMode === 'locked') return;
+  const host = $('#authSheetBody');
+  openSheet(kind === 'forced' ? 'locked' : 'account');
+  const title = {
+    forced: 'Set a new password',
+    prompt: 'Set a password',
+    change: 'Change password',
+  }[kind];
+  const intro = {
+    forced: `Welcome back${firstName() ? ', ' + firstName() : ''}. Choose a new password to finish signing in.`,
+    prompt: 'Set a password so you can sign in without an email code.',
+    change: "Choose a new password. You'll use it the next time you sign in.",
+  }[kind];
+  const password = passwordField({
+    label: 'New password',
+    name: 'password',
+    autocomplete: 'new-password',
+    hint: PASSWORD_HINT,
+  });
+  const again = passwordField({
+    label: 'Confirm new password',
+    name: 'confirm',
+    autocomplete: 'new-password',
+  });
+  const button = elt('button', { type: 'submit', class: 'send-link-button' }, 'Save password');
+  const form = elt(
+    'form',
+    { class: 'sign-in-form auth-form' },
+    password.field,
+    again.field,
+    button,
+  );
+  const formError = elt('p', { class: 'auth-sheet-error hidden', role: 'alert' });
+  const nodes = [
+    elt('h2', {}, title),
+    elt('p', { class: 'auth-sheet-hint' }, intro),
+    form,
+    formError,
+  ];
+  if (kind === 'forced') nodes.push(stepCancelButton('Sign out instead', () => db.auth.signOut()));
+  else nodes.push(stepCancelButton(kind === 'prompt' ? 'Not now' : 'Cancel', closeAuthSheet));
+  showStep(host, title, nodes);
+  if (kind === 'prompt') localStorage.setItem(passwordPromptKey(), '1');
+  // Once updateUser has worked, a retry only needs to finish the job: asking
+  // Supabase to set the same password again would be refused as unchanged.
+  let saved = false;
+  // Back on, with a message, when something stops the save.
+  const fail = (message, focusEl) => {
+    showFormError(formError, message, focusEl);
+    setBusy(button, false, 'Save password', 'Saving…');
+  };
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    formError.classList.add('hidden');
+    // Off from the first tap, so a double tap can't save twice while the
+    // common-password list is still loading.
+    if (button.disabled) return;
+    button.disabled = true;
+    if (!saved) {
+      const problem = await passwordProblem(password.input.value);
+      if (problem) return fail(problem, password.input);
+      if (password.input.value !== again.input.value)
+        return fail("The two passwords don't match.", again.input);
+      const { error } = await db.auth.updateUser({
+        password: password.input.value,
+        data: { has_password: true },
+      });
+      if (error) {
+        return fail(
+          error.code === 'same_password'
+            ? "That's the same as your current password. Choose a different one."
+            : error.code === 'reauthentication_needed'
+              ? 'For your security, sign out and sign in again, then change your password.'
+              : 'Could not save your password: ' + error.message,
+          password.input,
+        );
+      }
+      saved = true;
+    }
+    if (kind === 'forced') {
+      const { error } = await db.rpc('password_changed');
+      // A database without the function can't hold the flag either.
+      if (error && error.code !== 'PGRST202')
+        return fail(
+          "Your password is saved, but we couldn't finish. Press Save password to try again.",
+        );
+    }
+    await checkMembership();
+    renderAuth();
+    closeAuthSheet({ force: true });
+    showToast('Password saved.');
+  });
+  focusStep(host);
+}
+const passwordPromptKey = () => `balance-password-prompt-${session.user.id}`;
+// What to do about the account that just signed in or loaded, in order of
+// priority: sign out an expired temporary password (R6) or a rejected or
+// revoked account, then make a reset password be changed (R5), then the
+// one-time prompts. Nothing here runs without a session.
+function reactToAccess() {
+  if (!session || !access) return;
+  const contact = `If you think that's a mistake, contact the club at ${CLUB_EMAIL}.`;
+  if (access.reset_expired)
+    return signOutWithMessage(
+      'This temporary password has expired. Ask the club admin for a new one.',
+      12000,
+    );
+  if (access.state === 'rejected')
+    return signOutWithMessage(`Your account wasn't approved. ${contact}`, 12000);
+  if (access.state === 'revoked')
+    return signOutWithMessage(`Your access has been removed. ${contact}`, 12000);
+  if (access.state === 'legacy') return rejectNonMember();
+  if (access.password_change_due) return showPasswordSheet('forced');
+  if (access.state === 'approved') {
+    if (!session.user.user_metadata?.has_password && !localStorage.getItem(passwordPromptKey()))
+      showPasswordSheet('prompt');
+  } else if (access.state === 'none' && autoAskedFor !== session.user.id) {
+    autoAskedFor = session.user.id;
+    showNameSheet();
+  }
+}
+// Offer the name step on its own once per pageview; after that the banner's
+// "Ask to join" button is the way back to it.
+let autoAskedFor = null;
 async function initAuth() {
   const {
     data: { session: s },
@@ -503,25 +1121,32 @@ async function initAuth() {
   if (session) {
     await loadProfile();
     await checkMembership();
-    if (!isMember) rejectNonMember();
   }
   renderAuth();
+  if (session) reactToAccess();
   showAuthSheetNudge();
   db.auth.onAuthStateChange(async (_event, s) => {
     session = s;
+    // The join form is mid-way through signUp then request_access and
+    // finishes the job itself (see openJoinForm). USER_UPDATED is our own
+    // updateUser call (a password or flag); its callers refresh what they
+    // need, and re-reading here could briefly overwrite that with older state.
+    if (authBusy || _event === 'USER_UPDATED') return;
     if (session) {
       await loadProfile();
       await checkMembership();
-      closeAuthSheet();
-      if (!isMember) rejectNonMember();
+      if (authSheetMode === 'nudge' || authSheetMode === 'gate') closeAuthSheet();
+      reactToAccess();
     } else {
       profile = null;
       isMember = false;
+      access = null;
+      if (authSheetMode === 'locked' || authSheetMode === 'account')
+        closeAuthSheet({ force: true });
     }
     renderAuth();
-    // Signing in with the code never reloads the page, so the name loadProfile
-    // just seeded into state.user would sit unrendered until the next redraw.
-    // The link path got this free from the reload.
+    // Signing in never reloads the page, so the name loadProfile just seeded
+    // into state.user would sit unrendered until the next redraw.
     render();
   });
 }
@@ -1652,6 +2277,11 @@ $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();
 });
 $('#authSheetClose').onclick = closeAuthSheet;
+// A tap anywhere outside the account menu closes it; Escape inside it is
+// handled where the menu is built.
+document.addEventListener('click', e => {
+  if (!e.target.closest('.account-menu-wrap')) closeAccountMenu();
+});
 // Escape backs out same as the × button; Tab is trapped inside the sheet so
 // a keyboard user can't tab into the page behind what's meant to be modal.
 $('#authSheetBackdrop').addEventListener('keydown', e => {
