@@ -1,4 +1,5 @@
--- Tests for migration 20261011230000_add_access_requests.sql (step B3).
+-- Tests for the B3 migrations, 20261012042054_add_access_requests_1_tables.sql
+-- to 20261012045350_add_access_requests_8_allow_list_remove.sql.
 -- Covers spec tests T1 to T6 and T10, plus the request state machine, the
 -- display-name rules and the profile changes. Run with supabase/tests/run.sh.
 begin;
