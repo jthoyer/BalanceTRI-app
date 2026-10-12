@@ -1,9 +1,9 @@
 -- ---------------------------------------------------------------------------
 -- Batch approval: approve several waiting requests in one go.
 --
--- NOT APPLIED. Apply it only after the owner's go, and after the B3
--- migrations (admin_decide_request, part 6). It doesn't depend on B5. Then rename this file to the
--- version Supabase recorded (list_migrations), as CLAUDE.md says.
+-- Applied to the live project on 12 October 2026, after the B3 migrations
+-- (admin_decide_request, part 6), and named after the version Supabase
+-- recorded. It doesn't depend on B5.
 --
 -- Why: at cutover, G1 removes about 159 pre-approvals, so nearly every member
 -- joins and waits for the owner. One at a time, that's an evening's work.
