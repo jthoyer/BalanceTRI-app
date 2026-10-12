@@ -670,9 +670,12 @@ begin
   end if;
   -- No request row (signed up but never asked, or listed before requests
   -- existed): listing them makes their profile name an approved name.
+  -- Compare the name as it would be cleaned: old profile names were never
+  -- normalised, and "Sam  Smith" must clash with "Sam Smith".
   if req.user_id is null and private.display_name_taken(
-       (select p.display_name from public.profiles p where p.id = v_uid), v_uid) then
-    raise exception 'Another member uses this account''s name. Rename the account before adding it.';
+       (select normalize(trim(regexp_replace(coalesce(p.display_name, ''), '\s+', ' ', 'g')), NFC)
+          from public.profiles p where p.id = v_uid), v_uid) then
+    raise exception 'Another member uses this account''s name. Rename the account in the dashboard, then try again.';
   end if;
 
   h := private.email_hash(p_email);

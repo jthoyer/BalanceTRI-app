@@ -313,9 +313,9 @@ The owner can't reset their own password this way, nor another admin's: admins u
 
 When the member signs in with it, the app sends them straight to "Set a new password" (B7), and `password_changed()` clears the flag. The 7-day expiry is enforced by the app in phase 1, not the server (spec R6).
 
-If setting the password fails after step 3, the member is still signed out and flagged, and their old password still works: they'll be asked for a new one when they next sign in. The owner sees an error and can try again.
+If setting the password fails after step 3, the function undoes the reset (`admin_password_reset_abort()`): the flag goes, and the log records `password_reset_failed`. The member stays signed out, and their old password still works. The owner sees an error and can try again.
 
-**Strength.** Four words from a list of 407 and two digits give about 41 bits. That's enough for a one-time password that the member replaces at once, behind Supabase's sign-in rate limit and hCaptcha. The words are in `supabase/functions/admin-reset-password/words.ts`.
+**Strength.** Four words from a list of 407 and two digits give about 41 bits, in about 28 characters. The list has no US spellings and no words that sound like others when read out, since R4 lets the owner pass the password on in person. That's enough for a one-time password that the member replaces at once, behind Supabase's sign-in rate limit and hCaptcha. The words are in `supabase/functions/admin-reset-password/words.ts`.
 
 **Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
 

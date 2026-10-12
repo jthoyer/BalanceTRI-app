@@ -84,6 +84,28 @@ begin
 end;
 $$;
 
+-- Called when setting the temporary password failed: undo the flag, so a
+-- member whose own password still works isn't later told a temporary password
+-- has expired, and log that the reset didn't happen. The sign-out stands.
+create function public.admin_password_reset_abort(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  perform private.lock_account(p_user_id);
+  delete from private.password_resets
+   where user_id = p_user_id and cleared_at is null and reset_by = auth.uid();
+  insert into private.admin_actions (admin_id, action, target)
+  values (auth.uid(), 'password_reset_failed', jsonb_build_object('user_id', p_user_id));
+end;
+$$;
+
+revoke execute on function public.admin_password_reset_abort(uuid) from public, anon;
+grant execute on function public.admin_password_reset_abort(uuid) to authenticated;
+
 -- Signed-in users only; the functions refuse non-admins inside.
 revoke execute on function public.admin_password_reset_begin(uuid) from public, anon;
 revoke execute on function public.admin_password_reset_finish(uuid) from public, anon;

@@ -23,6 +23,7 @@ interface Opts {
   begin?: { status: number; body?: object } | 'throw';
   set?: number | 'throw';
   finish?: number | 'throw';
+  abort?: number | 'throw';
   env?: Record<string, string | undefined>;
 }
 
@@ -33,6 +34,10 @@ function setup(opts: Opts = {}) {
     if (url.endsWith('/auth/v1/user')) {
       if (opts.me === 'throw') throw new Error('network');
       return new Response('{}', { status: opts.me ?? 200 });
+    }
+    if (url.endsWith('/rpc/admin_password_reset_abort')) {
+      if (opts.abort === 'throw') throw new Error('network');
+      return new Response(null, { status: opts.abort ?? 204 });
     }
     if (url.endsWith('/rpc/admin_password_reset_finish')) {
       if (opts.finish === 'throw') throw new Error('network');
@@ -61,6 +66,7 @@ function setup(opts: Opts = {}) {
     begins: () => calls.filter(c => c.url.endsWith('/rpc/admin_password_reset_begin')),
     sets: () => calls.filter(c => c.url.includes('/auth/v1/admin/users/')),
     finishes: () => calls.filter(c => c.url.endsWith('/rpc/admin_password_reset_finish')),
+    aborts: () => calls.filter(c => c.url.endsWith('/rpc/admin_password_reset_abort')),
   };
 }
 
@@ -177,12 +183,39 @@ test('if setting the password fails, the admin gets an error, no password, and t
       body = await res.json();
       sent = JSON.parse(String(t.sets()[0].init?.body)).password;
       assert.equal(t.finishes().length, 0, 'no second sign-out when the password was not set');
+      assert.equal(t.aborts().length, 1, 'the reset is undone');
+      assert.match(String(body.error), /reset was undone/);
     } finally {
       console.error = orig;
     }
     assert.equal(body.password, undefined);
     assert.ok(logged.every(l => !l.includes(sent)));
   }
+});
+
+test('if undoing also fails, the admin is told the member will be asked for a new password', async () => {
+  const t = setup({ set: 500, abort: 500 });
+  const res = await handle(post({ user_id: USER_ID }), t.deps);
+  assert.equal(res.status, 502);
+  assert.match(String((await res.json()).error), /asked for a new password/);
+});
+
+test('a database error that is not a refusal reads as an outage, not a no', async () => {
+  for (const status of [404, 500, 503]) {
+    const t = setup({ begin: { status, body: { message: 'raw upstream text' } } });
+    const res = await handle(post({ user_id: USER_ID }), t.deps);
+    assert.equal(res.status, 502);
+    assert.equal((await res.json()).error, 'Could not reach the database. Try again.');
+    assert.equal(t.sets().length, 0);
+  }
+});
+
+test('a request with no Origin gets no CORS headers but is still checked like any other', async () => {
+  const t = setup();
+  const res = await handle(post({ user_id: USER_ID }, { authorization: ADMIN.authorization }), t.deps);
+  assert.equal(res.headers.get('access-control-allow-origin'), null);
+  assert.equal(res.status, 200);
+  assert.equal(t.calls[0].url, 'https://example.supabase.co/auth/v1/user');
 });
 
 test('a database outage sets no password', async () => {
@@ -222,7 +255,7 @@ test('CORS: only the console origin is allowed', async () => {
   assert.equal(res.headers.get('access-control-allow-origin'), 'https://club.example');
 });
 
-test('temporary passwords: four words and two digits, about 24 characters, all different', () => {
+test('temporary passwords: four words and two digits, about 28 characters, all different', () => {
   const deps = setup().deps;
   const seen = new Set<string>();
   for (let i = 0; i < 2000; i++) {

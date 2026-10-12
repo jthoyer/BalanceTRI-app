@@ -116,9 +116,22 @@ select public.request_access('ZED');
 reset role;
 select t.as_user('owner', 'aal2');
 select public.admin_decide_request(t.id('zara'), 'approve');
-select t.ok(t.msg($$select public.admin_allow_list_add('zed@example.com')$$) = 'Another member uses this account''s name. Rename the account before adding it.', 'add checks the profile name when there is no request');
+select t.ok(t.msg($$select public.admin_allow_list_add('zed@example.com')$$) = 'Another member uses this account''s name. Rename the account in the dashboard, then try again.', 'add checks the profile name when there is no request');
 reset role;
 select t.ok(not t.listed('zed@example.com'), 'and lists nothing');
+-- An old profile name with a double space still clashes (R1 B5 round, L3).
+select t.mk('sam_old');
+select set_config('session_replication_role', 'replica', true);  -- write the old name as it was, past the rename rules
+update public.profiles set display_name = 'Sam  Smith' where id = t.id('sam_old');
+select set_config('session_replication_role', 'origin', true);
+select t.mk('sam_new');
+select t.as_user('sam_new');
+select public.request_access('Sam Smith');
+reset role;
+select t.as_user('owner', 'aal2');
+select public.admin_decide_request(t.id('sam_new'), 'approve');
+select t.ok(t.msg($$select public.admin_allow_list_add('sam_old@example.com')$$) like 'Another member uses this account''s name.%', 'an old double-spaced name still clashes');
+reset role;
 
 -- ---------------------------------------------------------------------------
 -- R2 M1 / R1 M2: the history logs real renames only, and renames are capped.

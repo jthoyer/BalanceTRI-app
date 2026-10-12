@@ -18,9 +18,9 @@
 //      not survive the reset.
 //   5. Return the password once. It is never stored, logged or emailed.
 //
-// If step 3 fails, the member is still flagged and signed out, and their old
-// password still works: they'll be asked for a new one when they next sign in.
-// The admin sees an error and can try again.
+// If step 3 fails, the reset is undone (admin_password_reset_abort): the flag
+// goes and the log says it failed. The member stays signed out, and their old
+// password still works. The admin sees an error and can try again.
 
 import { WORDS } from './words.ts';
 
@@ -54,7 +54,7 @@ function pick(deps: Deps, n: number): number {
   }
 }
 
-// e.g. "maple-river-swift-cloud-47": about 24 characters, easy to read out.
+// e.g. "maple-river-swift-cloud-47": about 28 characters, easy to read out.
 export function temporaryPassword(deps: Deps): string {
   const words = Array.from({ length: 4 }, () => WORDS[pick(deps, WORDS.length)]);
   const digits = String(pick(deps, 100)).padStart(2, '0');
@@ -127,8 +127,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       // keep the default
     }
     // 401 and 403 pass through: not signed in, not an admin, or no two-factor.
-    const status = begin.status === 401 || begin.status === 403 ? begin.status : 400;
-    return json(status, { error: message });
+    // 400 is a refusal with a reason. Anything else is an outage, not a no.
+    if (begin.status === 401 || begin.status === 403 || begin.status === 400) {
+      return json(begin.status, { error: message });
+    }
+    return json(502, { error: 'Could not reach the database. Try again.' });
   }
   const started = (await begin.json().catch(() => ({}))) as { expires_at?: string };
 
@@ -151,9 +154,21 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (!set.ok) {
     // Log the status only, never the password.
     console.error(`admin-reset-password: Auth answered ${set.status}`);
+    let undone = false;
+    try {
+      const abort = await deps.fetch(`${url}/rest/v1/rpc/admin_password_reset_abort`, {
+        method: 'POST',
+        headers: { apikey: anonKey, authorization: auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ p_user_id: userId }),
+      });
+      undone = abort.ok;
+    } catch {
+      // reported below
+    }
     return json(502, {
-      error:
-        'The member is signed out and will be asked for a new password, but the temporary password was not set. Try again.',
+      error: undone
+        ? 'The temporary password was not set, so the reset was undone. The member is signed out; their old password still works. Try again.'
+        : 'The temporary password was not set. The member is signed out and will be asked for a new password when they next sign in. Try again.',
     });
   }
 

@@ -44,6 +44,7 @@ select t.ok((select cleared_at is null from private.password_resets where user_i
 select t.ok((select count(*) from auth.sessions where user_id = t.id('sam')) = 0, 'every session of the member is gone (signed out everywhere)');
 select t.ok((select count(*) from auth.refresh_tokens where user_id = t.id('sam')::text) = 0, 'and every refresh token');
 select t.ok((select count(*) from auth.sessions where user_id = t.id('kit')) = 1, 'other members stay signed in');
+select t.ok((select count(*) from auth.refresh_tokens where user_id = t.id('kit')::text) = 1, 'and keep their refresh tokens');
 select t.ok(exists (select 1 from private.admin_actions where action = 'password_reset' and target ->> 'user_id' = t.id('sam')::text), 'the reset is logged');
 select t.ok(not exists (select 1 from private.admin_actions where action = 'password_reset' and target::text ~* 'password"\s*:'), 'the log holds no password field');
 
@@ -87,6 +88,19 @@ select t.ok(not exists (select 1 from private.password_resets where user_id = t.
 
 select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_begin(uuid)', 'execute'), 'anon cannot call begin');
 select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_finish(uuid)', 'execute'), 'anon cannot call finish');
+
+-- L1 (R1 on B5): a failed set is undone, and the log says so.
+select t.as_user('owner', 'aal2');
+select public.admin_password_reset_begin(t.id('kit'));
+select public.admin_password_reset_abort(t.id('kit'));
+reset role;
+select t.ok(not exists (select 1 from private.password_resets where user_id = t.id('kit') and cleared_at is null), 'abort removes the flag');
+select t.ok(exists (select 1 from private.admin_actions where action = 'password_reset_failed' and target ->> 'user_id' = t.id('kit')::text), 'abort logs the failure');
+select t.as_user('kit');
+select t.ok(not (public.my_access_status() ->> 'password_change_due')::boolean, 'the member is not asked for a new password');
+select t.fails($$select public.admin_password_reset_abort(t.id('sam'))$$, '42501');
+reset role;
+select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_abort(uuid)', 'execute'), 'anon cannot call abort');
 
 \o
 \echo B5 checks passed
