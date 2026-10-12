@@ -53,7 +53,7 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
 export function cleanName(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   const cleaned = raw
-    .replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return Array.from(cleaned).slice(0, MAX_NAME_LENGTH).join('');

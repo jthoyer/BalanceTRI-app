@@ -214,7 +214,7 @@ distinguished from an unloaded one.
 
 **Why it is not an open relay.** No shared secret, no work, and the anon key proves nothing. The chat ID comes from a secret, never from the request. The name comes from the database, never from the request body. The claim and release functions are callable by `service_role` only. The trigger never blocks a sign-up: if `pg_net` or Vault fails, the request is still saved, and the console's pending count is the backstop. The token is never logged.
 
-**It depends on B3.** The migration `20261012050000_add_access_request_notifier.sql` expects `private.access_requests` with `user_id`, `display_name`, `status` and `notified_at` (spec section 6.1). B3 is live, so it can go in next. Then rename the file to the version Supabase records. Its name sorts after B3's parts for now, so the test replay runs them in order.
+**It depends on B3.** The migration `20261012050607_add_access_request_notifier.sql` expects `private.access_requests` with `user_id`, `display_name`, `status` and `notified_at` (spec section 6.1). **It is live** (applied and deployed 12 October 2026), and the file carries the version Supabase recorded. What's left is the owner's: the secrets (steps 1 and 2 below) and the test request (step 5).
 
 **Switching it on — in this order, each step with the owner's go:**
 
@@ -224,8 +224,8 @@ distinguished from an unloaded one.
    - `ADMIN_CONSOLE_URL`, optional. Defaults to `https://jthoyer.github.io/BalanceTRI-app/admin.html#requests`.
 2. Create the matching Vault secret in the SQL editor, never in a migration file. The value is the same string as `NOTIFY_SHARED_SECRET`:
    `select vault.create_secret('<the same string>', 'notify_access_request_secret');`
-3. Apply the notifier migration (B3 is already live). It runs `create extension pg_net`.
-4. Deploy: `supabase functions deploy notify-access-request`. `config.toml` sets `verify_jwt = false`, because the caller is a database trigger, not a signed-in user.
+3. ~~Apply the notifier migration.~~ Done 12 October 2026. It switched on `pg_net`.
+4. ~~Deploy: `supabase functions deploy notify-access-request`.~~ Done 12 October 2026. `config.toml` sets `verify_jwt = false`, because the caller is a database trigger, not a signed-in user. With no secrets set, it answers "not configured" and sends nothing.
 5. Make a test request. Exactly one message arrives, with the display name and the console link, and no email address.
 
 Until step 2 is done the trigger stays silent. Until the function is deployed, a request still saves, and the console shows it as not announced.
@@ -235,7 +235,7 @@ Until step 2 is done the trigger stays silent. Until the function is deployed, a
 ```
 node --experimental-strip-types --test supabase/functions/notify-access-request/handler.test.ts
 
-sed '/^create extension/d' supabase/migrations/20261012050000_add_access_request_notifier.sql > /tmp/notifier_migration.sql
+sed '/^create extension/d' supabase/migrations/20261012050607_add_access_request_notifier.sql > /tmp/notifier_migration.sql
 psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db> \
      -f supabase/functions/notify-access-request/notifier.test.sql
 ```
@@ -323,6 +323,6 @@ If setting the password fails after step 3, the function undoes the reset (`admi
 
 **Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
 
-**Switching it on**, each step with the owner's go: apply `20261012050100_add_admin_password_reset.sql` (B3 is already live), then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) already shows, because B3 is live. Until the function is deployed, it says it can't reach the service.
+**Switching it on**, each step with the owner's go: apply `20261012050700_add_admin_password_reset.sql` (B3 is already live), then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) already shows, because B3 is live. Until the function is deployed, it says it can't reach the service.
 
 **Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.

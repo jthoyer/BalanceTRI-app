@@ -1,4 +1,4 @@
--- Tests for migration 20261012050100_add_admin_password_reset.sql (step B5).
+-- Tests for migration 20261012050700_add_admin_password_reset.sql (step B5).
 -- The database half of spec test T9. Run with supabase/tests/run.sh.
 begin;
 \set QUIET on
