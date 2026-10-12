@@ -189,6 +189,9 @@ test('rejects bad JSON, a missing or malformed user_id, and oversized bodies', a
 test('cleans a hostile display name from the database', async () => {
   assert.equal(cleanName('  Sam\n\tLee  '), 'Sam Lee');
   assert.equal(cleanName('Sam‮evil'), 'Sam evil');
+  assert.equal(cleanName('Sam\u200bLee'), 'Sam Lee');
+  assert.equal(cleanName('Sam\u2066Lee\u2069'), 'Sam Lee');
+  assert.equal(cleanName('\ufeffSam'), 'Sam');
   assert.equal(cleanName('a'.repeat(200)).length, 60);
   assert.equal(cleanName(42), '');
   const t = setup({ claim: { send: true, display_name: '   ', last_of_day: false } });

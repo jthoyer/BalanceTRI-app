@@ -1,9 +1,9 @@
 -- Tests for the database side of the notifier
--- (migration 20261012050000_add_access_request_notifier.sql).
+-- (migration 20261012050607_add_access_request_notifier.sql).
 --
 -- Run against a THROWAWAY Postgres, never the live project. From the repo root:
 --
---   sed '/^create extension/d' supabase/migrations/20261012050000_add_access_request_notifier.sql > /tmp/notifier_migration.sql
+--   sed '/^create extension/d' supabase/migrations/20261012050607_add_access_request_notifier.sql > /tmp/notifier_migration.sql
 --   psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db> \
 --        -f supabase/functions/notify-access-request/notifier.test.sql
 --

@@ -2,16 +2,16 @@
 -- Access-request alerts (step B4 of the gated member accounts plan): the
 -- database side of the notify-access-request Edge Function.
 --
--- NOT APPLIED. Apply it only after the owner's go, and only after the B3
--- migration that creates private.access_requests. After applying, rename this
--- file to the version Supabase recorded (list_migrations), as CLAUDE.md says.
+-- Applied to the live project on 12 October 2026, after B3, and named after
+-- the version Supabase recorded. The Edge Function is deployed too.
 --
--- Before it works, the owner must also (none of this belongs in a migration):
+-- Before it sends anything, the owner must also (none of this belongs in a
+-- migration):
 --   1. Create the Vault secret, in the SQL editor:
 --        select vault.create_secret('<long random string>', 'notify_access_request_secret');
 --   2. Set the same string as the Edge Function secret NOTIFY_SHARED_SECRET.
---   3. Set TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID, then deploy the
---      function. Until step 1 exists, the trigger stays silent.
+--   3. Set TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID.
+--   Until step 1 exists, the trigger stays silent.
 --
 -- How it fits together:
 --   * An AFTER INSERT trigger on private.access_requests posts the user_id,
