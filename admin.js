@@ -36,7 +36,8 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 function show(...nodes) {
-  root.replaceChildren(...nodes);
+  // Skip the nulls that optional sections return, or they print as "null".
+  root.replaceChildren(...nodes.filter(n => n !== null && n !== undefined && n !== false));
 }
 function card(title, ...body) {
   return el('section', { class: 'admin-card' }, title ? el('h2', {}, title) : null, ...body);
@@ -65,6 +66,15 @@ async function rpc(name, args) {
   const { data, error } = await db.rpc(name, args);
   if (error) throw new Error(error.message);
   return data;
+}
+// The access-request functions come with a migration (add_access_requests)
+// that may not be applied yet. PostgREST answers PGRST202 for a function it
+// doesn't have: show that panel as "not set up" rather than break the page.
+async function rpcOptional(name, args) {
+  const { data, error } = await db.rpc(name, args);
+  if (error?.code === 'PGRST202') return { missing: true };
+  if (error) throw new Error(error.message);
+  return { data };
 }
 const sydney = { timeZone: 'Australia/Sydney' };
 function when(iso) {
@@ -145,17 +155,75 @@ db.auth.onAuthStateChange(event => {
 // ---------------------------------------------------------------------------
 // Sign-in. Its own form, because the calendar signs out anyone not on the
 // allow-list — an admin who isn't would never get here through it.
-// shouldCreateUser: false means this form can't create accounts.
+// Password first (spec P10); either way two-factor comes next. The emailed
+// code stays as the fallback, and shouldCreateUser: false means it can't
+// create accounts.
 // ---------------------------------------------------------------------------
-function showSignIn() {
-  const email = el('input', {
+function emailInput(value) {
+  return el('input', {
     type: 'email',
     name: 'email',
     required: true,
     autocomplete: 'email',
     placeholder: 'you@example.com',
     'aria-label': 'Admin email address',
+    value: value || undefined,
   });
+}
+function showSignIn(prefill) {
+  const email = emailInput(prefill);
+  const password = el('input', {
+    type: 'password',
+    name: 'password',
+    required: true,
+    autocomplete: 'current-password',
+    placeholder: 'Password',
+    'aria-label': 'Password',
+  });
+  const button = el('button', { class: 'primary-button', type: 'submit' }, 'Sign in');
+  const form = el('form', { class: 'admin-form admin-signin-form' }, email, password, button);
+  const signInError = errorLine();
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    signInError.set('');
+    setBusy(button, 'Signing in…');
+    try {
+      const captchaToken = await getCaptchaToken(form);
+      const { error } = await db.auth.signInWithPassword({
+        email: email.value.trim(),
+        password: password.value,
+        options: { captchaToken },
+      });
+      if (error) throw error;
+      start();
+    } catch (err) {
+      signInError.set("Couldn't sign in: " + err.message);
+      clearBusy(button);
+      password.select();
+    }
+  });
+  const useCode = el(
+    'button',
+    { class: 'text-button', type: 'button', onclick: () => showCodeSignIn(email.value.trim()) },
+    'Email me a code instead',
+  );
+  show(
+    card(
+      'Admin sign-in',
+      el(
+        'p',
+        { class: 'admin-hint' },
+        "Sign in with your email and password. You'll be asked for your authenticator code next.",
+      ),
+      form,
+      signInError,
+      el('p', { class: 'admin-hint' }, 'No password yet? ', useCode),
+    ),
+  );
+  (prefill ? password : email).focus();
+}
+function showCodeSignIn(prefill) {
+  const email = emailInput(prefill);
   const button = el('button', { class: 'primary-button', type: 'submit' }, 'Send code');
   const form = el('form', { class: 'admin-form' }, email, button);
   const sendError = errorLine();
@@ -177,12 +245,18 @@ function showSignIn() {
       clearBusy(button);
     }
   });
+  const usePassword = el(
+    'button',
+    { class: 'text-button', type: 'button', onclick: () => showSignIn(email.value.trim()) },
+    'Use your password instead',
+  );
   show(
     card(
       'Admin sign-in',
       el('p', { class: 'admin-hint' }, "Enter your admin email. We'll send a 6-digit code."),
       form,
       sendError,
+      el('p', { class: 'admin-hint' }, usePassword),
     ),
   );
   email.focus();
@@ -336,9 +410,9 @@ function showFactorCode(factorId, title, text, extra) {
 // ---------------------------------------------------------------------------
 async function showConsole() {
   show(el('p', { class: 'admin-loading' }, 'Loading…'));
-  let stats, activity, removed, users, races;
+  let stats, activity, removed, users, races, requestResult;
   try {
-    [stats, activity, removed, users, races] = await Promise.all([
+    [stats, activity, removed, users, races, requestResult] = await Promise.all([
       rpc('admin_stats'),
       rpc('admin_activity', { p_days: 30, p_limit: 300 }),
       rpc('admin_removed_races'),
@@ -352,26 +426,40 @@ async function showConsole() {
           if (error) throw new Error(error.message);
           return data;
         }),
+      rpcOptional('admin_requests'),
     ]);
   } catch (e) {
     return message('Could not load the console', e.message);
   }
+  // null means the access-requests migration isn't applied yet.
+  const requests = requestResult.missing ? null : requestResult.data;
+  const waiting = requests ? requests.filter(r => r.status === 'pending').length : 0;
   const raceNames = new Map(races.map(r => [r.id, `${r.name} (${day(r.date)})`]));
   const me = users.find(u => u.is_admin && u.email);
   show(
     el(
       'div',
       { class: 'admin-title' },
-      el('h1', {}, 'Admin console'),
+      el(
+        'h1',
+        {},
+        'Admin console',
+        waiting
+          ? el('a', { class: 'admin-badge admin-waiting', href: '#requests' }, `${waiting} waiting`)
+          : null,
+      ),
       el('button', { class: 'text-button', type: 'button', onclick: showConsole }, 'Refresh'),
     ),
     me && !me.on_allow_list ? allowListWarning(me.email) : null,
+    requestsSection(requests),
     statsSection(stats),
     activitySection(activity, raceNames),
     removedSection(removed),
-    usersSection(users),
+    usersSection(users, requests !== null),
+    passwordSection(),
     allowListSection(),
   );
+  if (location.hash === '#requests') document.getElementById('requests')?.scrollIntoView();
 }
 function allowListWarning(email) {
   return el(
@@ -499,11 +587,20 @@ function activitySection(activity, raceNames) {
     el('option', { value: 'races' }, 'Races'),
     el('option', { value: 'profiles' }, 'Name changes'),
   );
+  // Who made the change: everyone in this feed, by the label the feed uses.
+  const people = [...new Set(activity.map(c => c.changed_by_label).filter(Boolean))].sort();
+  const personFilter = el(
+    'select',
+    { 'aria-label': 'Show changes by' },
+    el('option', { value: '' }, 'Anyone'),
+    people.map(p => el('option', { value: p }, p)),
+  );
   const deletesOnly = el('input', { type: 'checkbox' });
   function render() {
     const rows = activity.filter(
       c =>
         (!tableFilter.value || c.table_name === tableFilter.value) &&
+        (!personFilter.value || c.changed_by_label === personFilter.value) &&
         (!deletesOnly.checked ||
           c.op === 'DELETE' ||
           (c.new_row && c.new_row.deleted_at && !c.old_row?.deleted_at)),
@@ -515,7 +612,7 @@ function activitySection(activity, raceNames) {
             el(
               'li',
               { class: 'admin-empty' },
-              tableFilter.value || deletesOnly.checked
+              tableFilter.value || personFilter.value || deletesOnly.checked
                 ? 'Nothing matches these filters in the last 30 days.'
                 : 'No changes in the last 30 days.',
             ),
@@ -523,6 +620,7 @@ function activitySection(activity, raceNames) {
     );
   }
   tableFilter.addEventListener('change', render);
+  personFilter.addEventListener('change', render);
   deletesOnly.addEventListener('change', render);
   render();
   return card(
@@ -531,6 +629,7 @@ function activitySection(activity, raceNames) {
       'div',
       { class: 'admin-filters' },
       tableFilter,
+      personFilter,
       el('label', { class: 'admin-check' }, deletesOnly, ' Removals only'),
     ),
     list,
@@ -635,7 +734,7 @@ function removedItem(r) {
 }
 
 // ----- Accounts -----
-function usersSection(users) {
+function usersSection(users, resetsReady) {
   const yes = (flag, text) =>
     el(
       'span',
@@ -658,6 +757,7 @@ function usersSection(users) {
       el('td', {}, when(u.created_at)),
       el('td', {}, u.last_sign_in_at ? when(u.last_sign_in_at) : 'Never'),
       el('td', { class: 'admin-num' }, fmt(u.changes_30d)),
+      el('td', {}, resetsReady && !u.is_admin ? resetCell(u) : null),
     ),
   );
   return card(
@@ -679,9 +779,15 @@ function usersSection(users) {
           el(
             'tr',
             {},
-            ['Account', 'Allow-list', 'Email', 'Signed up', 'Last sign-in', 'Changes (30d)'].map(
-              h => el('th', { scope: 'col' }, h),
-            ),
+            [
+              'Account',
+              'Allow-list',
+              'Email',
+              'Signed up',
+              'Last sign-in',
+              'Changes (30d)',
+              'Password',
+            ].map(h => el('th', { scope: 'col' }, h)),
           ),
         ),
         el('tbody', {}, rows),
@@ -743,9 +849,301 @@ function allowListSection() {
     el(
       'p',
       { class: 'admin-hint' },
-      'The list stores only a keyed hash of each address, so it can’t be shown. Check, add or remove one address at a time.',
+      'The list stores only a keyed hash of each address, so it can’t be shown. Check, add or remove one address at a time. Add works only for an account that already exists and has confirmed its email; new members ask to join and appear under Requests.',
     ),
     el('div', { class: 'admin-form admin-allow-form' }, email, check, add, remove),
+    result,
+  );
+}
+
+// ----- Requests (add_access_requests migration) -----
+const STATUS_LABEL = {
+  pending: 'Waiting',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  revoked: 'Access removed',
+};
+// What each state lets the admin do, in admin_decide_request()'s terms.
+const DECISIONS = {
+  pending: [
+    ['approve', 'Approve', 'primary-button'],
+    ['reject', 'Reject', 'secondary-button'],
+  ],
+  approved: [['revoke', 'Remove access', 'secondary-button']],
+  rejected: [['reapprove', 'Approve after all', 'secondary-button']],
+  revoked: [['reapprove', 'Give access back', 'secondary-button']],
+};
+function requestsSection(requests) {
+  if (requests === null) {
+    return el(
+      'section',
+      { class: 'admin-card', id: 'requests' },
+      el('h2', {}, 'Requests'),
+      el(
+        'p',
+        { class: 'admin-hint' },
+        'Not set up yet: the access-requests migration hasn’t been applied to the database.',
+      ),
+    );
+  }
+  const list = el('ol', { class: 'admin-list admin-requests' });
+  const statusFilter = el(
+    'select',
+    { 'aria-label': 'Show requests that are' },
+    el('option', { value: 'pending' }, 'Waiting'),
+    el('option', { value: '' }, 'All'),
+    ['approved', 'rejected', 'revoked'].map(s => el('option', { value: s }, STATUS_LABEL[s])),
+  );
+  function render() {
+    const rows = requests.filter(r => !statusFilter.value || r.status === statusFilter.value);
+    list.replaceChildren(
+      ...(rows.length
+        ? rows.map(requestItem)
+        : [
+            el(
+              'li',
+              { class: 'admin-empty' },
+              statusFilter.value === 'pending' ? 'Nobody is waiting.' : 'No requests here.',
+            ),
+          ]),
+    );
+  }
+  statusFilter.addEventListener('change', render);
+  render();
+  return el(
+    'section',
+    { class: 'admin-card', id: 'requests' },
+    el('h2', {}, 'Requests'),
+    el(
+      'p',
+      { class: 'admin-hint' },
+      'People who signed up and asked to join. Check the name and note before you approve: an email address proves nothing on its own.',
+    ),
+    el('div', { class: 'admin-filters' }, statusFilter),
+    list,
+  );
+}
+function requestItem(r) {
+  const error = errorLine();
+  const name = r.display_name;
+  const reason = el('input', {
+    type: 'text',
+    maxlength: 200,
+    placeholder: 'Reason (optional, only admins see it)',
+    'aria-label': `Reason for the decision on ${name}`,
+  });
+  const buttons = (DECISIONS[r.status] || []).map(([decision, label, style]) => {
+    const button = el('button', { class: `${style} admin-small-button`, type: 'button' }, label);
+    button.onclick = async () => {
+      // Saying no or taking access away is worth a second look; approving
+      // isn't destructive, and the check is the reading the admin just did.
+      if (decision === 'reject' || decision === 'revoke') {
+        const ok = await confirmDialog({
+          title: decision === 'reject' ? `Reject ${name}?` : `Remove ${name}'s access?`,
+          body:
+            decision === 'reject'
+              ? `${name} will be signed out and can't ask again from this account.`
+              : `${name} loses edit access straight away and will be signed out.`,
+          confirmLabel: label,
+        });
+        if (!ok) return;
+      }
+      error.set('');
+      buttons.forEach(b => (b.disabled = true));
+      setBusy(button, 'Saving…');
+      try {
+        await rpc('admin_decide_request', {
+          p_user_id: r.user_id,
+          p_decision: decision,
+          p_reason: reason.value.trim() || null,
+        });
+        showConsole();
+      } catch (err) {
+        error.set(err.message);
+        clearBusy(button);
+        buttons.forEach(b => (b.disabled = false));
+      }
+    };
+    return button;
+  });
+  const notes = [];
+  // The Telegram message is the alert; the console is the record. A pending
+  // request whose message never went shows that here (spec 6.4, step 8).
+  if (r.status === 'pending' && !r.notified_at) {
+    notes.push(el('span', { class: 'admin-badge admin-warn' }, 'Telegram message not sent'));
+  }
+  if (r.reset_pending) {
+    notes.push(
+      el(
+        'span',
+        { class: 'admin-badge' },
+        `Password reset pending until ${when(r.reset_expires_at)}`,
+      ),
+    );
+  }
+  return el(
+    'li',
+    { class: 'admin-request' },
+    el(
+      'div',
+      { class: 'admin-change-main' },
+      el(
+        'p',
+        { class: 'admin-change-text' },
+        el('strong', {}, name),
+        el('span', { class: `admin-badge admin-status-${r.status}` }, STATUS_LABEL[r.status]),
+        notes,
+      ),
+      el('p', { class: 'admin-change-meta' }, r.email || 'Account deleted'),
+      r.note ? el('blockquote', { class: 'admin-note' }, r.note) : null,
+      el(
+        'p',
+        { class: 'admin-change-meta' },
+        `Asked ${when(r.requested_at)}`,
+        r.decided_at
+          ? ` · ${STATUS_LABEL[r.status]} ${when(r.decided_at)}${r.decided_by_label ? ` by ${r.decided_by_label}` : ''}`
+          : '',
+        r.reason ? ` · “${r.reason}”` : '',
+      ),
+      buttons.length ? reason : null,
+      error,
+    ),
+    buttons.length ? el('div', { class: 'admin-request-actions' }, buttons) : null,
+  );
+}
+
+// ----- Password reset (admin-reset-password Edge Function) -----
+function resetCell(u) {
+  const name = u.display_name || u.email;
+  const cell = el('div', { class: 'admin-reset' });
+  const error = errorLine();
+  const button = el(
+    'button',
+    { class: 'secondary-button admin-small-button', type: 'button' },
+    'Reset password',
+  );
+  button.onclick = async () => {
+    const ok = await confirmDialog({
+      title: `Reset ${name}'s password?`,
+      body: `${name} will be signed out on every device. You'll get a temporary password to give them; they choose their own when they next sign in.`,
+      confirmLabel: 'Reset',
+    });
+    if (!ok) return;
+    error.set('');
+    // Disabled while in flight: a second click would set a second password,
+    // and only the last one would work.
+    setBusy(button, 'Resetting…');
+    const { data, error: fnError } = await db.functions.invoke('admin-reset-password', {
+      body: { user_id: u.id },
+    });
+    if (fnError) {
+      let text = fnError.message;
+      try {
+        const res = fnError.context;
+        if (res?.status === 404) text = 'Password resets aren’t set up yet.';
+        else text = (await res.json()).error || text;
+      } catch {
+        // keep the generic message
+      }
+      error.set("Couldn't reset: " + text);
+      clearBusy(button);
+      return;
+    }
+    cell.replaceChildren(revealPassword(name, data));
+  };
+  cell.append(button, error);
+  return cell;
+}
+// Shown once. Nothing keeps it: Refresh, or leaving the page, and it's gone.
+function revealPassword(name, data) {
+  const value = el('code', { class: 'admin-temp-password' }, data.password);
+  const copied = el('span', { class: 'admin-change-meta', role: 'status' });
+  const copy = el(
+    'button',
+    { class: 'secondary-button admin-small-button', type: 'button' },
+    'Copy',
+  );
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(data.password);
+      copied.textContent = 'Copied.';
+    } catch {
+      copied.textContent = 'Select the password and copy it.';
+    }
+  };
+  return el(
+    'div',
+    { class: 'admin-reveal' },
+    el('div', { class: 'admin-reveal-row' }, value, copy, copied),
+    el(
+      'p',
+      { class: 'admin-hint' },
+      `Send this to ${name} by text or in person. It works once. They'll set their own on sign-in.`,
+      data.expires_at ? ` It stops working ${when(data.expires_at)}.` : '',
+    ),
+    data.signed_out === false
+      ? el(
+          'p',
+          { class: 'admin-error' },
+          'A device that signed in during the reset may still be signed in. Reset again to be sure.',
+        )
+      : null,
+  );
+}
+
+// ----- Your password -----
+// For the admin's own account: set a password the first time (the console
+// used to sign in by emailed code only), or change it. Supabase's "Secure
+// password change" may ask you to have signed in recently.
+function passwordSection() {
+  const first = el('input', {
+    type: 'password',
+    autocomplete: 'new-password',
+    minlength: 12,
+    maxlength: 72,
+    required: true,
+    placeholder: 'New password (12 to 72 characters)',
+    'aria-label': 'New password',
+  });
+  const second = el('input', {
+    type: 'password',
+    autocomplete: 'new-password',
+    minlength: 12,
+    maxlength: 72,
+    required: true,
+    placeholder: 'Type it again',
+    'aria-label': 'New password again',
+  });
+  const button = el('button', { class: 'primary-button', type: 'submit' }, 'Save password');
+  const result = el('p', { class: 'admin-result', role: 'status' });
+  const form = el('form', { class: 'admin-form' }, first, second, button);
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    result.textContent = '';
+    if (first.value !== second.value) {
+      result.textContent = "Those two don't match.";
+      return second.select();
+    }
+    setBusy(button, 'Saving…');
+    const { error } = await db.auth.updateUser({ password: first.value });
+    clearBusy(button);
+    if (error) {
+      result.textContent = "Couldn't save it: " + error.message;
+      return;
+    }
+    first.value = '';
+    second.value = '';
+    result.textContent =
+      'Saved. Next time, sign in with your email and this password, then your authenticator code.';
+  });
+  return card(
+    'Your password',
+    el(
+      'p',
+      { class: 'admin-hint' },
+      'Sign in with a password and your authenticator app. The emailed code keeps working as a fallback.',
+    ),
+    form,
     result,
   );
 }

@@ -77,11 +77,13 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 
 `admin.html` is a page for club admins. It shows:
 
+- **Requests** (once the access-requests migration is applied): everyone who has asked to join, with their name, email and note. **Approve** or **Reject** a waiting request; **Remove access** from an approved one; **Approve after all** or **Give access back** for a rejected or removed one. An optional reason is kept for admins only. A request whose Telegram message never went out is marked "Telegram message not sent". The title shows how many are waiting, and so does the calendar's **Admin** link. Until the migration is applied, this panel says "Not set up yet" and the rest of the console works as before.
 - **Stats:** upcoming races, commitments, accounts, accounts not on the allow-list, changes this week, and sign-ups over the last 14 days.
-- **Activity:** every change to commitments and races in the last 30 days, who made it, and what changed. Each one has an **Undo** button.
+- **Activity:** every change to commitments and races in the last 30 days, and every display-name change, with who made it and what changed. Filter by kind of change or by member. Commitment and race changes have an **Undo** button; a rename doesn't.
 - **Removed races,** each with a **Restore** button.
-- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account.
-- **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed.
+- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Each non-admin account has **Reset password** (see "Password resets"): the temporary password shows once, with a Copy button, and is gone when you refresh.
+- **Your password:** set a password for your own account, or change it.
+- **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
 Signed-in admins see an **Admin** link in the calendar header.
 
@@ -91,7 +93,9 @@ Signed-in admins see an **Admin** link in the calendar header.
 - To drop the two-factor requirement for one admin: `update private.admins set mfa_required = false where user_id = '<id>';`.
 - If an admin loses their authenticator, delete their factor under Authentication → Users → the user → MFA. The console then asks them to set up a new one.
 
-**The page has its own sign-in.** The calendar signs out anyone who isn't on the allow-list, so an admin who isn't listed could never reach the console through it. The admin form uses `shouldCreateUser: false`, so it can't create accounts. Both pages share one session, so if an admin who isn't listed opens the calendar, they're signed out of the console too. The console warns about this and offers to add their address.
+**The page has its own sign-in.** The calendar signs out anyone who isn't on the allow-list, so an admin who isn't listed could never reach the console through it. It asks for email and password first, then the authenticator code. **Email me a code instead** is the fallback, and the way in until you've set a password under **Your password**. The code form uses `shouldCreateUser: false`, so it can't create accounts. Both pages share one session, so if an admin who isn't listed opens the calendar, they're signed out of the console too. The console warns about this and offers to add their address.
+
+**Checking it in a browser.** `node scripts/check-admin-ui.mjs` drives the console in headless Chromium against a stand-in Supabase client: the Requests panel, decisions, password reset, "not set up yet", sign-in and the password card. It skips if Playwright isn't installed, and never talks to the real project.
 
 **Undo is careful.** It only goes ahead if the row is still exactly as that change left it; otherwise it asks you to undo the later change first. Undoing a new race removes it softly, so its roster stays. A restored commitment is credited to the admin who restored it, while the history keeps the original. Every admin action is logged in `private.admin_actions`.
 
