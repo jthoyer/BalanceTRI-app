@@ -62,7 +62,31 @@ reset role;
 select t.ok((select cleared_at is null from private.password_resets where user_id = t.id('sam')), 'a new reset sets the flag again');
 select t.ok((select count(*) from private.password_resets where user_id = t.id('sam')) = 1, 'still one row per member');
 
-select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_begin(uuid)', 'execute'), 'anon cannot call it');
+-- L1 (R2 on B5): a sign-in that lands between begin and the new password is
+-- ended by finish.
+insert into auth.sessions (id, user_id) values ('aaaaaaaa-0000-0000-0000-000000000004', t.id('sam'));
+insert into auth.refresh_tokens (token, user_id, session_id) values ('r4', t.id('sam')::text, 'aaaaaaaa-0000-0000-0000-000000000004');
+select t.as_user('owner', 'aal2');
+select public.admin_password_reset_finish(t.id('sam'));
+reset role;
+select t.ok((select count(*) from auth.sessions where user_id = t.id('sam')) = 0, 'finish ends a session opened during the reset');
+select t.ok((select count(*) from auth.refresh_tokens where user_id = t.id('sam')::text) = 0, 'and its refresh token');
+select t.ok((select count(*) from auth.sessions where user_id = t.id('kit')) = 1, 'and no one else''s');
+select t.as_user('kit');
+select t.fails($$select public.admin_password_reset_finish(t.id('sam'))$$, '42501');
+reset role;
+
+-- L2 (R2 on B5): an admin can't reset another admin.
+select t.mk('second_admin');
+insert into private.admins (user_id, mfa_required) values (t.id('second_admin'), true);
+select t.as_user('owner', 'aal2');
+select t.ok(t.msg($$select public.admin_password_reset_begin(t.id('second_admin'))$$) = 'Admins can''t reset another admin''s password here. Use the dashboard.', 'begin refuses another admin');
+select t.ok(t.msg($$select public.admin_password_reset_finish(t.id('second_admin'))$$) = 'Admins can''t reset another admin''s password here. Use the dashboard.', 'finish refuses another admin');
+reset role;
+select t.ok(not exists (select 1 from private.password_resets where user_id = t.id('second_admin')), 'no flag for the other admin');
+
+select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_begin(uuid)', 'execute'), 'anon cannot call begin');
+select t.ok(not has_function_privilege('anon', 'public.admin_password_reset_finish(uuid)', 'execute'), 'anon cannot call finish');
 
 \o
 \echo B5 checks passed

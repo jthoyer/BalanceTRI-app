@@ -299,10 +299,17 @@ It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can crea
 Members get no email, so Supabase's own "reset password" email isn't used. The owner resets a password from the console instead (step B5). **Not deployed or applied yet.**
 
 1. The console's **Reset password** button calls the Edge Function `admin-reset-password` with the owner's own session.
-2. The function calls `public.admin_password_reset_begin(user_id)` **as the owner**, so the usual admin check decides: an admin, signed in with two-factor. Anyone else gets 401 or 403, and nothing changes. The owner can't reset their own password this way.
+2. The function calls `public.admin_password_reset_begin(user_id)` **as the owner**, so the usual admin check decides: an admin, signed in with two-factor. Anyone else gets 401 or 403, and nothing changes.
 3. That function flags "must change password" in `private.password_resets` for 7 days, signs the member out on every device (it deletes their sessions and refresh tokens), and logs `password_reset` in `private.admin_actions`.
 4. The Edge Function makes a temporary password (four random words and two digits, such as `maple-river-swift-cloud-47`) and sets it with the service role through the Auth admin API.
-5. It returns the password once. It is never stored, logged or emailed. The owner passes it on by text or in person.
+5. It calls `admin_password_reset_finish()`, again as the owner, which signs the member out once more. The old password worked until step 4, so a session opened in between must not survive the reset.
+6. It returns the password once. It is never stored, logged or emailed. The owner passes it on by text or in person. If the second sign-out failed, the reply says `signed_out: false`, and the console should say so.
+
+Before any of this, the function checks with Auth that the owner's own session is still live. A stolen admin token whose session was revoked does nothing.
+
+The owner can't reset their own password this way, nor another admin's: admins use Change password or the dashboard.
+
+**Signed out, but not instantly everywhere.** Deleting a member's sessions and refresh tokens stops every device renewing its access token. A token already issued keeps working until it expires, because the database checks its signature and expiry, not whether its session still exists. That is up to `jwt_expiry` (an hour by default). Shortening `jwt_expiry` in the dashboard narrows the window.
 
 When the member signs in with it, the app sends them straight to "Set a new password" (B7), and `password_changed()` clears the flag. The 7-day expiry is enforced by the app in phase 1, not the server (spec R6).
 

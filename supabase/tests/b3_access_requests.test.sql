@@ -368,7 +368,8 @@ insert into admin_calls values
   ('select * from public.admin_requests(''pending'')'),
   ('select public.admin_decide_request(gen_random_uuid(), ''approve'')'),
   ('select public.admin_pending_count()'),
-  ('select public.admin_password_reset_begin(gen_random_uuid())');
+  ('select public.admin_password_reset_begin(gen_random_uuid())'),
+  ('select public.admin_password_reset_finish(gen_random_uuid())');
 grant select on admin_calls to anon, authenticated;
 select t.ok((select count(*) from admin_calls) = (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.proname <> 'admin_status') + 1, 'every admin function is in the list (admin_requests appears twice)');
 

@@ -3,6 +3,9 @@
 //
 // The console's Reset password button calls this with the admin's own session.
 // Flow:
+//   0. Check the caller's own session is still live with Auth. A stolen admin
+//      token whose session was revoked fails here, though the token itself
+//      would pass PostgREST until it expires.
 //   1. Ask the database, AS THE CALLER, to begin the reset. That function
 //      refuses anyone who isn't an admin with a two-factor (aal2) session, then
 //      flags "must change password" for 7 days, signs the member out on every
@@ -10,7 +13,10 @@
 //      place as every other admin check, not in this file.
 //   2. Make a temporary password: four random words and two digits.
 //   3. Set it with the service role (the Auth admin API).
-//   4. Return it once. It is never stored, logged or emailed.
+//   4. Ask the database, as the caller, to sign the member out once more. The
+//      old password worked until step 3, so a session opened in between must
+//      not survive the reset.
+//   5. Return the password once. It is never stored, logged or emailed.
 //
 // If step 3 fails, the member is still flagged and signed out, and their old
 // password still works: they'll be asked for a new one when they next sign in.
@@ -92,6 +98,16 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json(400, { error: 'user_id must be a uuid' });
   }
 
+  // 0. The caller's session must still exist.
+  try {
+    const me = await deps.fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: anonKey, authorization: auth },
+    });
+    if (!me.ok) return json(401, { error: 'Your session has ended. Sign in again.' });
+  } catch {
+    return json(502, { error: 'Could not reach Auth. Try again.' });
+  }
+
   // 1. The database decides, as the caller, whether this is allowed.
   let begin: Response;
   try {
@@ -141,6 +157,21 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     });
   }
 
-  // 4. Shown once by the console, then gone.
-  return json(200, { password, expires_at: started.expires_at ?? null });
+  // 4. Sign the member out again, now the old password no longer works.
+  let signedOut = false;
+  try {
+    const finish = await deps.fetch(`${url}/rest/v1/rpc/admin_password_reset_finish`, {
+      method: 'POST',
+      headers: { apikey: anonKey, authorization: auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId }),
+    });
+    signedOut = finish.ok;
+  } catch {
+    // reported below
+  }
+  if (!signedOut) console.error('admin-reset-password: the second sign-out failed');
+
+  // 5. Shown once by the console, then gone. signed_out false means a session
+  // opened during the reset may survive it: the console says so.
+  return json(200, { password, expires_at: started.expires_at ?? null, signed_out: signedOut });
 }

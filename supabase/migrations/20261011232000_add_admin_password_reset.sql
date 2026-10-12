@@ -32,6 +32,11 @@ begin
   if p_user_id = auth.uid() then
     raise exception 'Use Change password for your own account.';
   end if;
+  -- One admin must not be able to take over another's account. Admins change
+  -- their own password with Change password, or in the dashboard.
+  if exists (select 1 from private.admins where user_id = p_user_id) then
+    raise exception 'Admins can''t reset another admin''s password here. Use the dashboard.';
+  end if;
   perform private.lock_account(p_user_id);
   if not exists (select 1 from auth.users where id = p_user_id) then
     raise exception 'That account no longer exists.';
@@ -45,8 +50,9 @@ begin
 
   -- Sign the member out on every device (spec P9): no session, no refresh
   -- token, so no device can renew its access token. One already issued lasts
-  -- until it expires (an hour at most), and the app sends a flagged member
-  -- straight to the set-password step.
+  -- until it expires (jwt_expiry, an hour at most): RLS checks the token's
+  -- signature and expiry, not whether its session still exists. The app sends a
+  -- flagged member straight to the set-password step.
   delete from auth.refresh_tokens where user_id = p_user_id::text;
   delete from auth.sessions where user_id = p_user_id;
 
@@ -57,6 +63,29 @@ begin
 end;
 $$;
 
--- Signed-in users only; the function refuses non-admins inside.
+-- Called after the temporary password is set. The old password worked until
+-- that moment, so sign the member out again: a session someone opened in
+-- between (with the old password, which a reset is often recovering from)
+-- must not outlive the reset.
+create function public.admin_password_reset_finish(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform private.require_admin();
+  if exists (select 1 from private.admins where user_id = p_user_id) then
+    raise exception 'Admins can''t reset another admin''s password here. Use the dashboard.';
+  end if;
+  perform private.lock_account(p_user_id);
+  delete from auth.refresh_tokens where user_id = p_user_id::text;
+  delete from auth.sessions where user_id = p_user_id;
+end;
+$$;
+
+-- Signed-in users only; the functions refuse non-admins inside.
 revoke execute on function public.admin_password_reset_begin(uuid) from public, anon;
+revoke execute on function public.admin_password_reset_finish(uuid) from public, anon;
 grant execute on function public.admin_password_reset_begin(uuid) to authenticated;
+grant execute on function public.admin_password_reset_finish(uuid) to authenticated;

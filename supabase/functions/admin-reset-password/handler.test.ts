@@ -19,8 +19,10 @@ interface Call {
   init?: RequestInit;
 }
 interface Opts {
+  me?: number | 'throw';
   begin?: { status: number; body?: object } | 'throw';
   set?: number | 'throw';
+  finish?: number | 'throw';
   env?: Record<string, string | undefined>;
 }
 
@@ -28,6 +30,14 @@ function setup(opts: Opts = {}) {
   const calls: Call[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     calls.push({ url, init });
+    if (url.endsWith('/auth/v1/user')) {
+      if (opts.me === 'throw') throw new Error('network');
+      return new Response('{}', { status: opts.me ?? 200 });
+    }
+    if (url.endsWith('/rpc/admin_password_reset_finish')) {
+      if (opts.finish === 'throw') throw new Error('network');
+      return new Response(null, { status: opts.finish ?? 204 });
+    }
     if (url.endsWith('/rpc/admin_password_reset_begin')) {
       if (opts.begin === 'throw') throw new Error('network');
       const b = opts.begin ?? { status: 200, body: { user_id: USER_ID, expires_at: '2026-10-19T00:00:00Z' } };
@@ -50,6 +60,7 @@ function setup(opts: Opts = {}) {
     calls,
     begins: () => calls.filter(c => c.url.endsWith('/rpc/admin_password_reset_begin')),
     sets: () => calls.filter(c => c.url.includes('/auth/v1/admin/users/')),
+    finishes: () => calls.filter(c => c.url.endsWith('/rpc/admin_password_reset_finish')),
   };
 }
 
@@ -104,11 +115,44 @@ test('T9: with two-factor, a temporary password is set with the service key and 
   assert.deepEqual(JSON.parse(String(set.init?.body)), { password: body.password });
 });
 
-test('the reset begins in the database before the password changes', async () => {
+test('order: check the session, begin, set the password, sign out again', async () => {
   const t = setup();
-  await handle(post({ user_id: USER_ID }), t.deps);
-  assert.ok(t.calls[0].url.endsWith('/rpc/admin_password_reset_begin'));
-  assert.ok(t.calls[1].url.includes('/auth/v1/admin/users/'));
+  const res = await handle(post({ user_id: USER_ID }), t.deps);
+  assert.deepEqual(
+    t.calls.map(c => new URL(c.url).pathname),
+    [
+      '/auth/v1/user',
+      '/rest/v1/rpc/admin_password_reset_begin',
+      `/auth/v1/admin/users/${USER_ID}`,
+      '/rest/v1/rpc/admin_password_reset_finish',
+    ],
+  );
+  assert.equal((await res.json()).signed_out, true);
+  const h = t.finishes()[0].init?.headers as Record<string, string>;
+  assert.equal(h.authorization, 'Bearer admin-session-jwt', 'the second sign-out also runs as the caller');
+});
+
+test('a token whose session has ended can do nothing', async () => {
+  for (const me of [401, 403] as const) {
+    const t = setup({ me });
+    const res = await handle(post({ user_id: USER_ID }), t.deps);
+    assert.equal(res.status, 401);
+    assert.equal(t.begins().length + t.sets().length, 0);
+  }
+  const t = setup({ me: 'throw' });
+  assert.equal((await handle(post({ user_id: USER_ID }), t.deps)).status, 502);
+  assert.equal(t.begins().length + t.sets().length, 0);
+});
+
+test('if the second sign-out fails, the password still comes back, flagged', async () => {
+  for (const finish of [500, 'throw'] as const) {
+    const t = setup({ finish });
+    const res = await handle(post({ user_id: USER_ID }), t.deps);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.match(body.password, SHAPE);
+    assert.equal(body.signed_out, false);
+  }
 });
 
 test('a refusal with a reason passes the reason on (for example, the account is gone)', async () => {
@@ -132,6 +176,7 @@ test('if setting the password fails, the admin gets an error, no password, and t
       assert.equal(res.status, 502);
       body = await res.json();
       sent = JSON.parse(String(t.sets()[0].init?.body)).password;
+      assert.equal(t.finishes().length, 0, 'no second sign-out when the password was not set');
     } finally {
       console.error = orig;
     }
