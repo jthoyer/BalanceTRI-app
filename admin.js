@@ -236,7 +236,11 @@ function showCodeSignIn(prefill) {
       const captchaToken = await getCaptchaToken(form);
       const { error } = await db.auth.signInWithOtp({
         email: address,
-        options: { shouldCreateUser: false, emailRedirectTo: location.href, captchaToken },
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: location.origin + location.pathname,
+          captchaToken,
+        },
       });
       if (error) throw error;
       showCodeStep(address);
@@ -408,7 +412,9 @@ function showFactorCode(factorId, title, text, extra) {
 // ---------------------------------------------------------------------------
 // The console.
 // ---------------------------------------------------------------------------
-async function showConsole() {
+// opts.focus 'requests': after a decision, put the keyboard back on the
+// Requests heading rather than at the top of the page.
+async function showConsole(opts = {}) {
   show(el('p', { class: 'admin-loading' }, 'Loading…'));
   let stats, activity, removed, users, races, requestResult;
   try {
@@ -444,6 +450,7 @@ async function showConsole() {
         'h1',
         {},
         'Admin console',
+        waiting ? ' ' : null,
         waiting
           ? el('a', { class: 'admin-badge admin-waiting', href: '#requests' }, `${waiting} waiting`)
           : null,
@@ -459,7 +466,13 @@ async function showConsole() {
     passwordSection(),
     allowListSection(),
   );
-  if (location.hash === '#requests') document.getElementById('requests')?.scrollIntoView();
+  // Arriving from the calendar's "Admin (2 waiting)" link: jump to Requests
+  // once, then drop the fragment so later re-renders don't jump again.
+  if (location.hash === '#requests') {
+    document.getElementById('requests')?.scrollIntoView();
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  if (opts.focus === 'requests') document.querySelector('#requests h2')?.focus();
 }
 function allowListWarning(email) {
   return el(
@@ -587,20 +600,27 @@ function activitySection(activity, raceNames) {
     el('option', { value: 'races' }, 'Races'),
     el('option', { value: 'profiles' }, 'Name changes'),
   );
-  // Who made the change: everyone in this feed, by the label the feed uses.
-  const people = [...new Set(activity.map(c => c.changed_by_label).filter(Boolean))].sort();
+  // Who made the change: every account in this feed, by id, shown by label.
+  const people = new Map();
+  for (const c of activity) {
+    if (c.changed_by && !people.has(c.changed_by)) {
+      people.set(c.changed_by, c.changed_by_label || 'Unnamed account');
+    }
+  }
   const personFilter = el(
     'select',
     { 'aria-label': 'Show changes by' },
     el('option', { value: '' }, 'Anyone'),
-    people.map(p => el('option', { value: p }, p)),
+    [...people]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id, label]) => el('option', { value: id }, label)),
   );
   const deletesOnly = el('input', { type: 'checkbox' });
   function render() {
     const rows = activity.filter(
       c =>
         (!tableFilter.value || c.table_name === tableFilter.value) &&
-        (!personFilter.value || c.changed_by_label === personFilter.value) &&
+        (!personFilter.value || c.changed_by === personFilter.value) &&
         (!deletesOnly.checked ||
           c.op === 'DELETE' ||
           (c.new_row && c.new_row.deleted_at && !c.old_row?.deleted_at)),
@@ -757,7 +777,7 @@ function usersSection(users, resetsReady) {
       el('td', {}, when(u.created_at)),
       el('td', {}, u.last_sign_in_at ? when(u.last_sign_in_at) : 'Never'),
       el('td', { class: 'admin-num' }, fmt(u.changes_30d)),
-      el('td', {}, resetsReady && !u.is_admin ? resetCell(u) : null),
+      resetsReady ? el('td', {}, u.is_admin ? null : resetCell(u)) : null,
     ),
   );
   return card(
@@ -786,8 +806,10 @@ function usersSection(users, resetsReady) {
               'Signed up',
               'Last sign-in',
               'Changes (30d)',
-              'Password',
-            ].map(h => el('th', { scope: 'col' }, h)),
+              resetsReady ? 'Password' : null,
+            ]
+              .filter(Boolean)
+              .map(h => el('th', { scope: 'col' }, h)),
           ),
         ),
         el('tbody', {}, rows),
@@ -913,7 +935,7 @@ function requestsSection(requests) {
   return el(
     'section',
     { class: 'admin-card', id: 'requests' },
-    el('h2', {}, 'Requests'),
+    el('h2', { tabindex: -1 }, 'Requests'),
     el(
       'p',
       { class: 'admin-hint' },
@@ -957,7 +979,7 @@ function requestItem(r) {
           p_decision: decision,
           p_reason: reason.value.trim() || null,
         });
-        showConsole();
+        showConsole({ focus: 'requests' });
       } catch (err) {
         error.set(err.message);
         clearBusy(button);
@@ -972,13 +994,21 @@ function requestItem(r) {
   if (r.status === 'pending' && !r.notified_at) {
     notes.push(el('span', { class: 'admin-badge admin-warn' }, 'Telegram message not sent'));
   }
+  // An approved request whose address is no longer listed can't write: the
+  // member sees "access removed" (my_access_status), so say so here too.
+  if (r.status === 'approved' && !r.listed) {
+    notes.push(el('span', { class: 'admin-badge admin-warn' }, 'Not on the allow-list'));
+  }
   if (r.reset_pending) {
+    // Spec R6: the console marks an expired temporary password.
     notes.push(
-      el(
-        'span',
-        { class: 'admin-badge' },
-        `Password reset pending until ${when(r.reset_expires_at)}`,
-      ),
+      new Date(r.reset_expires_at) < new Date()
+        ? el('span', { class: 'admin-badge admin-warn' }, 'Temporary password expired')
+        : el(
+            'span',
+            { class: 'admin-badge' },
+            `Password reset pending until ${when(r.reset_expires_at)}`,
+          ),
     );
   }
   return el(
@@ -1036,25 +1066,55 @@ function resetCell(u) {
     const { data, error: fnError } = await db.functions.invoke('admin-reset-password', {
       body: { user_id: u.id },
     });
+    clearBusy(button);
     if (fnError) {
-      let text = fnError.message;
-      try {
-        const res = fnError.context;
-        if (res?.status === 404) text = 'Password resets aren’t set up yet.';
-        else text = (await res.json()).error || text;
-      } catch {
-        // keep the generic message
+      // An HTTP error carries the function's Response; a network or CORS
+      // failure (for example, the function isn't deployed) carries none.
+      const res = fnError.context;
+      let text = 'Couldn’t reach the password reset service. It may not be set up yet.';
+      if (res instanceof Response) {
+        text = fnError.message;
+        if (res.status === 404) text = 'Password resets aren’t set up yet.';
+        else {
+          try {
+            text = (await res.json()).error || text;
+          } catch {
+            // keep the generic message
+          }
+        }
       }
       error.set("Couldn't reset: " + text);
-      clearBusy(button);
       return;
     }
-    cell.replaceChildren(revealPassword(name, data));
+    // A dialog outside the console, so a re-render (Refresh, a decision, an
+    // Undo) can't wipe the password, even one that arrives mid-render.
+    showPasswordDialog(name, data);
   };
   cell.append(button, error);
   return cell;
 }
-// Shown once. Nothing keeps it: Refresh, or leaving the page, and it's gone.
+// Shown once, in a dialog that only Done closes (Escape doesn't, so a stray
+// key can't lose it). Nothing keeps the password after that.
+function showPasswordDialog(name, data) {
+  const done = el('button', { class: 'primary-button', type: 'button' }, 'Done');
+  const dialog = el(
+    'dialog',
+    { class: 'admin-reveal-dialog', 'aria-labelledby': 'adminRevealTitle' },
+    el(
+      'div',
+      { class: 'dialog-card' },
+      el('h2', { id: 'adminRevealTitle' }, `Temporary password for ${name}`),
+      revealPassword(name, data),
+      el('div', { class: 'dialog-footer' }, done),
+    ),
+  );
+  dialog.addEventListener('cancel', e => e.preventDefault());
+  dialog.addEventListener('close', () => dialog.remove());
+  done.onclick = () => dialog.close();
+  document.body.append(dialog);
+  dialog.showModal();
+  dialog.querySelector('.admin-reveal button')?.focus();
+}
 function revealPassword(name, data) {
   const value = el('code', { class: 'admin-temp-password' }, data.password);
   const copied = el('span', { class: 'admin-change-meta', role: 'status' });
@@ -1100,7 +1160,6 @@ function passwordSection() {
     type: 'password',
     autocomplete: 'new-password',
     minlength: 12,
-    maxlength: 72,
     required: true,
     placeholder: 'New password (12 to 72 characters)',
     'aria-label': 'New password',
@@ -1109,7 +1168,6 @@ function passwordSection() {
     type: 'password',
     autocomplete: 'new-password',
     minlength: 12,
-    maxlength: 72,
     required: true,
     placeholder: 'Type it again',
     'aria-label': 'New password again',
@@ -1124,11 +1182,20 @@ function passwordSection() {
       result.textContent = "Those two don't match.";
       return second.select();
     }
+    // bcrypt reads 72 bytes and ignores the rest, so refuse rather than trim.
+    if (new TextEncoder().encode(first.value).length > 72) {
+      result.textContent = 'Keep it to 72 characters or fewer (accented letters count as two).';
+      return first.select();
+    }
     setBusy(button, 'Saving…');
     const { error } = await db.auth.updateUser({ password: first.value });
     clearBusy(button);
     if (error) {
-      result.textContent = "Couldn't save it: " + error.message;
+      // "Secure password change" wants a recent sign-in, and sessions last weeks.
+      result.textContent =
+        error.code === 'reauthentication_needed' || /reauthentic/i.test(error.message)
+          ? 'Supabase wants a recent sign-in for this. Sign out, sign in again, then save it.'
+          : "Couldn't save it: " + error.message;
       return;
     }
     first.value = '';

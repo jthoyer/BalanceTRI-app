@@ -81,7 +81,7 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 - **Stats:** upcoming races, commitments, accounts, accounts not on the allow-list, changes this week, and sign-ups over the last 14 days.
 - **Activity:** every change to commitments and races in the last 30 days, and every display-name change, with who made it and what changed. Filter by kind of change or by member. Commitment and race changes have an **Undo** button; a rename doesn't.
 - **Removed races,** each with a **Restore** button.
-- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Each non-admin account has **Reset password** (see "Password resets"): the temporary password shows once, with a Copy button, and is gone when you refresh.
+- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Once the access-requests migration is applied, each non-admin account has **Reset password** (see "Password resets"). The temporary password shows once, in a dialog with a Copy button that only **Done** closes; nothing on the page can wipe it first. A request shows when a reset is pending, and marks it once the temporary password has expired.
 - **Your password:** set a password for your own account, or change it.
 - **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
@@ -323,6 +323,6 @@ If setting the password fails after step 3, the function undoes the reset (`admi
 
 **Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
 
-**Switching it on**, each step with the owner's go: apply `20261011232000_add_admin_password_reset.sql` after the B3 migration, then `supabase functions deploy admin-reset-password`. The console button comes in B6.
+**Switching it on**, each step with the owner's go: apply `20261011232000_add_admin_password_reset.sql` after the B3 migration, then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) appears once the access-requests migration is applied; until the function is deployed it says it can't reach the service.
 
 **Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.

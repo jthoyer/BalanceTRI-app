@@ -402,6 +402,13 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.admin-reset .admin-error {
+  white-space: normal;
+  max-width: 280px;
+}
+.admin-reveal-dialog .admin-reveal {
+  margin: 8px 0 4px;
+}
 .admin-temp-password {
   font-size: 15px;
   padding: 4px 8px;

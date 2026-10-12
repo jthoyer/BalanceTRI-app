@@ -58,7 +58,7 @@ window.supabase = { createClient: () => ({
     signOut: () => res({ error: null }),
     signInWithPassword: a => { window.__calls.push(['signInWithPassword', a.email]); return res({ error: { message: 'Invalid login credentials' } }); },
     signInWithOtp: () => res({ error: null }),
-    updateUser: a => { window.__calls.push(['updateUser', a.password.length]); return res({ error: null }); },
+    updateUser: a => { window.__calls.push(['updateUser', a.password.length]); return res({ error: fx().updateUserError || null }); },
     mfa: { listFactors: () => res({ data: { totp: [] }, error: null }) },
   },
   rpc: (name, args) => {
@@ -68,7 +68,16 @@ window.supabase = { createClient: () => ({
     return res({ data: f === undefined ? null : f, error: null });
   },
   from: () => ({ select: () => ({ then: (ok, bad) => res({ data: fx().races, error: null }).then(ok, bad) }) }),
-  functions: { invoke: (name, opts) => { window.__calls.push(['invoke', name, opts.body]); return res(fx().invoke); } },
+  // invokeError mimics supabase-js 2.117.1: an HTTP error carries the
+  // function's Response as context; a network or CORS failure carries a TypeError.
+  functions: { invoke: (name, opts) => {
+    window.__calls.push(['invoke', name, opts.body]);
+    const e = fx().invokeError;
+    let out = fx().invoke;
+    if (e && e.status) out = { data: null, error: { name: 'FunctionsHttpError', message: 'Edge Function returned a non-2xx status code', context: new Response(JSON.stringify(e.body || {}), { status: e.status }) } };
+    else if (e) out = { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function', context: new TypeError('Failed to fetch') } };
+    return new Promise(r => setTimeout(() => r(out), fx().invokeDelay || 0));
+  } },
 }) };
 `;
 
@@ -286,6 +295,45 @@ console.log('1. The console with requests waiting');
   await page.close();
 }
 
+console.log('1b. Member-typed text stays text; unlisted approvals and expired resets are marked');
+{
+  const evil = '<img src=x onerror="window.__xss=1">';
+  const fx = fixtures();
+  fx.rpc.admin_requests = [
+    { ...fx.rpc.admin_requests[0], display_name: evil, note: evil },
+    {
+      ...fx.rpc.admin_requests[2],
+      status: 'approved',
+      listed: false,
+      reset_pending: true,
+      reset_expires_at: '2020-01-01T00:00:00Z',
+      display_name: 'Old Member',
+    },
+  ];
+  fx.rpc.admin_activity[0].changed_by_label = evil;
+  const { page } = await open(fx);
+  await page.waitForSelector('#requests');
+  await page.locator('#requests select').selectOption('');
+  await page.waitForTimeout(200);
+  check(
+    await page.evaluate(() => window.__xss === undefined),
+    'markup in a name, a note or an activity label never runs',
+  );
+  check(
+    (await page.locator('.admin-request').first().locator('strong').textContent()) === evil,
+    'it shows as literal text',
+  );
+  check(
+    (await page.locator('.admin-warn', { hasText: 'Not on the allow-list' }).count()) === 1,
+    'an approved request whose address is unlisted is marked',
+  );
+  check(
+    (await page.locator('.admin-warn', { hasText: 'Temporary password expired' }).count()) === 1,
+    'an expired temporary password is marked (R6)',
+  );
+  await page.close();
+}
+
 console.log('2. Rejecting asks first');
 {
   const { page } = await open(fixtures());
@@ -330,36 +378,79 @@ console.log('3. Resetting a password shows it once');
     ),
     'with the spec wording',
   );
+  check(
+    await page.evaluate(() => document.activeElement?.textContent === 'Copy'),
+    'focus moves to Copy',
+  );
   const inv = (await calls(page)).find(c => c[0] === 'invoke');
   check(
     inv[1] === 'admin-reset-password' && inv[2].user_id === 'u1',
     'it calls admin-reset-password for that account',
   );
+  await page.keyboard.press('Escape');
+  check(
+    (await page.locator('.admin-reveal-dialog[open]').count()) === 1,
+    'Escape does not close it',
+  );
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page
+    .waitForFunction(() => !document.querySelector('.admin-reveal-dialog'), null, { timeout: 2000 })
+    .catch(() => null);
+  check(
+    (await page.locator('.admin-reveal-dialog').count()) === 0,
+    'Done closes it, and the password is gone',
+  );
+  await page.close();
+}
+
+console.log('3b. A re-render while the reset is in flight does not lose the password (R1 M1)');
+{
+  const { page } = await open(fixtures({ invokeDelay: 1500 }));
+  await page.waitForSelector('#requests');
+  await page.getByRole('button', { name: 'Reset password' }).click();
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForSelector('#confirmDialog:not([open])', { state: 'attached' });
+  await page.getByRole('button', { name: 'Resetting…' }).waitFor();
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.waitForFunction(() => window.__calls.filter(c => c[1] === 'admin_stats').length === 2);
+  await page.getByRole('button', { name: 'Reset password' }).waitFor();
+  check(
+    (await page.locator('.admin-temp-password').count()) === 0,
+    'the console really re-rendered before the reset answered',
+  );
+  await page.waitForSelector('.admin-temp-password', { timeout: 3000 }).catch(() => null);
+  check(
+    (await page.locator('.admin-temp-password').count()) === 1,
+    'the password still shows after the console re-rendered',
+  );
   await page.close();
 }
 
 console.log('4. A reset that fails says why, and allows another try');
-{
-  const fx = fixtures({
-    invoke: {
-      data: null,
-      error: { message: 'Edge Function returned a non-2xx status code', context: null },
-    },
-  });
-  const { page } = await open(fx);
+for (const [invokeError, want, label] of [
+  [
+    { status: 400, body: { error: 'That account no longer exists.' } },
+    "Couldn't reset: That account no longer exists.",
+    'the function’s own reason',
+  ],
+  [{ status: 404 }, "Couldn't reset: Password resets aren’t set up yet.", 'a 404 says not set up'],
+  [
+    { fetch: true },
+    "Couldn't reset: Couldn’t reach the password reset service. It may not be set up yet.",
+    'a network or CORS failure says it can’t reach the service',
+  ],
+]) {
+  const { page } = await open(fixtures({ invokeError }));
   await page.waitForSelector('#requests');
   await page.getByRole('button', { name: 'Reset password' }).click();
   await page.locator('#confirmDialogConfirm').click();
   await page.waitForFunction(
     () => document.querySelector('.admin-reset .admin-error')?.textContent,
   );
-  check(
-    (await page.locator('.admin-reset .admin-error').textContent()).startsWith("Couldn't reset:"),
-    'the error shows',
-  );
+  check((await page.locator('.admin-reset .admin-error').textContent()) === want, label);
   check(
     await page.getByRole('button', { name: 'Reset password' }).isEnabled(),
-    'the button works again',
+    'and the button works again',
   );
   await page.close();
 }
@@ -381,6 +472,10 @@ console.log('5. Before the migration is applied');
   check(
     (await page.getByRole('button', { name: 'Reset password' }).count()) === 0,
     'no Reset password buttons',
+  );
+  check(
+    (await page.locator('th', { hasText: 'Password' }).count()) === 0,
+    'and no empty Password column',
   );
   check(
     (await page.locator('h2', { hasText: 'Activity' }).count()) === 1,
@@ -426,9 +521,50 @@ console.log('6. Sign-in: password first, code as fallback; and the password card
   );
   await pw.nth(1).fill('correct horse battery');
   await c.page.getByRole('button', { name: 'Save password' }).click();
-  await c.page.waitForFunction(() => window.__calls.some(x => x[0] === 'updateUser'));
-  check(true, 'a matching password is saved with updateUser');
+  await c.page
+    .waitForFunction(() => window.__calls.some(x => x[0] === 'updateUser'), null, { timeout: 3000 })
+    .catch(() => null);
+  const saved = (await calls(c.page)).find(x => x[0] === 'updateUser');
+  check(
+    saved?.[1] === 'correct horse battery'.length,
+    'a matching password is saved with updateUser',
+  );
   await c.page.close();
+  const r = await open(
+    fixtures({
+      updateUserError: {
+        code: 'reauthentication_needed',
+        message: 'Password update requires reauthentication',
+      },
+    }),
+  );
+  await r.page.waitForSelector('#requests');
+  const pw2 = r.page
+    .locator('section', { hasText: 'Your password' })
+    .locator('input[type=password]');
+  await pw2.nth(0).fill('correct horse battery');
+  await pw2.nth(1).fill('correct horse battery');
+  await r.page.getByRole('button', { name: 'Save password' }).click();
+  await r.page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('.admin-result')].some(n =>
+          n.textContent.includes('Supabase'),
+        ),
+      null,
+      { timeout: 3000 },
+    )
+    .catch(() => null);
+  check(
+    (
+      await r.page
+        .locator('section', { hasText: 'Your password' })
+        .locator('.admin-result')
+        .textContent()
+    ).startsWith('Supabase wants a recent sign-in'),
+    'a reauthentication error says what to do',
+  );
+  await r.page.close();
 }
 
 await browser.close();
