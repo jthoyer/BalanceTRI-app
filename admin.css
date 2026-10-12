@@ -390,6 +390,34 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.admin-batch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.admin-batch[hidden] {
+  display: none;
+}
+.admin-request .admin-choose {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+.admin-batch-notice {
+  margin-bottom: 12px;
+}
+.admin-batch-notice p,
+.admin-batch-notice ul {
+  margin: 0;
+}
+.admin-batch-notice ul {
+  padding-left: 20px;
+  margin-top: 6px;
+}
 
 /* Password reset */
 .admin-reveal {
