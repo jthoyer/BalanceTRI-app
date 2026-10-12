@@ -1,4 +1,4 @@
--- Tests for migration 20261012070000_add_batch_approve.sql: approving several
+-- Tests for migration 20261012210000_add_batch_approve.sql: approving several
 -- waiting requests in one go. Run with supabase/tests/run.sh.
 begin;
 \set QUIET on
