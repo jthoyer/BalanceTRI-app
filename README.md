@@ -77,11 +77,13 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 
 `admin.html` is a page for club admins. It shows:
 
+- **Requests** (once the access-requests migration is applied): everyone who has asked to join, with their name, email and note. **Approve** or **Reject** a waiting request; **Remove access** from an approved one; **Approve after all** or **Give access back** for a rejected or removed one. An optional reason is kept for admins only. A request whose Telegram message never went out is marked "Telegram message not sent". The title shows how many are waiting, and so does the calendar's **Admin** link. Until the migration is applied, this panel says "Not set up yet" and the rest of the console works as before.
 - **Stats:** upcoming races, commitments, accounts, accounts not on the allow-list, changes this week, and sign-ups over the last 14 days.
-- **Activity:** every change to commitments and races in the last 30 days, who made it, and what changed. Each one has an **Undo** button.
+- **Activity:** every change to commitments and races in the last 30 days, and every display-name change, with who made it and what changed. Filter by kind of change or by member. Commitment and race changes have an **Undo** button; a rename doesn't.
 - **Removed races,** each with a **Restore** button.
-- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account.
-- **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed.
+- **Accounts:** everyone who has signed up, whether they're on the allow-list and whether they confirmed their email. This is the quickest way to spot a bot account. Once the access-requests migration is applied, each non-admin account has **Reset password** (see "Password resets"). The temporary password shows once, in a dialog with a Copy button that only **Done** closes; nothing on the page can wipe it first. A request shows when a reset is pending, and marks it once the temporary password has expired.
+- **Your password:** set a password for your own account, or change it.
+- **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
 Signed-in admins see an **Admin** link in the calendar header.
 
@@ -91,7 +93,9 @@ Signed-in admins see an **Admin** link in the calendar header.
 - To drop the two-factor requirement for one admin: `update private.admins set mfa_required = false where user_id = '<id>';`.
 - If an admin loses their authenticator, delete their factor under Authentication → Users → the user → MFA. The console then asks them to set up a new one.
 
-**The page has its own sign-in.** The calendar signs out anyone who isn't on the allow-list, so an admin who isn't listed could never reach the console through it. The admin form uses `shouldCreateUser: false`, so it can't create accounts. Both pages share one session, so if an admin who isn't listed opens the calendar, they're signed out of the console too. The console warns about this and offers to add their address.
+**The page has its own sign-in.** The calendar signs out anyone who isn't on the allow-list, so an admin who isn't listed could never reach the console through it. It asks for email and password first, then the authenticator code. **Email me a code instead** is the fallback, and the way in until you've set a password under **Your password**. The code form uses `shouldCreateUser: false`, so it can't create accounts. Both pages share one session, so if an admin who isn't listed opens the calendar, they're signed out of the console too. The console warns about this and offers to add their address.
+
+**Checking it in a browser.** `node scripts/check-admin-ui.mjs` drives the console in headless Chromium against a stand-in Supabase client: the Requests panel, decisions, password reset, "not set up yet", sign-in and the password card. It skips if Playwright isn't installed, and never talks to the real project.
 
 **Undo is careful.** It only goes ahead if the row is still exactly as that change left it; otherwise it asks you to undo the later change first. Undoing a new race removes it softly, so its roster stays. A restored commitment is credited to the admin who restored it, while the history keeps the original. Every admin action is logged in `private.admin_actions`.
 
@@ -203,7 +207,7 @@ distinguished from an unloaded one.
 
 **How it works.**
 
-1. An `AFTER INSERT` trigger on `private.access_requests` posts the new row's `user_id` to the function through `pg_net`. It sends nothing else, plus a shared secret in the `x-notify-secret` header. It fires on the request row, not on a raw `auth.users` signup, so a half-finished sign-up never pings the admin.
+1. An `AFTER INSERT` trigger on `private.access_requests` posts the new row's `user_id` to the function through `pg_net`, for pending rows only. It sends nothing else, plus a shared secret in the `x-notify-secret` header. It fires on the request row, not on a raw `auth.users` signup, so a half-finished sign-up never pings the admin.
 2. The function calls `public.notifier_claim(user_id)`. The database checks the request is still `pending`, has not been announced, and that fewer than 20 requests were announced today (Sydney time). If so it stamps `notified_at` and returns the display name.
 3. The function builds the text itself, from fixed wording and the name the database returned. It never uses text from the caller. It sends it as plain text, with link previews off, to a fixed chat.
 4. If Telegram refuses, the function calls `public.notifier_release(user_id)`, which clears `notified_at`. The console then shows "notification not sent" for that request. The 20th message of the day ends with "Daily limit reached. Check the console for more.", and the 21st sends nothing.
@@ -237,3 +241,88 @@ psql -v ON_ERROR_STOP=1 -v migration=/tmp/notifier_migration.sql -d <scratch db>
 ```
 
 The first set covers the secret check (T7), what the caller can and cannot influence, the daily-limit message (T8), and Telegram failures. The second runs against a throwaway Postgres with stand-ins for Supabase and B3. It covers the trigger, the claim and release rules, the daily cap of 20 across the Sydney day, and who may call what.
+
+## Access requests (gated member accounts)
+
+Migration `20261011230000_add_access_requests.sql` is the database side of "sign up with email, password and display name, then wait for the club admin". It is step B3 of the plan. **It is not applied to the live project yet**, and it is safe with "Confirm email" still on: it only adds.
+
+**The allow-list stays the only gate.** The RLS policies on `entries` and `races` still check `private.is_allow_listed()` and nothing else. `private.access_requests` is the workflow and the record; it never grants anything by itself. `admin_decide_request()` moves the two together in one transaction. A write stops the moment an address leaves the allow-list, because the policies check it on every write.
+
+**Tables** (`private`, so invisible to the API; RLS on, no policies, every grant revoked):
+
+- `access_requests` — one row per person (the primary key on `user_id`): display name, note, status (`pending`, `approved`, `rejected`, `revoked`), who decided and when, an admin-only reason, and `notified_at` (set by the notifier below).
+- `password_resets` — the "must change password" flag and its 7-day expiry. Written by the admin reset function (B5); cleared by `password_changed()`. In phase 1 the app enforces the expiry, not the server.
+
+**Member functions** (signed-in only; each acts on the caller and takes no user id):
+
+- `my_access_status()` — `none`, `pending`, `approved`, `rejected` or `revoked`, plus whether a password change is due. Anyone on the allow-list is `approved` with or without a request row, so existing members need no backfill.
+- `request_access(name, note)` — once per account, only if not listed. Writes `profiles.display_name` and a `pending` row. Errors are worded for the member.
+- `password_changed()` — clears the caller's reset flag.
+
+**Admin functions** (admins with a two-factor session; every decision is logged in `private.admin_actions` as `access_approve`, `access_reject`, `access_revoke` or `access_reapprove`): `admin_requests(status)`, `admin_decide_request(user, decision, reason)` and `admin_pending_count()`. Transitions: approve and reject act on `pending`; revoke on `approved`; reapprove on `revoked` or `rejected`. An admin can't decide on their own account.
+
+**Display names.** 2 to 40 characters; letters in any language, spaces, apostrophes, hyphens and full stops; at least one letter. Names are stored in Unicode NFC form, so "Zoë" typed two different ways is one name. Names are unique among pending and approved people, ignoring case, because `entries` is unique on `(race_id, name)` and two "Sam"s would collide on a race. A member who joined before requests existed counts if their address is on the allow-list. Approving or reapproving re-checks the name, in case such a member has taken it since. Letter matching uses `[[:alpha:]]`, which needs a UTF-8 database; the live project's is `en_US.UTF-8` and was checked. Look-alike letters from other scripts (a Cyrillic "а" for a Latin "a") are not caught.
+
+**Renames.** The same rules apply when a member renames their own profile (a `BEFORE UPDATE` trigger). A pending member's request follows the rename, so the name guard covers the new name and frees the old one. Each rename is logged in `private.change_history` and shows in the console's activity feed as "Renamed A to B", with no Undo. Renames are capped at 5 a day per member, because each one writes a history row and an uncapped loop could fill the database; the dashboard and the service role are not capped. Choosing a name in `request_access()` replaces the seeded one (the email's local part) and is not counted or logged as a rename. Invisible marks such as U+034F are stripped, so they can't make a copy of a taken name.
+
+**Re-approving an existing member can need a rename first.** When a member who joined before requests existed loses their listing, they get a `revoked` row named after their profile (or "Member" if that is too short). Profile names were never unique, so reapproving can be refused with "Another member now uses that name". Rename the profile in the dashboard to a valid, unused name, then reapprove. The same goes for adding such an account through the Allow-list box.
+
+**Guards for "Confirm email" off.** With confirmation off, an address proves nothing, so a hash left on the allow-list is a pre-approval anyone can claim by signing up with that address.
+
+- **G2.** `admin_allow_list_add()` refuses an address with no account ("No account uses that address."), and an account that hasn't confirmed its email. Listing an address also approves its request, and `admin_allow_list_remove()` revokes it, so the Requests panel and the list never disagree. A member who joined before requests existed and is removed gets a `revoked` row, so they see "access removed" rather than the join form.
+- **G3.** Triggers on `auth.users`: deleting an account removes its hash; changing its email removes the old hash and sets the request to `revoked` (or makes a `revoked` row for an existing member) so the owner approves the new address. A change of letter case alone is the same address and is ignored. These fail closed: if the Vault key is missing, the delete or email change is refused.
+- **One change per account at a time.** Admin decisions, `request_access()` and the G3 triggers all take a per-account advisory lock first (`private.lock_account`); a deletion takes it in a `BEFORE DELETE` trigger, so it is held before the cascade touches the request row. Without it, an approval and an email change landing together could leave the old address listed with no account behind it. The lock order is the same everywhere, so these wait for each other rather than deadlock; that part is reasoned, not tested, because the window can't be forced in a test.
+- **G1 is not in the migration.** It is a one-off for cutover (B9) and must run immediately before "Confirm email" goes off. It deletes every hash that has no **confirmed** account, and **cannot be undone**: the deleted hashes were never readable. Unconfirmed accounts don't count, because anyone can create one on any address while confirmation is on and confirm it later by signing up again.
+
+  ```sql
+  delete from private.allowed_emails
+   where email_hash not in (
+     select private.email_hash(email) from auth.users
+      where email is not null and email_confirmed_at is not null
+   );
+  ```
+
+  Straight after G1, delete the accounts that are still unconfirmed. None of them can be listed by then, and one sitting on a member's address would stop that member joining:
+
+  ```sql
+  delete from auth.users where email_confirmed_at is null;
+  ```
+
+**Profiles.** Members could edit every column of their own `profiles` row, including `justgo_status`. They can now change `display_name` and nothing else (a table-wide `UPDATE` grant was replaced with a column grant; revoking only the `justgo_*` columns would have done nothing).
+
+**SQL tests.** `supabase/tests/run.sh` replays every migration on a scratch Postgres, with stand-ins for `auth`, `vault` and `pg_net` in `stubs.sql`, then runs each `*.test.sql`. It never touches a real project.
+
+```
+PGHOST=/tmp/pgtest PGUSER=nobody supabase/tests/run.sh
+```
+
+It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can create databases and roles (the scratch `service_role` is made with `BYPASSRLS`, as on Supabase). `b3_access_requests.test.sql` covers spec tests T1 to T6 and T10, the request state machine, the name rules and the profile changes. `b3_review_fixes.test.sql` covers the fixes from the code and security reviews. `b3_b4_notifier.test.sql` checks that a real `request_access()` call fires the notifier trigger. `races.sh` runs two sessions at once to show the per-account lock holds when an approval and an email change collide.
+
+## Password resets
+
+Members get no email, so Supabase's own "reset password" email isn't used. The owner resets a password from the console instead (step B5). **Not deployed or applied yet.**
+
+1. The console's **Reset password** button calls the Edge Function `admin-reset-password` with the owner's own session.
+2. The function calls `public.admin_password_reset_begin(user_id)` **as the owner**, so the usual admin check decides: an admin, signed in with two-factor. Anyone else gets 401 or 403, and nothing changes.
+3. That function flags "must change password" in `private.password_resets` for 7 days, signs the member out on every device (it deletes their sessions and refresh tokens), and logs `password_reset` in `private.admin_actions`.
+4. The Edge Function makes a temporary password (four random words and two digits, such as `maple-river-swift-cloud-47`) and sets it with the service role through the Auth admin API.
+5. It calls `admin_password_reset_finish()`, again as the owner, which signs the member out once more. The old password worked until step 4, so a session opened in between must not survive the reset.
+6. It returns the password once. It is never stored, logged or emailed. The owner passes it on by text or in person. If the second sign-out failed, the reply says `signed_out: false`, and the console should say so.
+
+Before any of this, the function checks with Auth that the owner's own session is still live. A stolen admin token whose session was revoked does nothing.
+
+The owner can't reset their own password this way, nor another admin's: admins use Change password or the dashboard.
+
+**Signed out, but not instantly everywhere.** Deleting a member's sessions and refresh tokens stops every device renewing its access token. A token already issued keeps working until it expires, because the database checks its signature and expiry, not whether its session still exists. That is up to `jwt_expiry` (an hour by default). Shortening `jwt_expiry` in the dashboard narrows the window.
+
+When the member signs in with it, the app sends them straight to "Set a new password" (B7), and `password_changed()` clears the flag. The 7-day expiry is enforced by the app in phase 1, not the server (spec R6).
+
+If setting the password fails after step 3, the function undoes the reset (`admin_password_reset_abort()`): the flag goes, and the log records `password_reset_failed`. The member stays signed out, and their old password still works. The owner sees an error and can try again.
+
+**Strength.** Four words from a list of 407 and two digits give about 41 bits, in about 28 characters. The list has no US spellings and no words that sound like others when read out, since R4 lets the owner pass the password on in person. That's enough for a one-time password that the member replaces at once, behind Supabase's sign-in rate limit and hCaptcha. The words are in `supabase/functions/admin-reset-password/words.ts`.
+
+**Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+
+**Switching it on**, each step with the owner's go: apply `20261011232000_add_admin_password_reset.sql` after the B3 migration, then `supabase functions deploy admin-reset-password`. The console's **Reset password** button (B6) appears once the access-requests migration is applied; until the function is deployed it says it can't reach the service.
+
+**Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.

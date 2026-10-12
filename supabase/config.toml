@@ -433,3 +433,8 @@ enabled = true
 # "Access-request alerts").
 [functions.notify-access-request]
 verify_jwt = false
+
+# Called by the admin console with the admin's own session. Supabase checks the
+# JWT, and the database then checks the caller is an admin with two-factor.
+[functions.admin-reset-password]
+verify_jwt = true

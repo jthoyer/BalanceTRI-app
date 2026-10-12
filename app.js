@@ -173,6 +173,10 @@ let isMember = false;
 // isAdmin only decides whether the header shows a link to admin.html. The
 // admin functions check for themselves; see the add_admin_console migration.
 let isAdmin = false;
+// How many access requests are waiting, for the Admin link. Only an admin with
+// a two-factor session gets a number back; anyone else, or an older database,
+// gets an error and no number is shown.
+let adminWaiting = 0;
 async function checkMembership() {
   if (!session) {
     isMember = false;
@@ -182,6 +186,11 @@ async function checkMembership() {
   const [member, admin] = await Promise.all([db.rpc('is_allow_listed'), db.rpc('admin_status')]);
   isMember = !member.error && member.data === true;
   isAdmin = !admin.error && admin.data?.admin === true;
+  adminWaiting = 0;
+  if (isAdmin && admin.data?.ready) {
+    const waiting = await db.rpc('admin_pending_count');
+    if (!waiting.error && Number.isInteger(waiting.data)) adminWaiting = waiting.data;
+  }
 }
 // supabase-js warns against calling auth methods synchronously from inside
 // onAuthStateChange (it can deadlock the client), so the actual sign-out is
@@ -256,8 +265,8 @@ function renderAuth() {
     if (isAdmin) {
       const adminLink = document.createElement('a');
       adminLink.className = 'text-button';
-      adminLink.href = 'admin.html';
-      adminLink.textContent = 'Admin';
+      adminLink.href = adminWaiting ? 'admin.html#requests' : 'admin.html';
+      adminLink.textContent = adminWaiting ? `Admin (${adminWaiting} waiting)` : 'Admin';
       widget.append(adminLink);
     }
     widget.append(signOut);

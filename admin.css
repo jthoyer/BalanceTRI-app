@@ -342,6 +342,81 @@
   color: #9b2c2c;
 }
 
+/* Requests */
+.admin-waiting {
+  font-family: inherit;
+  font-size: 14px;
+  vertical-align: middle;
+  color: var(--ink);
+  text-decoration: none;
+}
+.admin-status-pending {
+  color: var(--ink);
+  font-weight: 600;
+}
+.admin-status-approved {
+  color: var(--green);
+}
+.admin-status-rejected,
+.admin-status-revoked,
+.admin-warn {
+  color: #9b2c2c;
+}
+.admin-note {
+  margin: 4px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--line);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.admin-request .admin-change-main {
+  flex: 1;
+}
+.admin-request input[type='text'] {
+  display: block;
+  width: 100%;
+  max-width: 460px;
+  min-height: 40px;
+  margin-top: 8px;
+  border: 1px solid #aab5c6;
+  border-radius: 9px;
+  padding: 6px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: 15px 'DM Sans';
+}
+.admin-request-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Password reset */
+.admin-reveal {
+  white-space: normal;
+  min-width: 260px;
+}
+.admin-reveal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.admin-reset .admin-error {
+  white-space: normal;
+  max-width: 280px;
+}
+.admin-reveal-dialog .admin-reveal {
+  margin: 8px 0 4px;
+}
+.admin-temp-password {
+  font-size: 15px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  user-select: all;
+}
+
 @media (max-width: 700px) {
   .admin-card {
     padding: 16px;
