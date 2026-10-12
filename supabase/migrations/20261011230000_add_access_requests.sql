@@ -118,7 +118,7 @@ begin
   if char_length(v) < 2 or char_length(v) > 40 then
     raise exception 'Your name needs to be 2 to 40 characters.';
   end if;
-  if v !~ '^([[:alpha:]̀-ͯ]|[ ''.’-])+$' then
+  if v !~ '^([[:alpha:]\u0300-\u036f]|[ ''.’-])+$' then
     raise exception 'Use letters, spaces, apostrophes, hyphens and full stops in your name.';
   end if;
   if v !~ '[[:alpha:]]' then
