@@ -105,6 +105,7 @@ window.supabase = { createClient: () => ({
   },
   rpc: (name, args) => {
     window.__calls.push(['rpc', name, args || null]);
+    if (name === 'is_allow_listed' && fx().listedError) return res({ data: null, error: { message: 'boom' } });
     if (name === 'is_allow_listed') return res({ data: window.__access?.state === 'approved' || !!fx().listed, error: null });
     if (name === 'my_access_status') {
       if (fx().statusError) return res({ data: null, error: fx().statusError });
@@ -126,13 +127,18 @@ window.supabase = { createClient: () => ({
     return res({ data: null, error: { code: 'PGRST202', message: 'not found' } });
   },
   from: table => {
+    let writing = false;
     const q = {
+      insert: () => { writing = true; window.__calls.push(['write', table, 'insert']); return q; },
+      update: () => { writing = true; window.__calls.push(['write', table, 'update']); return q; },
+      delete: () => { writing = true; window.__calls.push(['write', table, 'delete']); return q; },
+      upsert: () => { writing = true; window.__calls.push(['write', table, 'upsert']); return q; },
       select: () => q,
       is: () => q,
       eq: () => q,
       order: () => q,
       single: () => res({ data: { display_name: window.__access?.display_name || 'Sam' }, error: null }),
-      then: (ok, bad) => res({ data: table === 'races' ? fx().races : [], error: null }).then(ok, bad),
+      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : { data: table === 'races' ? fx().races : [], error: null }).then(ok, bad),
     };
     return q;
   },
@@ -193,7 +199,7 @@ const check = (cond, msg) => {
     failures++;
   }
 };
-async function open(fx, { width = 1100 } = {}) {
+async function open(fx, { width = 1100, storage = {} } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -208,6 +214,10 @@ async function open(fx, { width = 1100 } = {}) {
   await page.addInitScript(f => {
     window.__fixtures = f;
   }, withRaces(fx));
+  // localStorage a scenario wants to start with (a flag left by an earlier visit).
+  await page.addInitScript(entries => {
+    for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
+  }, storage);
   await page.goto(base + '/');
   await page.waitForFunction(() => !document.querySelector('#raceLoading'));
   return { page, errors };
@@ -392,11 +402,11 @@ console.log('3. Password rules (P1, P2, P3)');
     'focus moves to the box that needs fixing',
   );
   // Boundaries that must be accepted: no composition rules.
-  await attempt('a'.repeat(12));
+  await attempt('zqxjkvbnmwpt');
   await page.waitForFunction(() => window.__calls.some(c => c[0] === 'signUp'));
   check(
     (await called(page, 'signUp'))[0][2] === 12,
-    '12 lower-case letters, no capitals or symbols, is accepted',
+    '12 lower-case letters, no capitals or symbols (and not a common password), is accepted',
   );
   await page.close();
 }
@@ -986,7 +996,246 @@ console.log('13. A database that cannot answer yet');
   await page.close();
 }
 
-console.log('14. Looks (screenshots in $SCREENSHOT_DIR or /tmp), small and large screens');
+console.log('14. Review round: reauthentication, refused writes, inert page, retries');
+{
+  // The one-time prompt, where Supabase wants a recent sign-in: never "sign out".
+  const { page } = await open({
+    ...signedIn(accessOf('approved'), {}),
+    seq: {
+      updateUser: [
+        { code: 'reauthentication_needed', message: 'Password update requires reauthentication' },
+      ],
+    },
+  });
+  await page.locator('#auth-password').fill('river maple cloud swift');
+  await page.locator('#auth-confirm').fill('river maple cloud swift');
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await joinError(page).waitFor({ state: 'visible' });
+  const msg = await joinError(page).innerText();
+  check(
+    msg ===
+      "We couldn't save it from this session. Stay signed in, and ask the club admin for a temporary password if you need one.",
+    'prompt + reauthentication_needed: says to stay signed in and ask the admin',
+  );
+  check(!/sign out|sign in again/i.test(msg), 'and never suggests signing out');
+  check((await called(page, 'signOut')).length === 0, 'nobody is signed out');
+  check(await sheetOpen(page), 'the prompt stays open');
+  check(
+    await page.evaluate(() => localStorage.getItem('balance-password-prompt-u1') === null),
+    'a failed save does not mark the prompt as seen',
+  );
+  // Closed some other way than "Not now", then a reload: the prompt returns.
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await page.waitForFunction(() => !document.querySelector('#raceLoading'));
+  await settle(page);
+  check(await sheetOpen(page), 'after a reload the prompt comes back');
+  check(
+    (await sheetText(page)).includes('Set a password so you can sign in without an email code.'),
+    'with the same wording',
+  );
+  await page.close();
+}
+{
+  const { page } = await open(signedIn(accessOf('approved'), {}));
+  await page.locator('#auth-password').fill('river maple cloud swift');
+  await page.locator('#auth-confirm').fill('river maple cloud swift');
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'updateUser'));
+  await settle(page);
+  check(
+    await page.evaluate(() => localStorage.getItem('balance-password-prompt-u1') === '1'),
+    'a successful save marks the prompt as seen',
+  );
+  await page.close();
+}
+{
+  // A refused write re-reads the member's standing (5.3, T12).
+  const { page } = await open({
+    ...signedIn(accessOf('approved')),
+    writeResult: {
+      data: null,
+      error: { message: 'new row violates row-level security policy for table "races"' },
+    },
+  });
+  check(await page.locator('#heroAddButton').isEnabled(), 'an approved member can open Add a race');
+  await page.evaluate(() => {
+    window.__access = { ...window.__access, state: 'revoked' };
+  });
+  await page.locator('#heroAddButton').click();
+  await page.locator('#raceForm input[name="name"]').fill('Noosa 2027');
+  await page.locator('#raceForm input[name="date"]').fill('2027-11-01');
+  await page.locator('#raceForm .primary-button').click();
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'signOut'));
+  await settle(page);
+  check(
+    (await text(page, '#updateBannerText')) ===
+      "Your access has been removed. If you think that's a mistake, contact the club at mail@balancetriclub.com.",
+    'a revoked member whose save is refused gets the removal message, not a save error',
+  );
+  check(await page.locator('#signInButton').isVisible(), 'and is signed out at once');
+  check(
+    await page.locator('#heroAddButton').isEnabled(),
+    'signed-out buttons are the ordinary signed-out ones',
+  );
+  const writesBefore = (await called(page, 'write')).length;
+  await page.locator('#heroAddButton').click();
+  check(
+    (await sheetOpen(page)) && (await called(page, 'write')).length === writesBefore,
+    'Add a race now opens the sign-in sheet and writes nothing',
+  );
+  await page.close();
+}
+{
+  // Still approved, but the write found zero rows: nothing changes for them.
+  const { page } = await open({
+    ...signedIn(accessOf('approved')),
+    writeResult: { data: [], error: null },
+  });
+  await page.locator('#heroAddButton').click();
+  await page.locator('#raceForm input[name="name"]').fill('Noosa 2027');
+  await page.locator('#raceForm input[name="date"]').fill('2027-11-01');
+  await page.locator('#raceForm .primary-button').click();
+  await settle(page);
+  check(
+    (await called(page, 'signOut')).length === 0,
+    'an approved member with a refused write stays signed in',
+  );
+  await page.close();
+}
+{
+  // Save on the commitment form follows the account state.
+  for (const [state, enabled] of [
+    ['pending', false],
+    ['approved', true],
+  ]) {
+    const { page } = await open(signedIn(accessOf(state)));
+    await page.locator('.race-summary').first().click();
+    await page.locator('.save-button').waitFor({ state: 'attached' });
+    check(
+      (await page.locator('.save-button').isEnabled()) === enabled,
+      `${state}: the commitment Save button is ${enabled ? 'enabled' : 'disabled'}`,
+    );
+    await page.close();
+  }
+}
+{
+  // A password changed, but the flag not cleared last time: retried on load.
+  const { page } = await open(
+    signedIn(accessOf('approved', { password_change_due: true }), { has_password: true }),
+    { storage: { 'balance-pwchanged-u1': '1' } },
+  );
+  await settle(page);
+  check(
+    (await rpcCalled(page, 'password_changed')).length === 1,
+    'password_changed is retried on load',
+  );
+  check(!(await sheetOpen(page)), 'so the member is not asked for another new password');
+  check(
+    await page.evaluate(() => localStorage.getItem('balance-pwchanged-u1') === null),
+    'and the reminder is cleared once it works',
+  );
+  await page.close();
+}
+{
+  const { page } = await open({
+    ...signedIn(accessOf('approved', { password_change_due: true }), {}),
+    seq: { passwordChanged: [{ code: '500', message: 'boom' }] },
+  });
+  await page.locator('#auth-password').fill('river maple cloud swift');
+  await page.locator('#auth-confirm').fill('river maple cloud swift');
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await joinError(page).waitFor({ state: 'visible' });
+  check(
+    await page.evaluate(() => localStorage.getItem('balance-pwchanged-u1') === '1'),
+    'a failed password_changed is remembered on the device',
+  );
+  await page.close();
+}
+{
+  // The page behind the locked step cannot be reached from the keyboard.
+  const { page } = await open(signedIn(accessOf('approved', { password_change_due: true }), {}));
+  // Start from a control behind the sheet: an inert page won't take focus, so
+  // the Tab walk below starts from inside the sheet.
+  await page.evaluate(() => document.querySelector('#heroAddButton').focus());
+  const outside = [];
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.press('Tab');
+    outside.push(
+      await page.evaluate(() => {
+        const a = document.activeElement;
+        return a === document.body || !!a.closest('.auth-sheet') ? '' : a.id || a.tagName;
+      }),
+    );
+  }
+  check(
+    outside.every(x => x === ''),
+    'Tab from the page never lands on a control behind the forced step',
+  );
+  check(
+    await page.evaluate(() => document.querySelector('main.shell').inert),
+    'the page is inert while the sheet is open',
+  );
+  await page.close();
+}
+{
+  const { page } = await open({ ...SIGNED_OUT });
+  await page.locator('#authSheetBrowseButton').click();
+  check(
+    await page.evaluate(() => !document.querySelector('main.shell').inert),
+    'and live again once it closes',
+  );
+  await page.close();
+}
+{
+  // A failed is_allow_listed call must not lock out someone who is approved.
+  const { page } = await open({ ...signedIn(accessOf('approved')), listedError: true });
+  await settle(page);
+  check(
+    (await page.locator('#heroAddButton').isEnabled()) &&
+      (await called(page, 'signOut')).length === 0,
+    'an approved member survives a failed is_allow_listed',
+  );
+  await page.close();
+}
+{
+  // Confirm email on: the account exists, nobody is signed in.
+  const { page } = await open({
+    ...SIGNED_OUT,
+    signUp: { noSession: true, user: { id: 'x', identities: [{ id: 'i' }] } },
+  });
+  await openJoin(page);
+  await fillJoin(page);
+  await page.getByRole('button', { name: 'Join', exact: true }).click();
+  await joinError(page).waitFor({ state: 'visible' });
+  check(
+    (await joinError(page).innerText()) ===
+      'Check your email to confirm your address, then sign in.',
+    'a sign-up with no session and a fresh identity says to check email',
+  );
+  await page.close();
+}
+{
+  // The common-password list is a real one now.
+  const { page } = await open(SIGNED_OUT);
+  await openJoin(page);
+  for (const password of ['password1234', 'qwertyuiop123', '123456789012']) {
+    await fillJoin(page, { password, confirm: password });
+    await page.getByRole('button', { name: 'Join', exact: true }).click();
+    await page.waitForFunction(() =>
+      document.querySelector('#authSheetBody .auth-sheet-error:not(.hidden)'),
+    );
+    await page.waitForTimeout(100);
+    check(
+      (await joinError(page).innerText()).startsWith('That password is too common.'),
+      `${password} is refused as too common`,
+    );
+  }
+  check((await called(page, 'signUp')).length === 0, 'none of them reach signUp');
+  await page.close();
+}
+
+console.log('15. Looks (screenshots in $SCREENSHOT_DIR or /tmp), small and large screens');
 for (const width of [375, 1100]) {
   const dir = process.env.SCREENSHOT_DIR || '/tmp';
   const shot = (page, name) => page.screenshot({ path: `${dir}/app-${name}-${width}.png` });

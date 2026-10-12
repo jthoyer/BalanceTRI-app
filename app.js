@@ -114,6 +114,7 @@ let editScreenReturnFocus = null;
 let toast = null;
 let toastKind = 'success'; // 'success' | 'error' — see render()'s #updateBanner block
 let toastTimer = null;
+let signOutNotice = null;
 // The one place a save/remove/error result reaches the member: a banner
 // above the race list, not a blocking alert(). Replaces every alert() this
 // app used to raise for a write result — those were unstyled, blocked the
@@ -121,12 +122,16 @@ let toastTimer = null;
 // (send-link/verify-code failures): its opaque backdrop sits above this
 // banner, so those stay inline in the sheet instead — see openSignInForm.
 function showToast(msg, kind = 'success', ms = 4000) {
+  // Once a "you've been signed out" notice is up, a write error must not
+  // replace it (a refused save runs this right after the notice).
+  if (signOutNotice && msg !== signOutNotice) return;
   toast = msg;
   toastKind = kind;
   render();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     toast = null;
+    signOutNotice = null;
     render();
   }, ms);
 }
@@ -199,7 +204,9 @@ async function checkMembership() {
     db.rpc('admin_status'),
     db.rpc('my_access_status'),
   ]);
-  isMember = !member.error && member.data === true;
+  // A failed is_allow_listed call doesn't lock out someone my_access_status
+  // says is approved.
+  isMember = (!member.error && member.data === true) || status.data?.state === 'approved';
   isAdmin = !admin.error && admin.data?.admin === true;
   if (!status.error && status.data?.state) access = status.data;
   else if (isMember) access = { state: 'approved' };
@@ -226,6 +233,7 @@ function pendingMessage() {
 // onAuthStateChange), so showToast()'s banner is actually visible — unlike
 // the auth sheet's own errors, which stay inline; see openSignInForm.
 function signOutWithMessage(msg, ms) {
+  signOutNotice = msg;
   showToast(msg, 'error', ms);
   setTimeout(() => db.auth.signOut(), 0);
 }
@@ -458,7 +466,7 @@ const PASSWORD_HINT = `${PASSWORD_MIN} to ${PASSWORD_MAX} characters. Any charac
 // retried next time rather than remembered.
 let commonPasswords = null;
 function loadCommonPasswords() {
-  commonPasswords ||= fetch(`${BASE_PATH}assets/common-passwords.txt?v=2026101201`)
+  commonPasswords ||= fetch(`${BASE_PATH}assets/common-passwords.txt?v=2026101202`)
     .then(res => {
       if (!res.ok) throw new Error('common-password list ' + res.status);
       return res.text();
@@ -776,14 +784,16 @@ function openJoinForm(host, { cancel } = {}) {
             "There's already an account for this email. Sign in, or ask the club admin to reset your password.",
             email.input,
           );
+        // Confirm email still on: the account exists but nobody is signed in.
         return showFormError(
           formError,
           error
             ? authErrorText(error, 'Could not join: ')
-            : "We couldn't sign you in after making your account. Try signing in.",
+            : 'Check your email to confirm your address, then sign in.',
         );
       }
       session = data.session;
+      signOutNotice = null;
       await requestAccess(host, cleaned.name, note.input.value, { cancel });
     } finally {
       authBusy = false;
@@ -925,15 +935,23 @@ function closeAuthSheet({ force = false } = {}) {
   authSheetSnoozeWanted = false;
   $('.auth-sheet').classList.remove('is-locked');
   $('#authSheetBackdrop').classList.add('hidden');
+  $('main.shell').inert = false;
   if (authSheetReturnFocus && document.body.contains(authSheetReturnFocus))
     authSheetReturnFocus.focus();
   authSheetReturnFocus = null;
+}
+// The page behind the sheet is inert while it is open, so neither Tab nor a
+// screen reader's cursor can reach controls the sheet is meant to hold back,
+// most of all behind the locked set-password step.
+function showSheetBackdrop() {
+  $('main.shell').inert = true;
+  $('#authSheetBackdrop').classList.remove('hidden');
 }
 function openSheet(mode) {
   if (authSheetMode === null) authSheetReturnFocus = document.activeElement;
   authSheetMode = mode;
   $('.auth-sheet').classList.toggle('is-locked', mode === 'locked');
-  $('#authSheetBackdrop').classList.remove('hidden');
+  showSheetBackdrop();
 }
 function showAuthSheetNudge() {
   if (session || authSheetDismissed || Date.now() < state.authDismissedUntil) return;
@@ -961,7 +979,7 @@ function showAuthSheetNudge() {
     focusStep($('#authSheetBody'));
   };
   $('#authSheetBrowseButton').onclick = closeAuthSheet;
-  $('#authSheetBackdrop').classList.remove('hidden');
+  showSheetBackdrop();
   focusAuthSheet();
 }
 // Called before a write; opens the gate and returns false if signed out
@@ -971,7 +989,7 @@ function requireSignIn(title) {
   authSheetReturnFocus = document.activeElement;
   authSheetMode = 'gate';
   openSignInForm($('#authSheetBody'), { heading: title, cancel: closeAuthSheet });
-  $('#authSheetBackdrop').classList.remove('hidden');
+  showSheetBackdrop();
   focusAuthSheet();
   return false;
 }
@@ -1029,9 +1047,17 @@ function showPasswordSheet(kind) {
     formError,
   ];
   if (kind === 'forced') nodes.push(stepCancelButton('Sign out instead', () => db.auth.signOut()));
-  else nodes.push(stepCancelButton(kind === 'prompt' ? 'Not now' : 'Cancel', closeAuthSheet));
+  else if (kind === 'prompt')
+    // Only an explicit "Not now", or saving, ends the prompt for good; closing
+    // the sheet any other way (or a failed save) lets it come back.
+    nodes.push(
+      stepCancelButton('Not now', () => {
+        localStorage.setItem(passwordPromptKey(), '1');
+        closeAuthSheet();
+      }),
+    );
+  else nodes.push(stepCancelButton('Cancel', closeAuthSheet));
   showStep(host, title, nodes);
-  if (kind === 'prompt') localStorage.setItem(passwordPromptKey(), '1');
   // Once updateUser has worked, a retry only needs to finish the job: asking
   // Supabase to set the same password again would be refused as unchanged.
   let saved = false;
@@ -1061,7 +1087,7 @@ function showPasswordSheet(kind) {
           error.code === 'same_password'
             ? "That's the same as your current password. Choose a different one."
             : error.code === 'reauthentication_needed'
-              ? 'For your security, sign out and sign in again, then change your password.'
+              ? reauthText(kind)
               : 'Could not save your password: ' + error.message,
           password.input,
         );
@@ -1071,17 +1097,42 @@ function showPasswordSheet(kind) {
     if (kind === 'forced') {
       const { error } = await db.rpc('password_changed');
       // A database without the function can't hold the flag either.
-      if (error && error.code !== 'PGRST202')
+      if (error && error.code !== 'PGRST202') {
+        // The password is changed but the flag isn't cleared: remember it here
+        // so the next load retries before asking for another password.
+        localStorage.setItem(pwChangedKey(), '1');
         return fail(
           "Your password is saved, but we couldn't finish. Press Save password to try again.",
         );
+      }
+      localStorage.removeItem(pwChangedKey());
     }
+    if (kind === 'prompt') localStorage.setItem(passwordPromptKey(), '1');
     await checkMembership();
     renderAuth();
     closeAuthSheet({ force: true });
     showToast('Password saved.');
   });
   focusStep(host);
+}
+// Supabase wants a recent sign-in to change a password. Someone who has a
+// password can sign out and in again. Someone who has none (the one-time
+// prompt) must not be told to: they couldn't get back in.
+function reauthText(kind) {
+  if (kind === 'change' && session.user.user_metadata?.has_password)
+    return 'For your security, sign out and sign in again, then change your password.';
+  return "We couldn't save it from this session. Stay signed in, and ask the club admin for a temporary password if you need one.";
+}
+const pwChangedKey = () => `balance-pwchanged-${session.user.id}`;
+// The forced step changed the password but couldn't clear the reset flag (the
+// network dropped, say). Finish that before anything else reads the account,
+// or the member would be asked for yet another new password.
+async function settlePasswordChange() {
+  if (!session || !localStorage.getItem(pwChangedKey())) return;
+  const { error } = await db.rpc('password_changed');
+  if (error && error.code !== 'PGRST202') return;
+  localStorage.removeItem(pwChangedKey());
+  await checkMembership();
 }
 const passwordPromptKey = () => `balance-password-prompt-${session.user.id}`;
 // What to do about the account that just signed in or loaded, in order of
@@ -1103,8 +1154,14 @@ function reactToAccess() {
   if (access.state === 'legacy') return rejectNonMember();
   if (access.password_change_due) return showPasswordSheet('forced');
   if (access.state === 'approved') {
-    if (!session.user.user_metadata?.has_password && !localStorage.getItem(passwordPromptKey()))
+    if (
+      !session.user.user_metadata?.has_password &&
+      !localStorage.getItem(passwordPromptKey()) &&
+      promptedThisView !== session.user.id
+    ) {
+      promptedThisView = session.user.id;
       showPasswordSheet('prompt');
+    }
   } else if (access.state === 'none' && autoAskedFor !== session.user.id) {
     autoAskedFor = session.user.id;
     showNameSheet();
@@ -1113,6 +1170,9 @@ function reactToAccess() {
 // Offer the name step on its own once per pageview; after that the banner's
 // "Ask to join" button is the way back to it.
 let autoAskedFor = null;
+// Likewise the password prompt: once a pageview, so closing it (not saving, not
+// "Not now") doesn't bring it straight back on the next auth event.
+let promptedThisView = null;
 async function initAuth() {
   const {
     data: { session: s },
@@ -1122,6 +1182,7 @@ async function initAuth() {
     await loadProfile();
     await checkMembership();
   }
+  await settlePasswordChange();
   renderAuth();
   if (session) reactToAccess();
   showAuthSheetNudge();
@@ -1133,9 +1194,11 @@ async function initAuth() {
     // need, and re-reading here could briefly overwrite that with older state.
     if (authBusy || _event === 'USER_UPDATED') return;
     if (session) {
+      signOutNotice = null;
       await loadProfile();
       await checkMembership();
       if (authSheetMode === 'nudge' || authSheetMode === 'gate') closeAuthSheet();
+      await settlePasswordChange();
       reactToAccess();
     } else {
       profile = null;
@@ -1158,9 +1221,20 @@ async function initAuth() {
 // point, so a rejection can only mean their email isn't on the allow-list —
 // and both get the same message rather than raw Postgres text or looking
 // like nothing happened.
-function friendlyWriteError(message) {
+//
+// A refusal also means the member's standing may have changed (access removed
+// while the page was open), so each one re-reads it: a revoked member is told
+// so and signed out at once instead of finding out on the next load.
+async function refusedWrite(err) {
+  await checkMembership();
+  reactToAccess();
+  renderAuth();
+  render();
+  return err;
+}
+async function friendlyWriteError(message) {
   return /row-level security/i.test(message)
-    ? new Error('This action is for approved members only.')
+    ? refusedWrite(new Error('This action is for approved members only.'))
     : new Error(message);
 }
 async function removeEntry(raceId, name) {
@@ -1170,15 +1244,17 @@ async function removeEntry(raceId, name) {
     .eq('race_id', raceId)
     .eq('name', name)
     .select('id');
-  if (error) throw friendlyWriteError(error.message);
-  if (!data || !data.length) throw new Error('This action is for approved members only.');
+  if (error) throw await friendlyWriteError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(new Error('This action is for approved members only.'));
 }
 async function addEvent(raceId, event) {
   const race = races.find(r => r.id === raceId);
   const events = [...new Set([...(race?.events || []), event])];
   const { data, error } = await db.from('races').update({ events }).eq('id', raceId).select('id');
-  if (error) throw friendlyWriteError(error.message);
-  if (!data || !data.length) throw new Error('This action is for approved members only.');
+  if (error) throw await friendlyWriteError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(new Error('This action is for approved members only.'));
 }
 // Only for a name already loaded into the form as the entry being edited
 // (state.form.editingName), via the Edit button or picking up your own
@@ -1190,8 +1266,9 @@ async function saveEntry(raceId, name, events, level) {
     .from('entries')
     .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' })
     .select('id');
-  if (error) throw friendlyWriteError(error.message);
-  if (!data || !data.length) throw new Error('This action is for approved members only.');
+  if (error) throw await friendlyWriteError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(new Error('This action is for approved members only.'));
 }
 // A first-time commitment (no entry was loaded into the form to begin with)
 // is an INSERT, not an upsert: typing a name already on the roster must be
@@ -1205,7 +1282,7 @@ async function addEntry(raceId, name, events, level) {
       throw new Error(
         `${name} is already on this race. If that's you, use their "Edit" link on the roster instead of adding a new entry.`,
       );
-    throw friendlyWriteError(error.message);
+    throw await friendlyWriteError(error.message);
   }
 }
 // Renaming an existing commitment is one UPDATE of that row, never
@@ -1227,13 +1304,15 @@ async function renameEntry(raceId, oldName, newName, events, level) {
       throw new Error(
         `${newName} is already on this race. Choose a different name, or edit that entry instead.`,
       );
-    throw friendlyWriteError(error.message);
+    throw await friendlyWriteError(error.message);
   }
   // Zero rows: the allow-list blocked it (see friendlyWriteError), or the
   // entry being renamed was removed or renamed by someone else meanwhile.
   if (!data || !data.length)
-    throw new Error(
-      `Could not find ${oldName} on this race any more — it may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
+    throw await refusedWrite(
+      new Error(
+        `Could not find ${oldName} on this race any more — it may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
+      ),
     );
 }
 async function addRace(payload) {
@@ -1247,7 +1326,7 @@ async function addRace(payload) {
     club_focus: payload.eventType === 'Balance Bolt' || payload.clubFocus === 'Y',
     balance_bolt: payload.eventType === 'Balance Bolt',
   });
-  if (error) throw friendlyWriteError(error.message);
+  if (error) throw await friendlyWriteError(error.message);
 }
 // Removing a race is a soft delete: it stamps deleted_at rather than dropping
 // the row. A race carries its roster, so a hard delete destroys other people's
@@ -1263,9 +1342,11 @@ async function deleteRace(raceId) {
     .eq('id', raceId)
     .is('deleted_at', null)
     .select('id');
-  if (error) throw friendlyWriteError(error.message);
+  if (error) throw await friendlyWriteError(error.message);
   if (!data || !data.length)
-    throw new Error('This action is for approved members only, or the race was already removed.');
+    throw await refusedWrite(
+      new Error('This action is for approved members only, or the race was already removed.'),
+    );
 }
 async function updateRace(raceId, payload) {
   const { data, error } = await db
@@ -1281,8 +1362,9 @@ async function updateRace(raceId, payload) {
     })
     .eq('id', raceId)
     .select('id');
-  if (error) throw friendlyWriteError(error.message);
-  if (!data || !data.length) throw new Error('This action is for approved members only.');
+  if (error) throw await friendlyWriteError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(new Error('This action is for approved members only.'));
 }
 // ---------------------------------------------------------------------------
 // Routing. Every race is shareable at <base>race/<slug>.
@@ -2016,6 +2098,8 @@ function makeDetails(race) {
       lc.append(b);
     });
     const btn = wrap.querySelector('.save-button');
+    // A pending member never sees an enabled Save (5.3).
+    gateButton(btn);
     btn.onclick = async () => {
       const name = nameInput.value.trim();
       if (!name) {
