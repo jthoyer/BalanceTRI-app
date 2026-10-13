@@ -202,15 +202,22 @@ function parsePlace(text) {
   const n = Number(t);
   return n >= 1 && n <= 100000 ? n : undefined;
 }
-function canEditResult(entry) {
-  if (!session || !isMember) return false;
-  // Admins may write any result; the server also wants their two-factor session.
-  if (isAdmin) return true;
+// Is this entry the signed-in member's own? By who created it; for entries
+// from before created_by existed, by display name.
+function isOwnEntry(entry) {
+  if (!session) return false;
   if (entry.created_by) return entry.created_by === session.user.id;
-  // Entries from before created_by existed: the member whose display name matches.
   const mine = ownName().trim().toLowerCase();
   return !!mine && entry.name.trim().toLowerCase() === mine;
 }
+function canEditResult(entry) {
+  if (!session || !isMember) return false;
+  // Admins may write any result; the server also wants their two-factor session.
+  return isAdmin || isOwnEntry(entry);
+}
+// False when the last load could not read the results table, so a failed read
+// never looks like "nobody has a result" (the reminder would nag everyone).
+let resultsLoaded = false;
 // The form's values while it is open. Kept here, not in the DOM, because
 // render() rebuilds the race screen (a toast re-renders it) and would
 // otherwise wipe what was typed. Not saved to localStorage.
@@ -1724,6 +1731,7 @@ async function loadRaces() {
     // A database without the results table (or a failed read) shows the
     // calendar with no results rather than failing the whole load.
     if (resultRows?.error) console.warn('results not loaded:', resultRows.error);
+    resultsLoaded = !!resultRows && !resultRows.error;
     const resultByEntry = new Map((resultRows?.data || []).map(r => [r.entry_id, r]));
     // PGRST202: public_entries() isn't on this database yet. Show the races
     // with empty rosters rather than fail the whole calendar.
@@ -1796,6 +1804,7 @@ function render() {
   $('#updateBanner').classList.toggle('error', toastKind === 'error');
   $('#updateBannerCheck').classList.toggle('hidden', toastKind === 'error');
   $('#updateBannerAlert').classList.toggle('hidden', toastKind !== 'error');
+  renderResultReminder();
   if (loadError === 'fetch-failed') {
     $('#emptyState').textContent =
       'Could not reach the Supabase backend. Check your connection and try refreshing.';
@@ -2669,6 +2678,78 @@ function sydneyToday() {
 // daylight saving never makes a day 23 or 25 hours long.
 function daysBetween(from, to) {
   return Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
+}
+// "How did it go?": a card above the hero for an approved member who was
+// locked in on a recent race and has no result yet. One race at a time, the
+// most recent first. The member can add a time, say they did not start (saves
+// a DNS), or put it off ("Later" hides that race on this device).
+const REMINDER_DAYS = 14;
+function reminderTarget() {
+  if (!session || !isMember || !resultsLoaded) return null;
+  const today = sydneyToday();
+  const oldest = new Date(Date.parse(today) - REMINDER_DAYS * 86400000).toISOString().slice(0, 10);
+  const dismissed = state.dismissedReminders || [];
+  return (
+    [...races]
+      .filter(
+        r =>
+          r.balanceBolt !== 'Y' && r.date < today && r.date >= oldest && !dismissed.includes(r.id),
+      )
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(race => ({
+        race,
+        entry: race.entries.find(e => e.level === 'locked' && !e.result && isOwnEntry(e)),
+      }))
+      .find(t => t.entry) || null
+  );
+}
+function renderResultReminder() {
+  const card = $('#resultReminder');
+  const target = openId || editingId !== null ? null : reminderTarget();
+  card.classList.toggle('hidden', !target);
+  if (!target) return;
+  const { race, entry } = target;
+  const when = new Date(race.date + 'T12:00:00').toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+  });
+  $('#resultReminderTitle').textContent = `How did ${race.name} go?`;
+  $('#resultReminderText').textContent =
+    `You were locked in on ${when}. Add your time so the club can see how you went.`;
+  const buttons = card.querySelectorAll('button');
+  const settle = () => $('#raceList').focus({ preventScroll: true });
+  $('#resultReminderAdd').onclick = () => {
+    openRaceScreen(race.id);
+    resultDraft = draftFrom(entry);
+    resultDraft.focus = true;
+    render();
+  };
+  $('#resultReminderLater').onclick = () => {
+    state.dismissedReminders = [...new Set([...(state.dismissedReminders || []), race.id])];
+    persist();
+    render();
+    settle();
+  };
+  $('#resultReminderDns').onclick = async () => {
+    buttons.forEach(b => (b.disabled = true));
+    try {
+      await saveResult(entry.id, {
+        status: 'dns',
+        finish_seconds: null,
+        place_overall: null,
+        place_age_group: null,
+        is_pb: false,
+        note: null,
+      });
+      await loadRaces();
+      showToast(`Marked as did not start for ${race.name}. You can change it from the race.`);
+      settle();
+    } catch (err) {
+      showToast('Could not save: ' + err.message, 'error');
+    } finally {
+      buttons.forEach(b => (b.disabled = false));
+    }
+  };
 }
 // The hero's next race card. Follows the view toggle only, not the type or
 // name filters: "Club races" counts down to the next club focus race, "View
