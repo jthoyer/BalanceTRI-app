@@ -124,6 +124,7 @@ window.supabase = { createClient: () => ({
       return res({ data: null, error: null });
     }
     if (name === 'admin_status') return res({ data: { admin: false }, error: null });
+    if (name === 'public_entries') return res({ data: fx().publicEntries || [], error: null });
     return res({ data: null, error: { code: 'PGRST202', message: 'not found' } });
   },
   from: table => {
@@ -484,7 +485,9 @@ console.log('4. Name clash, then fix (S5, S8)');
     'the person stays signed in',
   );
   check(
-    (await text(page, '#memberBanner')).startsWith("You're signed in, but you haven't asked"),
+    (await text(page, '#memberBanner')).startsWith(
+      "You're signed in, but you can't add or edit races yet. Ask to join",
+    ),
     'the account is in state none, and the banner says so',
   );
   await page.locator('#auth-display-name').fill('Sam L');
@@ -1263,6 +1266,45 @@ for (const width of [375, 1100]) {
     await page.locator('#accountMenuButton').click();
     await shot(page, 'pending-menu');
     check(await noSideScroll(page), `${width}px: the header with the account menu fits`);
+    await page.close();
+  }
+}
+
+console.log('16. Visitors see first names; approved members see full names');
+{
+  const full = [
+    { name: 'Sam Lee', events: [], level: 'locked' },
+    { name: 'Jo van der Berg', events: [], level: 'locked' },
+  ];
+  const races = [{ ...withRaces({}).races[0], entries: full }];
+  const publicEntries = [
+    { race_id: 'r1', name: 'Sam', events: [], level: 'locked' },
+    { race_id: 'r1', name: 'Jo', events: [], level: 'locked' },
+  ];
+  const roster = async page => {
+    // A visitor first gets the sign-in nudge; close it to reach the calendar.
+    if (await page.locator('#authSheetBackdrop').isVisible()) await page.keyboard.press('Escape');
+    await page.locator('.race-summary').first().click();
+    await page.locator('.roster-name').first().waitFor();
+    return page.locator('.roster-name').allTextContents();
+  };
+  for (const [label, fx, want] of [
+    ['a visitor', { session: null, access: null }, ['Jo', 'Sam']],
+    ['a pending account', signedIn(accessOf('pending')), ['Jo', 'Sam']],
+    ['an approved member', signedIn(accessOf('approved')), ['Jo van der Berg', 'Sam Lee']],
+  ]) {
+    const { page, errors } = await open({ ...fx, races, publicEntries });
+    const names = (await roster(page)).sort();
+    check(JSON.stringify(names) === JSON.stringify(want), `${label} sees ${want.join(', ')}`);
+    const asked = (await page.evaluate(() => window.__calls)).some(
+      c => c[0] === 'rpc' && c[1] === 'public_entries',
+    );
+    if (label === 'a visitor')
+      check(asked, 'a visitor loads names from public_entries, not the entries table');
+    check(
+      errors.length === 0,
+      `${label}: no page errors` + (errors.length ? ': ' + errors.join('; ') : ''),
+    );
     await page.close();
   }
 }
