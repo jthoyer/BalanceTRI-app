@@ -484,7 +484,9 @@ console.log('4. Name clash, then fix (S5, S8)');
     'the person stays signed in',
   );
   check(
-    (await text(page, '#memberBanner')).startsWith("You're signed in, but you haven't asked"),
+    (await text(page, '#memberBanner')).startsWith(
+      "You're signed in, but you can't add or edit races yet. Ask to join",
+    ),
     'the account is in state none, and the banner says so',
   );
   await page.locator('#auth-display-name').fill('Sam L');

@@ -369,7 +369,10 @@ function renderMemberBanner() {
   } else if (st === 'none') {
     const ask = elt('button', { type: 'button', class: 'member-banner-action' }, 'Ask to join');
     ask.onclick = () => showNameSheet();
-    banner.append("You're signed in, but you haven't asked to join the club yet. ", ask);
+    banner.append(
+      "You're signed in, but you can't add or edit races yet. Ask to join, and the club admin will approve you. ",
+      ask,
+    );
   } else {
     const link = elt('a', { href: `mailto:${CLUB_EMAIL}` }, CLUB_EMAIL);
     banner.append(
