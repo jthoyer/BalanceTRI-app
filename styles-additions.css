@@ -142,7 +142,7 @@
 }
 .roster-group-label {
   margin: 0 0 2px;
-  color: var(--brand-blue);
+  color: var(--brand-blue-text);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -1475,4 +1475,128 @@
   background: #f1f3f7;
   color: var(--muted);
   cursor: default;
+}
+
+/* Results on past races (approved members only) */
+.result-entry {
+  border-bottom: 1px solid #eff1f4;
+}
+.roster-group .result-entry:last-child {
+  border-bottom: 0;
+}
+.result-entry .roster-entry {
+  flex-wrap: wrap;
+  border-bottom: 0;
+}
+.result-entry .roster-who {
+  flex-wrap: wrap;
+}
+.result-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.result-status {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.result-status.result-dnf,
+.result-status.result-dns {
+  color: var(--muted);
+}
+.result-places {
+  color: var(--muted);
+  font-size: 13px;
+}
+.result-pb {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.result-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.result-edit,
+.result-form .roster-edit {
+  min-height: 44px;
+}
+.result-form {
+  margin: 4px 0 14px;
+}
+.result-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+.result-legend {
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.result-field {
+  margin-top: 12px;
+}
+.result-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #727b8f;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font:
+    400 16px 'DM Sans',
+    Arial,
+    sans-serif;
+}
+.result-note-input {
+  resize: vertical;
+}
+.result-places-row {
+  display: flex;
+  gap: 12px;
+}
+.result-places-row .result-field {
+  flex: 1;
+  min-width: 0;
+}
+.result-pb-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 8px;
+  font-weight: 600;
+}
+.result-pb-check input {
+  width: 20px;
+  height: 20px;
+}
+.result-error {
+  margin: 12px 0 0;
+  color: #b3261e;
+  font-weight: 600;
+}
+.result-form .save-row {
+  margin-top: 14px;
+}
+.result-form .choice-label {
+  color: var(--brand-blue-text);
+}
+.result-places-row .result-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
