@@ -1189,6 +1189,7 @@ async function initAuth() {
   renderAuth();
   if (session) reactToAccess();
   showAuthSheetNudge();
+  reloadIfNamesChanged();
   db.auth.onAuthStateChange(async (_event, s) => {
     session = s;
     // The join form is mid-way through signUp then request_access and
@@ -1214,7 +1215,13 @@ async function initAuth() {
     // Signing in never reloads the page, so the name loadProfile just seeded
     // into state.user would sit unrendered until the next redraw.
     render();
+    reloadIfNamesChanged();
   });
+}
+// Approval, sign-in or sign-out can change whether this viewer may see full
+// names. Reload the races when it no longer matches what's on screen.
+function reloadIfNamesChanged() {
+  if (loadedFullNames !== null && loadedFullNames !== isMember) loadRaces();
 }
 // Postgres/PostgREST report a write the allow-list blocked in two different
 // shapes: an INSERT's WITH CHECK failure comes back as a real "row-level
@@ -1233,6 +1240,7 @@ async function refusedWrite(err) {
   reactToAccess();
   renderAuth();
   render();
+  reloadIfNamesChanged();
   return err;
 }
 async function friendlyWriteError(message) {
@@ -1598,12 +1606,18 @@ function closeEditScreen() {
   target.focus({ preventScroll: true });
   editScreenReturnFocus = null;
 }
+// Which names the last load fetched. Full names are for approved members only
+// (the entries read policy); everyone else gets public_entries(), which cuts
+// each name to its first word on the server. When membership changes, the
+// races are loaded again so the roster matches.
+let loadedFullNames = null;
 async function loadRaces() {
   try {
     loadError = null;
-    const { data, error } = await db
+    const fullNames = isMember;
+    const racesQuery = db
       .from('races')
-      .select('*, entries(name,events,level)')
+      .select(fullNames ? '*, entries(name,events,level)' : '*')
       // Signed-in members can read removed races (the select policy has to
       // let them, or the soft delete itself is rejected — see the
       // races_auth_writes_and_soft_delete migration). Filter them here so a
@@ -1611,7 +1625,20 @@ async function loadRaces() {
       // signed in. Anonymous visitors never see them at all.
       .is('deleted_at', null)
       .order('date');
+    const [{ data, error }, firstNames] = await Promise.all([
+      racesQuery,
+      fullNames ? null : db.rpc('public_entries'),
+    ]);
     if (error) throw error;
+    // PGRST202: public_entries() isn't on this database yet. Show the races
+    // with empty rosters rather than fail the whole calendar.
+    if (firstNames?.error && firstNames.error.code !== 'PGRST202') throw firstNames.error;
+    const byRace = new Map();
+    for (const e of firstNames?.data || []) {
+      if (!byRace.has(e.race_id)) byRace.set(e.race_id, []);
+      byRace.get(e.race_id).push(e);
+    }
+    loadedFullNames = fullNames;
     races = (data || []).map(r => ({
       id: r.id,
       name: r.name,
@@ -1623,7 +1650,7 @@ async function loadRaces() {
       eventType: r.event_type || '',
       clubFocus: r.club_focus ? 'Y' : 'N',
       balanceBolt: r.event_type === 'Balance Bolt' ? 'Y' : 'N',
-      entries: r.entries.map(e => ({
+      entries: (fullNames ? r.entries : byRace.get(r.id) || []).map(e => ({
         ...e,
         events: (e.events || []).map(String),
         level: String(e.level),
@@ -1637,6 +1664,9 @@ async function loadRaces() {
     races = [];
   }
   $('#raceLoading')?.remove();
+  // Sign-in can finish while this load was in flight: if membership changed
+  // meanwhile, load again with the right names.
+  if (!loadError) queueMicrotask(reloadIfNamesChanged);
   // Only a load that actually returned races can resolve a deep link: until
   // then a valid /race/<slug> is indistinguishable from a stale one.
   bootstrapped = true;
