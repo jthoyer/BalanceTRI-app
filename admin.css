@@ -483,3 +483,26 @@
     font-size: 9px;
   }
 }
+.admin-rename {
+  display: block;
+  margin-top: 6px;
+}
+.admin-rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.admin-rename-form input {
+  min-height: 36px;
+  min-width: 0;
+  flex: 1 1 160px;
+  border: 1px solid #aab5c6;
+  border-radius: 9px;
+  padding: 6px 10px;
+  font: 14px 'DM Sans';
+}
+.admin-rename .admin-error {
+  white-space: normal;
+  max-width: 280px;
+}
