@@ -927,7 +927,9 @@
   color: var(--ink);
 }
 .auth-form .auth-field input,
-.auth-form .auth-field textarea {
+.auth-form .auth-field textarea,
+.feedback-field textarea,
+.feedback-field input {
   display: block;
   width: 100%;
   min-width: 0;
@@ -1061,7 +1063,9 @@
   border-radius: 9px;
   background: #fff;
 }
-.race-loading-eyebrow {
+/* Shared with the feedback panel's eyebrow. */
+.race-loading-eyebrow,
+.feedback-eyebrow {
   margin: 0 0 8px;
   color: var(--green);
   font-size: 12px;
@@ -1355,14 +1359,6 @@
 .feedback-panel:focus {
   outline: none;
 }
-.feedback-eyebrow {
-  margin: 0 0 8px;
-  color: var(--green);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 .feedback-heading h2 {
   margin: 0;
   color: var(--ink);
@@ -1382,20 +1378,9 @@
   font-size: 14px;
   font-weight: 700;
 }
-.feedback-field textarea,
-.feedback-field input {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  border: 1px solid rgba(24, 37, 66, 0.6);
-  border-radius: 9px;
-  padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
-  font: 16px/1.5 'DM Sans';
-}
 .feedback-field textarea {
   min-height: 132px;
+  line-height: 1.5;
   resize: vertical;
 }
 .feedback-field textarea:focus-visible {
