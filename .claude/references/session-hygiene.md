@@ -1,6 +1,6 @@
 # Session hygiene — compact and clear, on purpose
 
-**Who reads this:** any agent that persists a Stage Register or Handoff Note (the `mc-*` playbook, `multi-actor-research`, `multi-actor-strategy`), and any agent that runs a continuous session across several unrelated pieces of work (`CPO`, `cos`).
+**Who reads this:** any agent that persists a Stage Register or Handoff Note (the `mc-*` playbook, `multi-actor-research`, `multi-actor-strategy`), and any agent that runs a continuous session across several unrelated pieces of work (the `cpo` and `cos` skills).
 
 ## The rule
 

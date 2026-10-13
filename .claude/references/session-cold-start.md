@@ -1,8 +1,8 @@
 # Session cold start — the first turn is not a measurement
 
 **Who reads this:** any agent that judges what the session *has* — which agents exist,
-whether a skill is installed, whether the library is present. `CPO`, `cos`,
-`mc-orchestrator` above all, because each opens by taking stock.
+whether a skill is installed, whether the library is present. The `cpo`, `cos` and
+`mc-orchestrator` skills above all, because each opens by taking stock.
 
 ## The rule
 
@@ -34,7 +34,7 @@ reach cloud sessions" — the opposite of the truth.
 
 ## What this does *not* cover
 
-The **dispatch probe** in `CPO.md` reads whether an `Agent`/`Task` tool exists in the
+The **dispatch probe** (does this thread hold the `Agent` tool?) reads whether an `Agent`/`Task` tool exists in the
 session's tool list. That is a harness tool, present from turn 1, so a negative there is
 genuinely resolved and this file does not soften it. The lag affects the *roster* — which
 agent types are listed — not the *tool*. Keep the two apart: conflating them turns a real
