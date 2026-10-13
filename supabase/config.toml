@@ -438,3 +438,9 @@ verify_jwt = false
 # JWT, and the database then checks the caller is an admin with two-factor.
 [functions.admin-reset-password]
 verify_jwt = true
+
+# Called from the calendar by anyone, signed in or not, with the publishable
+# key, which is not a JWT. The function does its own checks (origin, signed
+# form token, hCaptcha, rate limits). See README.md, "App feedback".
+[functions.send-feedback]
+verify_jwt = false

@@ -317,6 +317,118 @@
         </div>
       </section>
       <p id="raceListStatus" class="sr-only" role="status">Loading races…</p>
+
+      <!-- App feedback, at the foot of the page. An inline panel, not a modal
+           <dialog>: hCaptcha's challenge renders in the page, and a modal
+           dialog sits in the top layer above it, so a member who got a
+           challenge couldn't answer it. Wired up by the "App feedback" block
+           near the end of app.js; the server side is the send-feedback Edge
+           Function (README.md, "App feedback"). The recipient address is a
+           server secret and appears nowhere on this page. -->
+      <footer class="app-footer">
+        <div class="app-footer-bar">
+          <p class="app-footer-text">Something broken, or got an idea for the app?</p>
+          <button
+            type="button"
+            class="feedback-button"
+            id="feedbackButton"
+            aria-expanded="false"
+            aria-controls="feedbackPanel"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12Z" />
+              <path d="M8.5 10.5h7M8.5 13.5h4.5" /></svg
+            ><span>Send feedback</span>
+          </button>
+        </div>
+        <section
+          class="feedback-panel hidden"
+          id="feedbackPanel"
+          aria-labelledby="feedbackTitle"
+          tabindex="-1"
+        >
+          <form id="feedbackForm" class="feedback-form" novalidate>
+            <div class="feedback-heading">
+              <p class="feedback-eyebrow">App feedback</p>
+              <h2 id="feedbackTitle">Tell us what to fix</h2>
+              <p class="feedback-intro">
+                Spotted a bug or got an idea? It goes straight to the person who runs this app.
+              </p>
+            </div>
+            <div class="feedback-field">
+              <label for="feedbackMessage">Your feedback</label>
+              <textarea
+                id="feedbackMessage"
+                name="message"
+                rows="5"
+                maxlength="2000"
+                required
+                aria-describedby="feedbackCount"
+              ></textarea>
+              <p class="feedback-hint" id="feedbackCount">0 of 2,000 characters</p>
+            </div>
+            <div class="feedback-field">
+              <label for="feedbackContact"
+                >Name or email <span class="optional">optional</span></label
+              >
+              <input
+                id="feedbackContact"
+                name="contact"
+                maxlength="120"
+                autocomplete="email"
+                aria-describedby="feedbackContactHint"
+              />
+              <p class="feedback-hint" id="feedbackContactHint">Only if you'd like a reply.</p>
+            </div>
+            <!-- Honeypot: people never see or reach this field; bots that
+                 fill every input do. The server drops anything that has it. -->
+            <div class="feedback-trap" aria-hidden="true">
+              <label for="feedbackWebsite">Website</label>
+              <input id="feedbackWebsite" name="website" tabindex="-1" autocomplete="off" />
+            </div>
+            <!-- Always rendered (zero-size when empty), so a message written
+                 into it is announced. -->
+            <p class="feedback-status" id="feedbackStatus" role="alert"></p>
+            <div class="dialog-footer">
+              <button type="button" class="secondary-button" id="feedbackCancel">Cancel</button
+              ><button type="submit" class="primary-button" id="feedbackSend">Send</button>
+            </div>
+          </form>
+          <div class="feedback-done hidden" id="feedbackDone">
+            <p class="feedback-done-title" id="feedbackDoneTitle" tabindex="-1">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" /></svg
+              ><span>Thanks, your feedback is on its way.</span>
+            </p>
+            <p class="feedback-intro">Every message gets read.</p>
+            <div class="dialog-footer">
+              <button type="button" class="secondary-button" id="feedbackAgain">
+                Send more feedback</button
+              ><button type="button" class="primary-button" id="feedbackDoneClose">Done</button>
+            </div>
+          </div>
+        </section>
+      </footer>
     </main>
 
     <!-- A native <dialog> for destructive confirms (remove a commitment,

@@ -1309,6 +1309,198 @@ console.log('16. Visitors see first names; approved members see full names');
   }
 }
 
+console.log('17. App feedback: the footer form (keyboard, errors, no lost text, sent state)');
+{
+  // The send-feedback Edge Function is replaced: each scenario says what
+  // "send" answers, in order. Every request body is recorded.
+  const feedbackPage = async (sendAnswers, opts) => {
+    const { page, errors } = await open(SIGNED_OUT, opts);
+    const seen = [];
+    const answers = [...sendAnswers];
+    await page.route('**/functions/v1/send-feedback', async r => {
+      const body = JSON.parse(r.request().postData() || '{}');
+      seen.push({ body, headers: r.request().headers() });
+      if (body.action === 'start') return r.fulfill({ json: { form_token: '1.abc' } });
+      const [status, json] = answers.shift() || [200, { sent: true }];
+      return r.fulfill({ status, json });
+    });
+    // A visitor first gets the sign-in nudge; close it to reach the page.
+    if (await page.locator('#authSheetBackdrop').isVisible()) await page.keyboard.press('Escape');
+    // Every message written into the alert region, so a check can see what
+    // was announced even after it is replaced.
+    await page.evaluate(() => {
+      window.__alerts = [];
+      new MutationObserver(() => {
+        const t = document.querySelector('#feedbackStatus').textContent;
+        if (t) window.__alerts.push(t);
+      }).observe(document.querySelector('#feedbackStatus'), { childList: true, subtree: true });
+    });
+    return { page, errors, seen };
+  };
+  const sends = seen => seen.filter(s => s.body.action === 'send');
+
+  // a. Fresh page, empty sessionStorage. Opening, a too-short message, a
+  // server failure that keeps the text, then a retry that works.
+  {
+    const { page, errors, seen } = await feedbackPage([[502, { error: 'mail_failed' }]]);
+    const footerAfterList = await page.evaluate(
+      () =>
+        !!(
+          document
+            .querySelector('#raceList')
+            .compareDocumentPosition(document.querySelector('.app-footer')) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+    );
+    check(footerAfterList, 'the feedback footer sits after the race list');
+    const btn = page.locator('#feedbackButton');
+    check((await btn.getAttribute('aria-expanded')) === 'false', 'the button starts collapsed');
+    await btn.focus();
+    await page.keyboard.press('Enter');
+    await page.locator('#feedbackPanel').waitFor({ state: 'visible' });
+    check(
+      (await btn.getAttribute('aria-expanded')) === 'true',
+      'Enter opens it: aria-expanded=true',
+    );
+    check(
+      await page.evaluate(() => document.activeElement.id === 'feedbackMessage'),
+      'focus moves to the feedback box',
+    );
+    check(
+      (await page.locator('#feedbackWebsite').getAttribute('tabindex')) === '-1' &&
+        (await page.locator('.feedback-trap').getAttribute('aria-hidden')) === 'true',
+      'the honeypot is out of the tab order and hidden from screen readers',
+    );
+    await settle(page);
+    check(
+      seen.some(s => s.body.action === 'start'),
+      'opening asks the server for a form token',
+    );
+
+    await page.keyboard.type('hi');
+    await page.locator('#feedbackSend').click();
+    check(
+      (await text(page, '#feedbackStatus')).startsWith('Write a little more'),
+      'a too-short message is refused in the form',
+    );
+    check(
+      (await page.locator('#feedbackMessage').getAttribute('aria-invalid')) === 'true' &&
+        (await page.evaluate(() => document.activeElement.id)) === 'feedbackMessage',
+      'the box is marked invalid and keeps focus',
+    );
+    check(sends(seen).length === 0, 'nothing is sent for a too-short message');
+
+    const words = 'The filter forgets my athlete when I open a race.\nSecond line stays.';
+    await page.locator('#feedbackMessage').fill(words);
+    await page.locator('#feedbackContact').fill('Sam');
+    check(
+      (await text(page, '#feedbackCount')) === `${words.length} of 2,000 characters`,
+      'the counter follows the text',
+    );
+    await page.locator('#feedbackSend').click();
+    await page.waitForFunction(() => window.__alerts.some(a => a.includes('still here')), null, {
+      timeout: 15000,
+    });
+    check(
+      (await page.locator('#feedbackMessage').inputValue()) === words &&
+        (await page.locator('#feedbackContact').inputValue()) === 'Sam',
+      'a failed send keeps every word typed',
+    );
+    check(
+      (await page.evaluate(() => window.__alerts)).some(a =>
+        a.startsWith("We couldn't send it just now"),
+      ),
+      'the failure is announced in the alert region',
+    );
+    check(
+      !(await page.locator('#feedbackSend').isDisabled()) &&
+        (await text(page, '#feedbackSend')) === 'Send',
+      'the Send button comes back after a failure',
+    );
+    const first = sends(seen)[0];
+    check(
+      first.body.captcha_token === 'captcha-token-1' &&
+        first.body.form_token === '1.abc' &&
+        first.body.website === '' &&
+        first.body.message === words.trim() &&
+        first.body.page === '/',
+      'the send carries the hCaptcha token, the form token, an empty honeypot and the text',
+    );
+    check(
+      seen.every(s => Object.keys(s.body).every(k => !/^(to|recipient|email)$/i.test(k))),
+      'no request carries a recipient field: the address lives only on the server',
+    );
+
+    await page.locator('#feedbackSend').click();
+    await page.locator('#feedbackDone').waitFor({ state: 'visible', timeout: 15000 });
+    check(
+      (await page.evaluate(() => document.activeElement.id)) === 'feedbackDoneTitle',
+      'after sending, focus moves to the thank-you message',
+    );
+    check(
+      (await page.evaluate(() => sessionStorage.getItem('balance-feedback-draft'))) === null,
+      'the saved draft is cleared once the server says it was sent',
+    );
+    await page.locator('#feedbackDoneClose').click();
+    check(
+      (await page.evaluate(() => document.activeElement.id)) === 'feedbackButton' &&
+        (await btn.getAttribute('aria-expanded')) === 'false',
+      'Done collapses the panel and returns focus to the button',
+    );
+    check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+    await page.close();
+  }
+
+  // b. Fresh page. Escape collapses without losing text, and a reload in
+  // the same tab brings the draft back (sessionStorage, same context).
+  {
+    const { page, errors } = await feedbackPage([]);
+    await page.locator('#feedbackButton').click();
+    await page.locator('#feedbackMessage').fill('Half-written thought about the countdown');
+    await page.keyboard.press('Escape');
+    check(await page.locator('#feedbackPanel').isHidden(), 'Escape collapses the panel');
+    check(
+      (await page.evaluate(() => document.activeElement.id)) === 'feedbackButton',
+      'focus goes back to the button',
+    );
+    await page.reload();
+    await page.waitForFunction(() => !document.querySelector('#raceLoading'));
+    if (await page.locator('#authSheetBackdrop').isVisible()) await page.keyboard.press('Escape');
+    await page.locator('#feedbackButton').click();
+    check(
+      (await page.locator('#feedbackMessage').inputValue()) ===
+        'Half-written thought about the countdown',
+      'a reload in the same tab restores the draft',
+    );
+    check(errors.length === 0, 'no page errors after reload');
+    await page.close();
+  }
+
+  // c. Fresh page, phone width. Server-side refusals reach the member in plain words.
+  {
+    const { page, errors, seen } = await feedbackPage([[429, { error: 'rate_limited' }]], {
+      width: 390,
+    });
+    const box = await page.locator('#feedbackButton').boundingBox();
+    check(box.height >= 44 && box.width > 300, 'on a phone the button is full width and 44px tall');
+    await page.locator('#feedbackButton').click();
+    await page.locator('#feedbackMessage').fill('Rate limit me please, thanks.');
+    await page.locator('#feedbackSend').click();
+    await page.waitForFunction(() => window.__alerts.length > 0, null, { timeout: 15000 });
+    check(
+      (await text(page, '#feedbackStatus')).startsWith("You've sent a few messages"),
+      'a rate-limit refusal is explained',
+    );
+    check(sends(seen).length === 1, 'one send attempt');
+    await page.screenshot({
+      path: `${process.env.SCREENSHOT_DIR || '/tmp'}/feedback-390.png`,
+      fullPage: true,
+    });
+    check(errors.length === 0, 'no page errors at phone width');
+    await page.close();
+  }
+}
+
 await browser.close();
 server.close();
 if (failures) {

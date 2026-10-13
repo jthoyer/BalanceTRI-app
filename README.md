@@ -225,6 +225,57 @@ banner, and rewrites the URL so the dead link isn't re-shared. If Supabase is
 unreachable the URL is left untouched, since an unmatched slug can't be
 distinguished from an unloaded one.
 
+## App feedback
+
+A **Send feedback** button sits at the foot of the calendar page. It opens an inline form (a box for the message, an optional name or email for a reply) and sends it to the `send-feedback` Edge Function, which emails it to the app's maintainer. **The recipient address is an Edge Function secret (`FEEDBACK_TO_EMAIL`) and nothing else.** It is not in the page, the JavaScript, this repository, the database, any request or any response.
+
+**How a message travels.**
+
+1. Opening the form asks the function for a *form token*: the time, signed with a key only the function holds.
+2. On **Send**, the page gets an hCaptcha token (the same invisible widget sign-in uses), then posts the message, the form token, the hCaptcha token, the page path and the honeypot field. A signed-in member's own session token goes in the `authorization` header; a visitor sends the publishable key.
+3. The function checks everything (below), stores the message in `private.app_feedback`, emails it as plain text through [Resend](https://resend.com), and stamps `sent_at`. A signed-in member is named by the address Auth verified, and that address becomes Reply-To; a visitor's typed contact becomes Reply-To only if it looks like an address.
+
+**Bot defences, all enforced on the server.** The browser does some of the same checks for a friendlier message, but the function trusts none of them.
+
+- **Origin.** Only `https://jthoyer.github.io` may call it (override with the `FEEDBACK_ORIGINS` secret, comma-separated). No match, no work.
+- **Honeypot.** The form has a `website` field that is off-screen, `aria-hidden` and out of the tab order. If it is filled in, the function answers "sent" and does nothing, so a bot learns nothing.
+- **Minimum fill time.** A send less than 4 seconds after the form token was issued, or more than 2 hours after, is refused. The token's signature means the time can't be faked. The page waits out the 4 seconds itself, so a fast typist never sees the refusal.
+- **Validation and limits.** Body at most 12 KB; message 5 to 2,000 characters; contact at most 120; at most 3 links. Control and text-direction characters are stripped. The database repeats the length limits as check constraints.
+- **hCaptcha.** The token is checked with hCaptcha's `siteverify` and the `HCAPTCHA_SECRET` secret.
+- **Rate limits,** in `public.feedback_claim()` under a lock: 3 per sender in 10 minutes, 10 per sender a day, 50 for the whole app a day (which also caps the mail bill). The sender is a keyed hash of the IP address; the address itself is never stored. A signed-in member is counted by account as well.
+- **Fail closed.** With `FEEDBACK_TO_EMAIL`, `RESEND_API_KEY` or `HCAPTCHA_SECRET` missing, the function answers "not configured" and the form says feedback isn't switched on yet.
+
+**Nothing is lost.** The form keeps a draft in `sessionStorage` as the member types, so a failed send, a collapse of the panel or a reload keeps the text; it is cleared only when the server says "sent". On the server the message is stored *before* the email is tried, so if Resend refuses, the row stays with `sent_at` empty. To read those in the SQL editor:
+
+```sql
+select id, created_at, message, contact, page
+  from private.app_feedback
+ where sent_at is null
+ order by created_at desc;
+```
+
+**Accessibility.** The button is a disclosure (`aria-expanded`). Opening moves focus to the message box; Escape or Cancel collapses the form and returns focus to the button. Errors are written into a `role="alert"` line and the field at fault gets `aria-invalid`. After sending, focus moves to the thank-you line. It is an inline panel rather than a modal `<dialog>` because hCaptcha's challenge renders in the page, beneath a modal's top layer, where it couldn't be answered.
+
+**Switching it on — in this order:**
+
+1. **Apply the migration** `supabase/migrations/20261013034715_add_app_feedback.sql` with the Supabase MCP `apply_migration` tool (`project_id: shkfwuogrldbqldpipxd`), then rename the file to the version Supabase recorded (`list_migrations`), as `CLAUDE.md` asks.
+2. **Mail provider.** Make a [Resend](https://resend.com) account and an API key with "sending access". Until a domain is verified, Resend's test sender (`onboarding@resend.dev`, the default) only delivers to the address the Resend account was created with, so sign up with the address that should receive feedback. To send from the club's own domain instead, verify `balancetriclub.com.au` in Resend and set `FEEDBACK_FROM_EMAIL` (e.g. `Balance Tri app <feedback@balancetriclub.com.au>`).
+3. **Set the Edge Function secrets** (dashboard → Edge Functions → Secrets). Never in the repo or in chat:
+   - `FEEDBACK_TO_EMAIL` — the address that receives feedback.
+   - `RESEND_API_KEY` — from step 2.
+   - `HCAPTCHA_SECRET` — the hCaptcha **secret key**, the same one pasted into Authentication → Attack Protection (see *Bot check (hCaptcha)*).
+   - Optional: `FEEDBACK_FROM_EMAIL`, `FEEDBACK_ORIGINS`, `HCAPTCHA_SITE_KEY` (defaults to the site key in `shared.js`), `FEEDBACK_SIGNING_KEY` (defaults to the service role key, which Supabase provides).
+4. **Deploy:** `supabase functions deploy send-feedback` (or the MCP `deploy_edge_function`, with `verify_jwt: false`). `config.toml` sets `verify_jwt = false`, because visitors call it with the publishable key, which is not a JWT; the function does its own checks.
+5. **Test:** send one message from the live calendar. Exactly one email arrives, and `private.app_feedback` has one row with `sent_at` set.
+
+**Tests.** None need Deno or the live project:
+
+```
+node --experimental-strip-types --test supabase/functions/send-feedback/handler.test.ts
+supabase/tests/run.sh            # includes app_feedback.test.sql: rate limits and grants
+node scripts/check-app-ui.mjs    # scenario 17: keyboard, errors, no lost text, sent state
+```
+
 ## Access-request alerts
 
 `supabase/functions/notify-access-request/` is an Edge Function that sends the club admin one Telegram message when someone asks to join: the person's display name and a link to the admin console, nothing more. It is step B4 of the gated member accounts plan. Nothing in this section is live until the owner says go.
