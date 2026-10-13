@@ -1322,3 +1322,11 @@
     font-size: 22px;
   }
 }
+
+/* The member's own name on the commitment form is fixed, so it reads as a
+   label, not a field to type in. */
+.name-row input[readonly] {
+  background: #f1f3f7;
+  color: var(--muted);
+  cursor: default;
+}
