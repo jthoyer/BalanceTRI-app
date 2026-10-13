@@ -1,9 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- App feedback: the database side of the send-feedback Edge Function.
 --
--- NOT YET APPLIED. Apply it through the Supabase MCP apply_migration tool
--- (project shkfwuogrldbqldpipxd), then rename this file to the version
--- Supabase recorded (list_migrations), as CLAUDE.md asks.
+-- Applied to project shkfwuogrldbqldpipxd on 2026-10-13 (version 20261013034715).
 --
 -- What it holds:
 --   * private.app_feedback keeps every message the function accepts, before

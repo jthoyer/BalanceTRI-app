@@ -258,7 +258,7 @@ select id, created_at, message, contact, page
 
 **Switching it on — in this order:**
 
-1. **Apply the migration** `supabase/migrations/20261013032956_add_app_feedback.sql` with the Supabase MCP `apply_migration` tool (`project_id: shkfwuogrldbqldpipxd`), then rename the file to the version Supabase recorded (`list_migrations`), as `CLAUDE.md` asks.
+1. **Apply the migration** `supabase/migrations/20261013034715_add_app_feedback.sql` with the Supabase MCP `apply_migration` tool (`project_id: shkfwuogrldbqldpipxd`), then rename the file to the version Supabase recorded (`list_migrations`), as `CLAUDE.md` asks.
 2. **Mail provider.** Make a [Resend](https://resend.com) account and an API key with "sending access". Until a domain is verified, Resend's test sender (`onboarding@resend.dev`, the default) only delivers to the address the Resend account was created with, so sign up with the address that should receive feedback. To send from the club's own domain instead, verify `balancetriclub.com.au` in Resend and set `FEEDBACK_FROM_EMAIL` (e.g. `Balance Tri app <feedback@balancetriclub.com.au>`).
 3. **Set the Edge Function secrets** (dashboard → Edge Functions → Secrets). Never in the repo or in chat:
    - `FEEDBACK_TO_EMAIL` — the address that receives feedback.

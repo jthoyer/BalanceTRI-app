@@ -119,7 +119,7 @@ export async function readFormToken(key: string, token: unknown): Promise<number
 export function cleanText(raw: unknown, { multiline }: { multiline: boolean }): string {
   if (typeof raw !== 'string') return '';
   let s = raw.replace(/\r\n?/g, '\n');
-  s = s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, '');
+  s = s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '');
   if (multiline) {
     s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   } else {

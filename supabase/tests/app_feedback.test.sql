@@ -1,4 +1,4 @@
--- Tests for migration 20261013032956_add_app_feedback.sql: the send-feedback
+-- Tests for migration 20261013034715_add_app_feedback.sql: the send-feedback
 -- rate limits, and that only the service role can reach any of it.
 -- Run with supabase/tests/run.sh.
 begin;
