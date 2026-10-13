@@ -1600,3 +1600,38 @@
   flex-direction: column;
   justify-content: flex-end;
 }
+
+/* "How did it go?" reminder on the home screen */
+.result-reminder {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--brand-blue);
+  border-radius: 14px;
+  background: #fff;
+}
+.result-reminder-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.result-reminder-text {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+.result-reminder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.result-reminder-actions button {
+  min-height: 44px;
+}
+.result-reminder-add {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ink);
+  color: #fff;
+  font: 700 14px 'DM Sans';
+  cursor: pointer;
+}

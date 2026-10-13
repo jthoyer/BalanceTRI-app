@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026101303" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026101304" />
   </head>
   <body>
     <main class="shell">
@@ -69,6 +69,24 @@
            asking to join. Filled by renderMemberBanner in app.js; the wording
            is the spec's. tabindex=-1 so joining can move focus here. -->
       <p class="member-banner hidden" id="memberBanner" role="status" tabindex="-1"></p>
+
+      <!-- "How did it go?" for an approved member with a recent race and no
+           result yet. Filled and shown by renderResultReminder in app.js. -->
+      <section
+        class="result-reminder hidden"
+        id="resultReminder"
+        aria-labelledby="resultReminderTitle"
+      >
+        <h2 class="result-reminder-title" id="resultReminderTitle"></h2>
+        <p class="result-reminder-text" id="resultReminderText"></p>
+        <div class="result-reminder-actions">
+          <button type="button" class="result-reminder-add" id="resultReminderAdd">
+            Add my time
+          </button>
+          <button type="button" class="roster-edit" id="resultReminderDns">I didn't start</button>
+          <button type="button" class="roster-edit" id="resultReminderLater">Later</button>
+        </div>
+      </section>
 
       <section class="hero" id="top">
         <div class="hero-copy">
@@ -558,6 +576,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026100901"></script>
-    <script src="app.js?v=2026101303"></script>
+    <script src="app.js?v=2026101304"></script>
   </body>
 </html>

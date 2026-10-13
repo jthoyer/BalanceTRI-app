@@ -141,7 +141,7 @@ window.supabase = { createClient: () => ({
       eq: () => q,
       order: () => q,
       single: () => res({ data: { display_name: window.__access?.display_name || 'Sam' }, error: null }),
-      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : { data: table === 'races' ? fx().races : table === 'results' ? fx().results || [] : [], error: null }).then(ok, bad),
+      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : table === 'results' && fx().resultsError ? { data: null, error: fx().resultsError } : { data: table === 'races' ? fx().races : table === 'results' ? fx().results || [] : [], error: null }).then(ok, bad),
     };
     return q;
   },
@@ -1755,6 +1755,219 @@ console.log('17. App feedback: the footer form (keyboard, errors, no lost text, 
     );
     check((await page.locator('.result-edit').count()) === 0, `${label}: no result buttons`);
     check(errors.length === 0, `${label}: no page errors`);
+    await page.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "How did it go?" reminder. An approved member locked in on a race in the
+// last 14 days, with no result yet, gets one card on the home screen.
+// ---------------------------------------------------------------------------
+{
+  console.log('\nresult reminder');
+  const sydney = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(d);
+  const daysAgo = n => sydney(new Date(Date.now() - n * 86400000));
+  const race = (id, name, date, entries) => ({
+    id,
+    name,
+    date,
+    location: 'Sydney',
+    slug: id,
+    events: ['Sprint'],
+    event_type: 'Triathlon',
+    club_focus: true,
+    entries,
+  });
+  const mine = (id, over = {}) => ({
+    id,
+    name: 'Sam Lee',
+    events: ['Sprint'],
+    level: 'locked',
+    created_by: 'u1',
+    ...over,
+  });
+  const approved = signedIn(accessOf('approved'));
+  const card = '#resultReminder';
+
+  // a. The card, its words, and what each button does.
+  {
+    const fx = {
+      ...approved,
+      races: [
+        race('old', 'Old Sprint', daysAgo(40), [mine('eo')]),
+        race('mid', 'Manly Sprint', daysAgo(9), [mine('em')]),
+        race('new', 'Coogee Sprint', daysAgo(3), [mine('en')]),
+      ],
+    };
+    const { page, errors } = await open(fx);
+    check(await page.locator(card).isVisible(), 'a recent race with no result shows the card');
+    check(
+      (await text(page, '#resultReminderTitle')) === 'How did Coogee Sprint go?',
+      'it names the most recent race, not the older one',
+    );
+    check(
+      (await page.locator(card + ' button').count()) === 3,
+      'it offers Add my time, I didn’t start and Later',
+    );
+    // Later: the next race takes its place, then the card goes.
+    await page.locator('#resultReminderLater').click();
+    check(
+      (await text(page, '#resultReminderTitle')) === 'How did Manly Sprint go?',
+      'Later brings up the next recent race',
+    );
+    await page.locator('#resultReminderLater').click();
+    check(
+      await page.locator(card).isHidden(),
+      'and then the card goes (the 40-day-old race is too old)',
+    );
+    const kept = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('balance-race-ui')).dismissedReminders,
+    );
+    check(
+      kept.length === 2 && kept.includes('new') && kept.includes('mid'),
+      'Later is remembered on this device: ' + JSON.stringify(kept),
+    );
+    check(
+      (await page.evaluate(() => document.activeElement.id)) === 'raceList',
+      'focus settles on the race list when the card goes',
+    );
+    await page.reload();
+    await page.waitForFunction(() => !document.querySelector('#raceLoading'));
+    check(await page.locator(card).isHidden(), 'it stays hidden after a reload');
+    check((await called(page, 'write')).length === 0, 'Later writes nothing');
+    check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+    await page.close();
+  }
+
+  // b. I didn't start saves a DNS.
+  {
+    const { page } = await open({
+      ...approved,
+      races: [race('new', 'Coogee Sprint', daysAgo(3), [mine('en')])],
+    });
+    await page.locator('#resultReminderDns').click();
+    await page.waitForFunction(() =>
+      window.__calls.some(c => c[0] === 'write' && c[1] === 'results'),
+    );
+    const w = (await called(page, 'write')).find(c => c[1] === 'results');
+    check(
+      w?.[2] === 'upsert' &&
+        w[3].entry_id === 'en' &&
+        w[3].status === 'dns' &&
+        w[3].finish_seconds === null &&
+        w[3].is_pb === false,
+      'it saves a DNS with no time: ' + JSON.stringify(w?.[3]),
+    );
+    await page.close();
+  }
+
+  // c. Add my time opens the race with the form ready.
+  {
+    const { page } = await open({
+      ...approved,
+      races: [race('new', 'Coogee Sprint', daysAgo(3), [mine('en')])],
+    });
+    await page.locator('#resultReminderAdd').click();
+    await page.locator('#result-time').waitFor();
+    check(
+      (await text(page, '#raceScreenTitle')) === 'Coogee Sprint',
+      'it opens the race screen for that race',
+    );
+    await page.waitForFunction(() => document.activeElement?.id === 'result-time', null, {
+      timeout: 2000,
+    });
+    check(true, 'with the result form open and focus on the time field');
+    check(await page.locator(card).isHidden(), 'the card is not shown over the race screen');
+    await page.close();
+  }
+
+  // d. Who does not get it.
+  const none = [
+    [
+      'an entry that already has a result',
+      {
+        races: [race('r', 'Done Sprint', daysAgo(3), [mine('e1')])],
+        results: [
+          {
+            entry_id: 'e1',
+            status: 'finished',
+            finish_seconds: 3000,
+            place_overall: null,
+            place_age_group: null,
+            is_pb: false,
+            note: null,
+          },
+        ],
+      },
+    ],
+    [
+      "someone else's entry",
+      {
+        races: [
+          race('r', 'Other Sprint', daysAgo(3), [
+            mine('e1', { created_by: 'u9', name: 'Alex Kim' }),
+          ]),
+        ],
+      },
+    ],
+    [
+      'an entry that is only "considering"',
+      { races: [race('r', 'Maybe Sprint', daysAgo(3), [mine('e1', { level: 'considering' })])] },
+    ],
+    [
+      'a race that has not finished yet (today)',
+      { races: [race('r', 'Today Sprint', daysAgo(0), [mine('e1')])] },
+    ],
+    [
+      'a Balance Bolt race',
+      { races: [{ ...race('r', 'Bolt', daysAgo(3), [mine('e1')]), event_type: 'Balance Bolt' }] },
+    ],
+    [
+      'a failed read of the results table',
+      {
+        races: [race('r', 'Unread Sprint', daysAgo(3), [mine('e1')])],
+        resultsError: { code: 'PGRST205', message: 'no such table' },
+      },
+    ],
+    [
+      'a signed-out visitor',
+      { session: null, access: null, races: [race('r', 'Public Sprint', daysAgo(3), [])] },
+    ],
+    [
+      'a member waiting for approval',
+      { ...signedIn(accessOf('pending')), races: [race('r', 'Wait Sprint', daysAgo(3), [])] },
+    ],
+  ];
+  for (const [label, fx] of none) {
+    const { page, errors } = await open({ ...approved, ...fx });
+    check(await page.locator(card).isHidden(), `no card for ${label}`);
+    check(errors.length === 0, `no page errors for ${label}`);
+    await page.close();
+  }
+
+  // e. A phone.
+  {
+    const { page } = await open(
+      {
+        ...approved,
+        races: [race('new', 'Coogee Triathlon Festival Sprint', daysAgo(3), [mine('en')])],
+      },
+      { width: 390 },
+    );
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    check(!over, 'no sideways scroll at 390px');
+    const tall = await page.evaluate(() =>
+      [...document.querySelectorAll('#resultReminder button')].every(
+        b => b.getBoundingClientRect().height >= 43.5,
+      ),
+    );
+    check(tall, 'all three buttons are at least 44px tall');
+    await page.screenshot({
+      path: `${process.env.SCREENSHOT_DIR || '/tmp'}/reminder-390.png`,
+      fullPage: false,
+    });
     await page.close();
   }
 }
