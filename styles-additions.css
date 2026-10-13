@@ -392,6 +392,18 @@
   color: inherit;
   text-decoration: underline;
 }
+/* "Ask to join" inside the banner: a link-styled button, so it reads as part
+   of the sentence but still has a 44px-tall target. */
+.member-banner-action {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 @media (max-width: 700px) {
   .edit-screen .add-panel {
     padding: 22px 18px;
@@ -533,6 +545,42 @@
   flex-shrink: 0;
   -webkit-appearance: none;
   appearance: none;
+}
+/* The header's account menu: "Account" opens Change password and Sign out.
+   Sign out lives inside it so it stays at the edge, hard to hit by mistake. */
+.account-menu-wrap {
+  position: relative;
+}
+.account-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(24, 37, 66, 0.14);
+}
+.account-menu.hidden {
+  display: none;
+}
+.account-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px 'DM Sans';
+  text-align: left;
+  cursor: pointer;
+}
+.account-menu-item:hover {
+  background: var(--navy-bg);
 }
 @media (max-width: 700px) {
   .auth-widget {
@@ -723,12 +771,13 @@
 }
 .auth-sheet-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 14px 0 12px;
 }
 .auth-sheet-actions .primary-button,
 .auth-sheet-actions .secondary-button {
-  flex: 1;
+  flex: 1 1 120px;
   min-height: 44px;
 }
 .auth-sheet-actions .secondary-button {
@@ -861,6 +910,97 @@
   padding: 8px 0;
   font-size: 13px;
   color: var(--ink);
+}
+/* The forms (sign in, join, ask to join, set a password): labelled fields in
+   one column. 16px type so iOS doesn't zoom the sheet on focus. */
+.auth-sheet .auth-form {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin-top: 10px;
+}
+.auth-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.auth-form .auth-field input,
+.auth-form .auth-field textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  /* Stronger than the older .sign-in-form inputs' border: 3.8:1 against the
+     sheet's panel, so the box edge meets the 3:1 non-text contrast bar. */
+  border: 1px solid rgba(24, 37, 66, 0.6);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px 'DM Sans';
+}
+.auth-form .auth-field textarea {
+  resize: vertical;
+}
+.auth-field-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(24, 37, 66, 0.72);
+  overflow-wrap: break-word;
+}
+.auth-field-hint:empty {
+  display: none;
+}
+.auth-form .send-link-button {
+  width: 100%;
+}
+/* Password box with its show/hide eye inside the right edge. */
+.password-input {
+  position: relative;
+}
+.auth-form .password-input input {
+  padding-right: 48px;
+}
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(24, 37, 66, 0.72);
+  cursor: pointer;
+}
+.password-toggle .eye-shut,
+.password-toggle[aria-pressed='true'] .eye-open {
+  display: none;
+}
+.password-toggle[aria-pressed='true'] .eye-shut {
+  display: block;
+}
+/* A text link between steps ("Join the club", "Sign in"). */
+.auth-sheet .auth-sheet-link {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 700 15px 'DM Sans';
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+/* The forced set-password step can't be backed out of. */
+.auth-sheet.is-locked .auth-sheet-close {
+  display: none;
 }
 /* At desktop width the sheet stops being a compact centered card and
    becomes a full-bleed two-column split: the brand strip as a left column

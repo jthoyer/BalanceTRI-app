@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026100903" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026101201" />
   </head>
   <body>
     <main class="shell">
@@ -65,10 +65,10 @@
         </div>
       </header>
 
-      <p class="member-banner hidden" id="memberBanner">
-        You're signed in, but this account isn't a club member yet. Email
-        <a href="mailto:mail@balancetriclub.com">mail@balancetriclub.com</a> to request access.
-      </p>
+      <!-- What the signed-in account is waiting for, by state: approval, or
+           asking to join. Filled by renderMemberBanner in app.js; the wording
+           is the spec's. tabindex=-1 so joining can move focus here. -->
+      <p class="member-banner hidden" id="memberBanner" role="status" tabindex="-1"></p>
 
       <section class="hero" id="top">
         <div class="hero-copy">
@@ -438,6 +438,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026100901"></script>
-    <script src="app.js?v=2026101201"></script>
+    <script src="app.js?v=2026101202"></script>
   </body>
 </html>

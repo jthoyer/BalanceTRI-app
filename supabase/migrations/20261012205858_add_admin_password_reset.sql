@@ -2,10 +2,10 @@
 -- Admin password reset (step B5, spec 5.5): the database side of the
 -- admin-reset-password Edge Function.
 --
--- NOT APPLIED. Apply it only after the owner's go, and after the B3 migrations
--- (20261012042054_add_access_requests_1_tables onwards), which make private.password_resets
--- and private.lock_account(). Then rename this file to the version Supabase
--- recorded (list_migrations), as CLAUDE.md says.
+-- Applied to the live project on 12 October 2026, after B3, and named after the
+-- version Supabase recorded. The connector stalled on it, so the owner ran it
+-- in the SQL editor and its history row was added by hand. The Edge Function
+-- is deployed too.
 --
 -- Supabase's own reset sends an email, and this design sends members none. The
 -- owner presses Reset password in the console instead. The Edge Function calls

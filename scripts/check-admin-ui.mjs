@@ -278,8 +278,8 @@ console.log('1. The console with requests waiting');
     'a revoked request offers Give access back',
   );
   await page.locator('#requests select').selectOption('pending');
-  await page.locator('.admin-request').first().locator('input').fill('Knows Jo');
-  await page.getByRole('button', { name: 'Approve' }).first().click();
+  await page.locator('.admin-request').first().locator('input[type=text]').fill('Knows Jo');
+  await page.getByRole('button', { name: 'Approve', exact: true }).first().click();
   await page.waitForFunction(() => window.__calls.some(c => c[1] === 'admin_decide_request'));
   const decide = (await calls(page)).find(c => c[1] === 'admin_decide_request');
   check(
@@ -565,6 +565,137 @@ console.log('6. Sign-in: password first, code as fallback; and the password card
     'a reauthentication error says what to do',
   );
   await r.page.close();
+}
+
+console.log('9. Batch approval');
+{
+  const fx = fixtures({
+    rpc: {
+      admin_approve_requests: {
+        approved: 1,
+        results: [
+          { user_id: 'u1', ok: true },
+          {
+            user_id: 'u3',
+            ok: false,
+            error: "That account hasn't confirmed its email address, so it can't be approved.",
+          },
+        ],
+      },
+    },
+  });
+  const { page, errors } = await open(fx);
+  await page.waitForSelector('#requests');
+  const approveChosen = page.getByRole('button', { name: /^Approve chosen/ });
+  check(await approveChosen.isDisabled(), 'Approve chosen starts disabled');
+  check(
+    (await page.locator('#requests input[type=checkbox]').count()) === 2,
+    'each waiting request has a tick box',
+  );
+  await page.getByRole('checkbox', { name: 'Choose Sam Lee' }).check();
+  check(
+    (await approveChosen.textContent()) === 'Approve chosen (1)' &&
+      !(await approveChosen.isDisabled()),
+    'ticking one counts it and enables the button',
+  );
+  await page.getByRole('button', { name: 'Clear' }).click();
+  check(
+    (await approveChosen.isDisabled()) &&
+      !(await page.getByRole('checkbox', { name: 'Choose Sam Lee' }).isChecked()),
+    'Clear unticks everything',
+  );
+  await page.getByRole('button', { name: 'Choose all waiting' }).click();
+  check(
+    (await approveChosen.textContent()) === 'Approve chosen (2)',
+    'Choose all waiting ticks both',
+  );
+  await page.locator('#requests select').selectOption('');
+  check(
+    (await page.getByRole('checkbox', { name: 'Choose Sam Lee' }).isChecked()) &&
+      (await page.getByRole('checkbox', { name: 'Choose Kim Ng' }).isChecked()),
+    'changing the filter keeps the ticks',
+  );
+  await page.locator('#requests select').selectOption('pending');
+  await approveChosen.click();
+  await page.waitForSelector('#confirmDialog[open]');
+  check(
+    (await page.locator('#confirmDialogTitle').textContent()) === 'Approve 2 people?',
+    'the dialog gives the count',
+  );
+  await page.locator('#confirmDialogCancel').click();
+  check(!(await calls(page)).some(c => c[1] === 'admin_approve_requests'), 'Cancel sends nothing');
+  await approveChosen.click();
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForSelector('.admin-batch-notice');
+  const batch = (await calls(page)).find(c => c[1] === 'admin_approve_requests');
+  check(
+    JSON.stringify([...batch[2].p_user_ids].sort()) === JSON.stringify(['u1', 'u3']),
+    'it sends exactly the ticked user ids',
+  );
+  const notice = await page.locator('.admin-batch-notice').textContent();
+  check(
+    notice.includes('Approved 1 person.') && notice.includes('Skipped 1:'),
+    'the notice counts both',
+  );
+  check(
+    notice.includes('Kim Ng') && notice.includes("hasn't confirmed its email address"),
+    'and names who was skipped and why',
+  );
+  // Only waiting requests can be ticked.
+  await page.locator('#requests select').selectOption('');
+  check(
+    (await page.locator('#requests input[type=checkbox]').count()) === 2,
+    'a revoked request has no tick box',
+  );
+  await page.locator('#requests select').selectOption('revoked');
+  check(await page.locator('.admin-batch').isHidden(), 'the batch bar hides when nobody waits');
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
+console.log('9b. Batch approval caps at 50, and copes before its migration');
+{
+  const many = Array.from({ length: 55 }, (_, i) => ({
+    ...fixtures().rpc.admin_requests[0],
+    user_id: `p${i}`,
+    display_name: `Person ${i}`,
+    email: `p${i}@example.com`,
+  }));
+  const fx = fixtures({
+    rpc: {
+      admin_requests: many,
+      admin_approve_requests: {
+        error: { code: 'PGRST202', message: 'Could not find the function' },
+      },
+    },
+  });
+  const { page } = await open(fx);
+  await page.waitForSelector('#requests');
+  await page.getByRole('button', { name: 'Choose all waiting' }).click();
+  check(
+    (await page.getByRole('button', { name: /^Approve chosen/ }).textContent()) ===
+      'Approve chosen (50)',
+    'Choose all waiting stops at 50',
+  );
+  await page.getByRole('checkbox', { name: 'Choose Person 54' }).click();
+  check(
+    (await page.locator('#requests .admin-error').first().textContent()) ===
+      'Approve at most 50 at a time.',
+    'a 51st tick is refused with a reason',
+  );
+  check(
+    !(await page.getByRole('checkbox', { name: 'Choose Person 54' }).isChecked()),
+    'and stays unticked',
+  );
+  await page.getByRole('button', { name: /^Approve chosen/ }).click();
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('#requests .admin-error')].some(e =>
+      e.textContent.includes('isn’t set up yet'),
+    ),
+  );
+  check(true, 'before its migration, it says batch approval isn’t set up yet');
+  await page.close();
 }
 
 await browser.close();

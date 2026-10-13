@@ -1075,15 +1075,74 @@ showToast('Could not save: ' + err.message, 'error');</pre>
                   <p class="auth-sheet-eyebrow">Balance Tri Club</p>
                   <h1 class="auth-sheet-title">Racing Calendar</h1>
                   <p class="auth-sheet-hint">
-                    Sign in as a Balance Tri Club member with your Triathlon Australia registered
-                    email address to add or edit race information. You can view the calendar anytime
-                    without signing in.
+                    Sign in to add or edit race information. New here? Join, and the club admin will
+                    approve your account. You can view the calendar anytime without signing in.
                   </p>
                   <div class="auth-sheet-actions">
                     <button type="button" class="primary-button">Sign In</button>
+                    <button type="button" class="secondary-button">Join</button>
                     <button type="button" class="secondary-button">View Calendar</button>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="guide-block">
+          <h3>Auth sheet forms and account menu</h3>
+          <p class="block-note">
+            The same sheet carries every step: sign in, join, ask to join, and set or change a
+            password. Fields are a visible <code>label</code> above the input (16px type, so iOS
+            doesn't zoom), a hint below in <code>.auth-field-hint</code>, and a 44px-tall box with a
+            border at 3.8:1 against the panel. A password field adds a show/hide eye
+            (<code>.password-toggle</code>, <code>aria-pressed</code>); paste is never blocked. Use
+            <code>autocomplete="new-password"</code> when choosing one and
+            <code>current-password</code> when signing in. Errors go in a
+            <code>role="alert"</code> line under the form, never a toast, because the sheet covers
+            the toast. The forced set-password step adds <code>.is-locked</code>, which hides the ×;
+            Escape and a click outside do nothing there. Steps swap with a text link
+            (<code>.auth-sheet-link</code>), and focus moves to the first field. In the header, a
+            signed-in member gets an <strong>Account</strong> button (<code>aria-expanded</code>)
+            that opens Change password and Sign out; Escape closes it.
+          </p>
+          <div class="specimen demo-card-width">
+            <form class="sign-in-form auth-form" onsubmit="return false;">
+              <div class="auth-field">
+                <label for="guide-pw">Password</label>
+                <div class="password-input">
+                  <input id="guide-pw" type="password" autocomplete="new-password" />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    aria-label="Show password"
+                    aria-pressed="false"
+                  >
+                    <svg
+                      class="eye-open"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </div>
+                <p class="auth-field-hint">
+                  12 to 72 characters. Any characters are fine, and a few random words works well.
+                </p>
+              </div>
+            </form>
+            <div class="account-menu-wrap" style="margin-top: 12px">
+              <div class="account-menu" style="position: static">
+                <button type="button" class="account-menu-item">Change password</button>
+                <button type="button" class="account-menu-item">Sign out</button>
               </div>
             </div>
           </div>

@@ -458,7 +458,7 @@ async function showConsole(opts = {}) {
       el('button', { class: 'text-button', type: 'button', onclick: showConsole }, 'Refresh'),
     ),
     me && !me.on_allow_list ? allowListWarning(me.email) : null,
-    requestsSection(requests),
+    requestsSection(requests, opts.notice),
     statsSection(stats),
     activitySection(activity, raceNames),
     removedSection(removed),
@@ -895,7 +895,10 @@ const DECISIONS = {
   rejected: [['reapprove', 'Approve after all', 'secondary-button']],
   revoked: [['reapprove', 'Give access back', 'secondary-button']],
 };
-function requestsSection(requests) {
+// Batch approval: at most this many in one go, so a mis-tap can't approve the
+// whole queue. admin_approve_requests() enforces the same limit.
+const BATCH_LIMIT = 50;
+function requestsSection(requests, notice) {
   if (requests === null) {
     return el(
       'section',
@@ -909,6 +912,85 @@ function requestsSection(requests) {
     );
   }
   const list = el('ol', { class: 'admin-list admin-requests' });
+  // Waiting requests the admin has ticked, by user id. Each row still shows the
+  // name, email and note: ticking one is the same check as pressing Approve.
+  const chosen = new Set();
+  const batchError = errorLine();
+  const approveChosen = el(
+    'button',
+    { class: 'primary-button admin-small-button', type: 'button', disabled: true },
+    'Approve chosen',
+  );
+  const clearChosen = el(
+    'button',
+    { class: 'text-button', type: 'button', disabled: true },
+    'Clear',
+  );
+  const chooseAll = el('button', { class: 'text-button', type: 'button' }, 'Choose all waiting');
+  const batchBar = el('div', { class: 'admin-batch' }, approveChosen, chooseAll, clearChosen);
+  function syncBatch() {
+    const n = chosen.size;
+    approveChosen.textContent = n ? `Approve chosen (${n})` : 'Approve chosen';
+    approveChosen.disabled = n === 0;
+    clearChosen.disabled = n === 0;
+    list.querySelectorAll('input[data-choose]').forEach(box => {
+      box.checked = chosen.has(box.dataset.choose);
+    });
+  }
+  function choose(id, on) {
+    batchError.set('');
+    if (on && chosen.size >= BATCH_LIMIT) {
+      batchError.set(`Approve at most ${BATCH_LIMIT} at a time.`);
+    } else if (on) {
+      chosen.add(id);
+    } else {
+      chosen.delete(id);
+    }
+    syncBatch();
+  }
+  chooseAll.onclick = () => {
+    batchError.set('');
+    for (const r of requests) {
+      if (r.status === 'pending' && chosen.size < BATCH_LIMIT) chosen.add(r.user_id);
+    }
+    syncBatch();
+  };
+  clearChosen.onclick = () => {
+    chosen.clear();
+    batchError.set('');
+    syncBatch();
+  };
+  approveChosen.onclick = async () => {
+    const ids = [...chosen];
+    const n = ids.length;
+    const ok = await confirmDialog({
+      title: `Approve ${n} ${n === 1 ? 'person' : 'people'}?`,
+      body: 'They can add and edit races straight away. Check each name and note before you go on.',
+      confirmLabel: 'Approve',
+    });
+    if (!ok) return;
+    batchError.set('');
+    [approveChosen, chooseAll, clearChosen].forEach(b => (b.disabled = true));
+    setBusy(approveChosen, 'Approving…');
+    try {
+      const result = await rpcOptional('admin_approve_requests', { p_user_ids: ids });
+      if (result.missing) {
+        batchError.set(
+          'Batch approval isn’t set up yet: its migration hasn’t been applied. Approve one at a time for now.',
+        );
+        clearBusy(approveChosen);
+        chooseAll.disabled = false;
+        syncBatch();
+        return;
+      }
+      showConsole({ focus: 'requests', notice: batchNotice(result.data, requests) });
+    } catch (err) {
+      batchError.set(err.message);
+      clearBusy(approveChosen);
+      chooseAll.disabled = false;
+      syncBatch();
+    }
+  };
   const statusFilter = el(
     'select',
     { 'aria-label': 'Show requests that are' },
@@ -918,9 +1000,10 @@ function requestsSection(requests) {
   );
   function render() {
     const rows = requests.filter(r => !statusFilter.value || r.status === statusFilter.value);
+    batchBar.hidden = !rows.some(r => r.status === 'pending');
     list.replaceChildren(
       ...(rows.length
-        ? rows.map(requestItem)
+        ? rows.map(r => requestItem(r, choose))
         : [
             el(
               'li',
@@ -930,8 +1013,12 @@ function requestsSection(requests) {
           ]),
     );
   }
-  statusFilter.addEventListener('change', render);
+  statusFilter.addEventListener('change', () => {
+    render();
+    syncBatch();
+  });
   render();
+  syncBatch();
   return el(
     'section',
     { class: 'admin-card', id: 'requests' },
@@ -941,11 +1028,44 @@ function requestsSection(requests) {
       { class: 'admin-hint' },
       'People who signed up and asked to join. Check the name and note before you approve: an email address proves nothing on its own.',
     ),
+    notice || null,
     el('div', { class: 'admin-filters' }, statusFilter),
+    batchBar,
+    batchError,
     list,
   );
 }
-function requestItem(r) {
+// What a batch did: how many went through, and who was skipped and why.
+function batchNotice(data, requests) {
+  const names = new Map(requests.map(r => [r.user_id, r.display_name]));
+  const skipped = (data?.results || []).filter(x => !x.ok);
+  const approved = data?.approved ?? 0;
+  return el(
+    'div',
+    { class: 'admin-notice admin-batch-notice', role: 'status' },
+    el(
+      'p',
+      {},
+      `Approved ${approved} ${approved === 1 ? 'person' : 'people'}.`,
+      skipped.length ? ` Skipped ${skipped.length}:` : '',
+    ),
+    skipped.length
+      ? el(
+          'ul',
+          {},
+          skipped.map(x =>
+            el(
+              'li',
+              {},
+              el('strong', {}, names.get(x.user_id) || 'Unknown account'),
+              ` — ${x.error}`,
+            ),
+          ),
+        )
+      : null,
+  );
+}
+function requestItem(r, choose) {
   const error = errorLine();
   const name = r.display_name;
   const reason = el('input', {
@@ -1011,9 +1131,20 @@ function requestItem(r) {
           ),
     );
   }
+  const pick =
+    r.status === 'pending' && choose
+      ? el('input', {
+          type: 'checkbox',
+          class: 'admin-choose',
+          'data-choose': r.user_id,
+          'aria-label': `Choose ${name}`,
+        })
+      : null;
+  if (pick) pick.addEventListener('change', () => choose(r.user_id, pick.checked));
   return el(
     'li',
     { class: 'admin-request' },
+    pick,
     el(
       'div',
       { class: 'admin-change-main' },
