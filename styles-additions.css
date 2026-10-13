@@ -249,24 +249,7 @@
 }
 .when-toggle {
   display: flex;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid #aab5c6;
-  border-radius: 999px;
-  background: #fff;
-}
-.when-toggle-btn {
-  min-height: 38px;
-  padding: 7px 16px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font: 600 14px 'DM Sans';
-  cursor: pointer;
-}
-.when-toggle-btn.selected {
-  background: var(--yellow);
+  gap: 8px;
 }
 /* .race-summary is an <a> (each race has a shareable /race/<slug> URL), so the
    default link underline has to be turned off; its colour is already set in
@@ -319,7 +302,10 @@
   }
 }
 .toolbar {
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+.toolbar label[for='athleteFilter'] {
+  margin-left: auto;
 }
 .upcoming-heading {
   margin: 8px 0 4px;
