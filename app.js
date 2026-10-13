@@ -2075,7 +2075,10 @@ function makeDetails(race) {
   // re-render on its own via onAuthStateChange — same as any other
   // re-render — which would otherwise wipe whatever they'd typed but not
   // saved yet back to editingName's old value.
-  nameInput.value = state.form.pendingName ?? state.form.editingName ?? '';
+  // With nothing typed and no entry being edited, start from the member's own
+  // name (state.user, seeded from their profile) so they never retype it.
+  nameInput.value =
+    state.form.pendingName ?? (state.form.editingName || state.user || profile?.display_name || '');
   nameInput.oninput = () => {
     state.form.pendingName = nameInput.value;
     persist();
