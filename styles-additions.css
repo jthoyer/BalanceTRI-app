@@ -241,6 +241,33 @@
 .race-summary.club-focus {
   background: var(--brand-blue);
 }
+/* Past races: one muted slate for every card, club focus included, so the
+   list reads as history. Two classes beat .race-summary.club-focus above. */
+.race-summary.past,
+.race-summary.past.club-focus {
+  background: #5d6b85;
+}
+.when-toggle {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #aab5c6;
+  border-radius: 999px;
+  background: #fff;
+}
+.when-toggle-btn {
+  min-height: 38px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px 'DM Sans';
+  cursor: pointer;
+}
+.when-toggle-btn.selected {
+  background: var(--yellow);
+}
 /* .race-summary is an <a> (each race has a shareable /race/<slug> URL), so the
    default link underline has to be turned off; its colour is already set in
    styles.css. */

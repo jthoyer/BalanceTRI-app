@@ -93,6 +93,7 @@ let state = JSON.parse(localStorage.getItem('balance-race-ui') || 'null') || {
 state.filter ||= '';
 state.eventTypeFilter ||= '';
 state.viewFilter ||= 'club';
+state.whenFilter ||= 'upcoming';
 state.authDismissedUntil ||= 0;
 if (!Array.isArray(state.form?.events)) {
   const legacyEvent = state.form?.event;
@@ -1688,6 +1689,13 @@ function render() {
   document
     .querySelectorAll('.view-toggle-btn')
     .forEach(b => b.classList.toggle('selected', b.dataset.view === state.viewFilter));
+  const past = state.whenFilter === 'past';
+  document.querySelectorAll('.when-toggle-btn').forEach(b => {
+    const on = b.dataset.when === state.whenFilter;
+    b.classList.toggle('selected', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  $('#upcomingHeadingText').textContent = past ? 'Past races' : 'Upcoming races';
   $('#updateBannerText').textContent = toast || '';
   $('#updateBanner').classList.toggle('hidden', !toast);
   $('#updateBanner').classList.toggle('error', toastKind === 'error');
@@ -1704,11 +1712,12 @@ function render() {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const byType = r => !state.eventTypeFilter || r.eventType === state.eventTypeFilter;
+  // Past races run newest first, so last month's race is at the top.
   const sorted = [...races]
-    .filter(r => r.date >= todayStr)
+    .filter(r => (past ? r.date < todayStr : r.date >= todayStr))
     .filter(r => (state.viewFilter === 'club' ? r.clubFocus === 'Y' : true))
     .filter(byType)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => (past ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const query = state.filter.trim().toLocaleLowerCase();
   const shown = query
     ? sorted.filter(r => r.entries.some(e => e.name.toLocaleLowerCase().includes(query)))
@@ -1733,8 +1742,10 @@ function render() {
   const joinWith = (a, w) =>
     a.length < 2 ? a[0] : `${a.slice(0, -1).join(', ')} ${w} ${a[a.length - 1]}`;
   $('#emptyState').textContent = active.length
-    ? `No upcoming races match ${joinWith(active, 'and')}. Try ${joinWith(tips, 'or')}.`
-    : 'No races here yet. Add a race to get started.';
+    ? `No ${past ? 'past' : 'upcoming'} races match ${joinWith(active, 'and')}. Try ${joinWith(tips, 'or')}.`
+    : past
+      ? 'No past races yet. Races move here once their date has passed.'
+      : 'No races here yet. Add a race to get started.';
   if (!editingId && !openId) {
     $('#emptyState').classList.toggle('hidden', shown.length > 0);
     $('#upcomingHeading').classList.toggle('hidden', shown.length === 0);
@@ -1752,6 +1763,7 @@ function render() {
     const node = $('#raceTemplate').content.cloneNode(true);
     const summary = node.querySelector('.race-summary');
     summary.classList.toggle('club-focus', race.clubFocus === 'Y');
+    summary.classList.toggle('past', past);
     summary.setAttribute('aria-label', `View commitments for ${race.name}`);
     node.querySelector('.date-tile strong').textContent = p.day;
     node.querySelector('.date-tile span').textContent = p.month;
@@ -1772,7 +1784,9 @@ function render() {
       h2.append(b);
     }
     const locked = race.entries.filter(e => e.level === 'locked').length;
-    node.querySelector('.race-meta').textContent = `${locked} locked in of ${race.entries.length}`;
+    node.querySelector('.race-meta').textContent = past
+      ? `${locked} raced`
+      : `${locked} locked in of ${race.entries.length}`;
     summary.href = racePath(race);
     summary.onclick = e => {
       // A real href is what makes "open in new tab" and "copy link address" work,
@@ -2247,6 +2261,14 @@ document.querySelectorAll('.view-toggle-btn').forEach(
   b =>
     (b.onclick = () => {
       state.viewFilter = b.dataset.view;
+      persist();
+      render();
+    }),
+);
+document.querySelectorAll('.when-toggle-btn').forEach(
+  b =>
+    (b.onclick = () => {
+      state.whenFilter = b.dataset.when;
       persist();
       render();
     }),
