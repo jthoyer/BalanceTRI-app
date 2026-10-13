@@ -241,6 +241,16 @@
 .race-summary.club-focus {
   background: var(--brand-blue);
 }
+/* Past races: one muted slate for every card, club focus included, so the
+   list reads as history. Two classes beat .race-summary.club-focus above. */
+.race-summary.past,
+.race-summary.past.club-focus {
+  background: #5d6b85;
+}
+.when-toggle {
+  display: flex;
+  gap: 8px;
+}
 /* .race-summary is an <a> (each race has a shareable /race/<slug> URL), so the
    default link underline has to be turned off; its colour is already set in
    styles.css. */
@@ -292,7 +302,10 @@
   }
 }
 .toolbar {
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+.toolbar label[for='athleteFilter'] {
+  margin-left: auto;
 }
 .upcoming-heading {
   margin: 8px 0 4px;
@@ -1454,4 +1467,12 @@
   .feedback-heading h2 {
     font-size: 24px;
   }
+}
+
+/* The member's own name on the commitment form is fixed, so it reads as a
+   label, not a field to type in. */
+.name-row input[readonly] {
+  background: #f1f3f7;
+  color: var(--muted);
+  cursor: default;
 }

@@ -771,6 +771,7 @@ function usersSection(users, resetsReady) {
         el('span', { class: 'admin-user-email' }, u.email || '—'),
         u.display_name ? el('span', { class: 'admin-change-meta' }, u.display_name) : null,
         u.is_admin ? el('span', { class: 'admin-badge' }, 'Admin') : null,
+        u.display_name ? renameControl(u) : null,
       ),
       el('td', {}, yes(u.on_allow_list, 'Listed')),
       el('td', {}, yes(u.confirmed, 'Confirmed')),
@@ -1242,6 +1243,65 @@ function requestItem(r, choose) {
     ),
     buttons.length ? el('div', { class: 'admin-request-actions' }, buttons) : null,
   );
+}
+
+// ----- Display name (admin_rename_member) -----
+// The one place a member's name changes. It updates the profile and every
+// commitment that member created, so the roster follows. Members see their
+// name read-only on the commitment form.
+function renameControl(u) {
+  const box = el('div', { class: 'admin-rename' });
+  const error = errorLine();
+  const open = el(
+    'button',
+    { class: 'secondary-button admin-small-button', type: 'button' },
+    'Edit name',
+  );
+  const input = el('input', {
+    type: 'text',
+    value: u.display_name,
+    maxlength: '40',
+    'aria-label': `Display name for ${u.email || u.display_name}`,
+  });
+  const save = el('button', { class: 'primary-button admin-small-button', type: 'button' }, 'Save');
+  const cancel = el(
+    'button',
+    { class: 'secondary-button admin-small-button', type: 'button' },
+    'Cancel',
+  );
+  const form = el('div', { class: 'admin-rename-form', hidden: true }, input, save, cancel);
+  const show = on => {
+    form.hidden = !on;
+    open.hidden = on;
+    error.set('');
+    if (on) {
+      input.value = u.display_name;
+      input.focus();
+    }
+  };
+  open.onclick = () => show(true);
+  cancel.onclick = () => show(false);
+  save.onclick = async () => {
+    const name = input.value.trim();
+    if (!name || name === u.display_name) return show(false);
+    const ok = await confirmDialog({
+      title: `Rename ${u.display_name}?`,
+      body: `${u.display_name} will appear as “${name}” on every commitment they've made. Members can't change this themselves.`,
+      confirmLabel: 'Rename',
+    });
+    if (!ok) return;
+    error.set('');
+    setBusy(save, 'Saving…');
+    try {
+      await rpc('admin_rename_member', { p_user_id: u.id, p_name: name });
+      showConsole();
+    } catch (err) {
+      error.set("Couldn't rename: " + err.message);
+      clearBusy(save);
+    }
+  };
+  box.append(open, form, error);
+  return box;
 }
 
 // ----- Password reset (admin-reset-password Edge Function) -----

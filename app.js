@@ -93,6 +93,7 @@ let state = JSON.parse(localStorage.getItem('balance-race-ui') || 'null') || {
 state.filter ||= '';
 state.eventTypeFilter ||= '';
 state.viewFilter ||= 'club';
+state.whenFilter ||= 'upcoming';
 state.authDismissedUntil ||= 0;
 if (!Array.isArray(state.form?.events)) {
   const legacyEvent = state.form?.event;
@@ -145,8 +146,13 @@ function dateParts(date) {
     group: d.toLocaleString('en-AU', { month: 'long', year: 'numeric' }),
   };
 }
+// The name a member's commitments carry: their profile display name. Members
+// cannot change it here; an admin renames them in the admin console.
+function ownName() {
+  return profile?.display_name || state.user || '';
+}
 function myEntry(race) {
-  return race.entries.find(e => e.name === state.user);
+  return race.entries.find(e => e.name === ownName());
 }
 // ---------------------------------------------------------------------------
 // Auth. Email and password via Supabase Auth, behind an approval step.
@@ -155,13 +161,11 @@ function myEntry(race) {
 // (requireSignIn, below, and the matching RLS policies on entries) AND being
 // approved: anyone can make an account (Join), and the club admin approves it
 // in the console. It's still the same honour system once approved: any member
-// can edit or rename any entry they've opened via the roster's Edit link (see
-// saveEntry, renameEntry) — sign-in isn't tied to ownership, only to being
-// someone. What it doesn't cover is typing an existing member's name into a
-// fresh commitment instead of using Edit: addEntry refuses that outright
-// rather than silently taking over their row. A signed-in profile's
-// display_name seeds state.user once, but never overwrites a name someone's
-// already typed in this browser. Email-code sign-in is gone from this page
+// can change the level and events on any entry they've opened via the
+// roster's Edit link (see saveEntry) — sign-in isn't tied to ownership, only
+// to being someone. Names are not editable: a new commitment carries the
+// member's profile display_name, and only an admin renames anyone (the
+// entries_name_guard_biu trigger enforces it). Email-code sign-in is gone from this page
 // (the console keeps it as the owner's fallback); a member who forgets their
 // password asks the admin for a reset.
 // ---------------------------------------------------------------------------
@@ -1269,17 +1273,24 @@ async function addEvent(raceId, event) {
 }
 // Only for a name already loaded into the form as the entry being edited
 // (state.form.editingName), via the Edit button or picking up your own
-// existing entry — never for a first-time commitment, where an upsert would
-// silently take over any existing member's row of the same name. That case
-// is addEntry, below.
+// existing entry — never for a first-time commitment, which is addEntry,
+// below. An UPDATE, not an upsert: if the entry was removed or renamed by an
+// admin meanwhile, this finds nothing and says so, rather than inserting a
+// new row under the old name.
 async function saveEntry(raceId, name, events, level) {
   const { data, error } = await db
     .from('entries')
-    .upsert({ race_id: raceId, name, events, level }, { onConflict: 'race_id,name' })
+    .update({ events, level })
+    .eq('race_id', raceId)
+    .eq('name', name)
     .select('id');
   if (error) throw await friendlyWriteError(error.message);
   if (!data || !data.length)
-    throw await refusedWrite(new Error('This action is for approved members only.'));
+    throw await refusedWrite(
+      new Error(
+        `Could not find ${name} on this race any more. It may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
+      ),
+    );
 }
 // A first-time commitment (no entry was loaded into the form to begin with)
 // is an INSERT, not an upsert: typing a name already on the roster must be
@@ -1295,36 +1306,6 @@ async function addEntry(raceId, name, events, level) {
       );
     throw await friendlyWriteError(error.message);
   }
-}
-// Renaming an existing commitment is one UPDATE of that row, never
-// saveEntry(new name) + removeEntry(old name). That pair was two requests, and
-// saveEntry upserts on (race_id, name): renaming to a name already on the
-// roster silently overwrote that member's row, and a failed follow-up delete
-// left you listed twice. A single UPDATE is atomic, keeps the row's id and
-// created_by (so the admin console can undo it as one change), and lets the
-// unique (race_id, name) constraint refuse a clash instead of overwriting.
-async function renameEntry(raceId, oldName, newName, events, level) {
-  const { data, error } = await db
-    .from('entries')
-    .update({ name: newName, events, level })
-    .eq('race_id', raceId)
-    .eq('name', oldName)
-    .select('id');
-  if (error) {
-    if (error.code === '23505')
-      throw new Error(
-        `${newName} is already on this race. Choose a different name, or edit that entry instead.`,
-      );
-    throw await friendlyWriteError(error.message);
-  }
-  // Zero rows: the allow-list blocked it (see friendlyWriteError), or the
-  // entry being renamed was removed or renamed by someone else meanwhile.
-  if (!data || !data.length)
-    throw await refusedWrite(
-      new Error(
-        `Could not find ${oldName} on this race any more — it may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
-      ),
-    );
 }
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
@@ -1688,6 +1669,13 @@ function render() {
   document
     .querySelectorAll('.view-toggle-btn')
     .forEach(b => b.classList.toggle('selected', b.dataset.view === state.viewFilter));
+  const past = state.whenFilter === 'past';
+  document.querySelectorAll('.when-toggle-btn').forEach(b => {
+    const on = b.dataset.when === state.whenFilter;
+    b.classList.toggle('selected', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  $('#upcomingHeadingText').textContent = past ? 'Past races' : 'Upcoming races';
   $('#updateBannerText').textContent = toast || '';
   $('#updateBanner').classList.toggle('hidden', !toast);
   $('#updateBanner').classList.toggle('error', toastKind === 'error');
@@ -1704,11 +1692,12 @@ function render() {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const byType = r => !state.eventTypeFilter || r.eventType === state.eventTypeFilter;
+  // Past races run newest first, so last month's race is at the top.
   const sorted = [...races]
-    .filter(r => r.date >= todayStr)
+    .filter(r => (past ? r.date < todayStr : r.date >= todayStr))
     .filter(r => (state.viewFilter === 'club' ? r.clubFocus === 'Y' : true))
     .filter(byType)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => (past ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const query = state.filter.trim().toLocaleLowerCase();
   const shown = query
     ? sorted.filter(r => r.entries.some(e => e.name.toLocaleLowerCase().includes(query)))
@@ -1733,8 +1722,10 @@ function render() {
   const joinWith = (a, w) =>
     a.length < 2 ? a[0] : `${a.slice(0, -1).join(', ')} ${w} ${a[a.length - 1]}`;
   $('#emptyState').textContent = active.length
-    ? `No upcoming races match ${joinWith(active, 'and')}. Try ${joinWith(tips, 'or')}.`
-    : 'No races here yet. Add a race to get started.';
+    ? `No ${past ? 'past' : 'upcoming'} races match ${joinWith(active, 'and')}. Try ${joinWith(tips, 'or')}.`
+    : past
+      ? 'No past races yet. Races move here once their date has passed.'
+      : 'No races here yet. Add a race to get started.';
   if (!editingId && !openId) {
     $('#emptyState').classList.toggle('hidden', shown.length > 0);
     $('#upcomingHeading').classList.toggle('hidden', shown.length === 0);
@@ -1752,6 +1743,7 @@ function render() {
     const node = $('#raceTemplate').content.cloneNode(true);
     const summary = node.querySelector('.race-summary');
     summary.classList.toggle('club-focus', race.clubFocus === 'Y');
+    summary.classList.toggle('past', past);
     summary.setAttribute('aria-label', `View commitments for ${race.name}`);
     node.querySelector('.date-tile strong').textContent = p.day;
     node.querySelector('.date-tile span').textContent = p.month;
@@ -1772,7 +1764,9 @@ function render() {
       h2.append(b);
     }
     const locked = race.entries.filter(e => e.level === 'locked').length;
-    node.querySelector('.race-meta').textContent = `${locked} locked in of ${race.entries.length}`;
+    node.querySelector('.race-meta').textContent = past
+      ? `${locked} raced`
+      : `${locked} locked in of ${race.entries.length}`;
     summary.href = racePath(race);
     summary.onclick = e => {
       // A real href is what makes "open in new tab" and "copy link address" work,
@@ -1955,7 +1949,7 @@ function makeDetails(race) {
   // and stored in a row any signed-in member can write, so putting them
   // through innerHTML let one member run script in every other member's
   // browser — with the Supabase session sitting in localStorage.
-  wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div><div class="card-header">Club commitments</div><div class="card-body roster-body"></div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button">Add your commitment</button><div class="commitment-fields"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" placeholder="Your name"></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button><button type="button" class="remove-commit-button">Remove commitment</button></div></div></div>`;
+  wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div><div class="card-header">Club commitments</div><div class="card-body roster-body"></div><div class="card-header">Your commitment</div><div class="card-body"><button type="button" class="commit-toggle-button">Add your commitment</button><div class="commitment-fields"><p class="choice-label">Your name</p><div class="name-row"><input class="name-input" readonly aria-readonly="true" title="Your display name. A club admin can change it."></div><p class="choice-label">Commitment level</p><div class="level-choices choices"></div><p class="choice-label">Participation type <span class="optional">select all that apply</span></p><div class="event-choices choices"></div><div class="other-row hidden"><input class="other-input" placeholder="Type your event or distance"></div><div class="save-row"><button type="button" class="save-button">Save commitment</button><button type="button" class="remove-commit-button">Remove commitment</button></div></div></div>`;
   if (!(race.url && safeLinkUrl(race.url))) {
     wrap.querySelector('.race-website-header').remove();
     wrap.querySelector('.race-website-body').remove();
@@ -2053,19 +2047,10 @@ function makeDetails(race) {
     };
   gateButton(removeCommitButton);
   const nameInput = wrap.querySelector('.name-input');
-  // pendingName is a typed-but-not-yet-saved name, kept live by oninput
-  // below the same way otherInput already keeps otherText live — not just
-  // snapshotted on submit. A signed-in session can drop out from under a
-  // member mid-edit (Supabase's own background token refresh failing, not
-  // only a click on an already-expired session), and that fires a
-  // re-render on its own via onAuthStateChange — same as any other
-  // re-render — which would otherwise wipe whatever they'd typed but not
-  // saved yet back to editingName's old value.
-  nameInput.value = state.form.pendingName ?? state.form.editingName ?? '';
-  nameInput.oninput = () => {
-    state.form.pendingName = nameInput.value;
-    persist();
-  };
+  // The name is the member's display name, shown read-only. An entry opened
+  // from the roster shows its own name instead. Only an admin changes a name
+  // (admin console, Accounts); the database refuses it from anyone else.
+  nameInput.value = state.form.editingName || ownName();
   const eventChoices = wrap.querySelector('.event-choices');
   const otherRow = wrap.querySelector('.other-row');
   const otherInput = wrap.querySelector('.other-input');
@@ -2134,20 +2119,15 @@ function makeDetails(race) {
     // A pending member never sees an enabled Save (5.3).
     gateButton(btn);
     btn.onclick = async () => {
-      const name = nameInput.value.trim();
+      // editingName tells this handler whether it's updating an existing
+      // entry or adding a new one, so it stays untouched until the save
+      // succeeds, below.
+      const previousEditingName = state.form.editingName;
+      const name = previousEditingName || ownName();
       if (!name) {
-        nameInput.focus();
+        showToast('Your display name has not loaded. Refresh and try again.', 'error');
         return;
       }
-      // editingName (not pendingName, which nameInput's oninput already
-      // keeps live) is what tells this handler whether it's renaming an
-      // existing entry or adding a new one, so it must stay untouched until
-      // the save actually succeeds, below. Overwriting it here used to mean:
-      // sign-in expires mid-edit, this runs again after re-auth with
-      // editingName already clobbered to the new name, previousEditingName
-      // reads back as already matching name, and the save goes through as a
-      // fresh add — orphaning the old-named entry instead of renaming it.
-      const previousEditingName = state.form.editingName;
       if (!requireSignIn('Sign in to save your commitment')) return;
       const extra = (state.form.otherText || '').trim();
       const events = [...new Set([...state.form.events, ...(extra ? [extra] : [])])];
@@ -2161,13 +2141,10 @@ function makeDetails(race) {
         for (const ev of events) {
           if (!race.events.includes(ev)) await addEvent(race.id, ev);
         }
-        if (previousEditingName && previousEditingName !== name)
-          await renameEntry(race.id, previousEditingName, name, events, state.form.level);
-        else if (previousEditingName) await saveEntry(race.id, name, events, state.form.level);
+        if (previousEditingName) await saveEntry(race.id, name, events, state.form.level);
         else await addEntry(race.id, name, events, state.form.level);
         state.form.editingName = name;
-        delete state.form.pendingName;
-        state.user = name;
+        if (name === ownName()) state.user = name;
         persist();
         await loadRaces();
       } catch (err) {
@@ -2247,6 +2224,17 @@ document.querySelectorAll('.view-toggle-btn').forEach(
   b =>
     (b.onclick = () => {
       state.viewFilter = b.dataset.view;
+      persist();
+      render();
+    }),
+);
+document.querySelectorAll('.when-toggle-btn').forEach(
+  b =>
+    (b.onclick = () => {
+      state.whenFilter = b.dataset.when;
+      // Past opens on "View all": few past races are club focus, so the club
+      // view would look empty. The member can still switch back.
+      if (state.whenFilter === 'past') state.viewFilter = 'all';
       persist();
       render();
     }),

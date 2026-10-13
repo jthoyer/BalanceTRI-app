@@ -119,6 +119,14 @@
             <option value="Triathlon">Triathlon</option>
           </select></label
         >
+        <div class="athlete-filter when-filter" role="group" aria-labelledby="whenFilterLabel">
+          <span id="whenFilterLabel">Show</span>
+          <div class="when-toggle">
+            <button type="button" class="choice when-toggle-btn" data-when="upcoming">
+              Upcoming</button
+            ><button type="button" class="choice when-toggle-btn" data-when="past">Past</button>
+          </div>
+        </div>
         <label class="athlete-filter" for="athleteFilter"
           ><span>Filter by athlete</span
           ><input
@@ -254,7 +262,7 @@
         ><span id="updateBannerText"></span>
       </p>
       <div class="race-info upcoming-heading hidden" id="upcomingHeading">
-        <h2>Upcoming races</h2>
+        <h2 id="upcomingHeadingText">Upcoming races</h2>
       </div>
       <p class="empty-state hidden" id="emptyState">
         No races here yet. Add a race or switch back to all races.

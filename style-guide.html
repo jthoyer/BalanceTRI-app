@@ -872,6 +872,38 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
         </div>
 
         <div class="guide-block">
+          <h3>Show toggle (Upcoming / Past)</h3>
+          <p class="block-note">
+            <code>.when-toggle</code> sits in the filter row, next to "Filter by event type", and
+            switches the race list between upcoming and past races. It is made of two
+            <code>.choice</code> pills, so it uses the light-surface tones from "Choice pills":
+            white with a line border when off, navy tint with a navy border when selected. One is
+            always selected. Past races show in a muted slate card
+            (<code>.race-summary.past</code>), newest first, and the meta line reads "N raced".
+          </p>
+          <div class="specimen">
+            <div class="athlete-filter when-filter" role="group" aria-labelledby="guideWhenLabel">
+              <span id="guideWhenLabel">Show</span>
+              <div class="when-toggle">
+                <button type="button" class="choice when-toggle-btn selected" aria-pressed="true">
+                  Upcoming</button
+                ><button type="button" class="choice when-toggle-btn" aria-pressed="false">
+                  Past
+                </button>
+              </div>
+            </div>
+          </div>
+          <pre class="code">
+&lt;div class="athlete-filter when-filter" role="group" aria-labelledby="whenFilterLabel"&gt;
+  &lt;span id="whenFilterLabel"&gt;Show&lt;/span&gt;
+  &lt;div class="when-toggle"&gt;
+    &lt;button class="choice when-toggle-btn selected" data-when="upcoming"&gt;Upcoming&lt;/button&gt;
+    &lt;button class="choice when-toggle-btn" data-when="past"&gt;Past&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</pre>
+        </div>
+
+        <div class="guide-block">
           <h3>Event-type &amp; club-focus badges</h3>
           <p class="block-note">
             Both sit inline after the race title in <code>.race-info h2</code>, on the race card and
