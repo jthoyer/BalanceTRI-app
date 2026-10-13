@@ -698,6 +698,70 @@ console.log('9b. Batch approval caps at 50, and copes before its migration');
   await page.close();
 }
 
+console.log('10. The club roster hint');
+{
+  const { page, errors } = await open(fixtures());
+  await page.waitForSelector('#requests');
+  check(
+    await page.getByRole('button', { name: 'Choose all on roster' }).isHidden(),
+    'Choose all on roster is hidden until a roster is loaded',
+  );
+  check(
+    (await page.locator('.admin-roster').count()) === 0,
+    'no roster badges before a roster is loaded',
+  );
+  // A JustGo-style export: a header, quoted fields, mixed case, a stray space.
+  const csv =
+    'First,Last,Email\n"Sam","Lee"," SAM@Example.com "\nJo,Ng,jo@example.com\nAl,Bo,al@example.com\n';
+  await page.locator('input.admin-roster-file').setInputFiles({
+    name: 'roster.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv),
+  });
+  await page.waitForSelector('.admin-roster');
+  check(
+    (await page.locator('.admin-roster-status').textContent()) ===
+      'Roster: 3 addresses. 1 of 2 waiting are on it.',
+    'the status counts the roster and the waiting matches',
+  );
+  const badged = await page
+    .locator('.admin-request', { has: page.locator('.admin-roster') })
+    .locator('strong')
+    .allTextContents();
+  check(
+    JSON.stringify(badged) === JSON.stringify(['Sam Lee']),
+    'only the matching request is marked On club roster',
+  );
+  await page.getByRole('button', { name: 'Choose all on roster' }).click();
+  check(
+    (await page.getByRole('button', { name: /^Approve chosen/ }).textContent()) ===
+      'Approve chosen (1)' &&
+      (await page.getByRole('checkbox', { name: 'Choose Sam Lee' }).isChecked()) &&
+      !(await page.getByRole('checkbox', { name: 'Choose Kim Ng' }).isChecked()),
+    'Choose all on roster ticks only the match',
+  );
+  check(
+    !(await page.evaluate(() => window.__calls)).some(c => c[0] === 'rpc' && /roster/i.test(c[1])),
+    'the roster is never sent to the database',
+  );
+  await page.locator('input.admin-roster-file').setInputFiles({
+    name: 'empty.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('no addresses here\n'),
+  });
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('#requests .admin-error')].some(e =>
+      e.textContent.includes('No email addresses found'),
+    ),
+  );
+  check(
+    (await page.locator('.admin-roster').count()) === 1,
+    'a file with no addresses is refused and keeps the roster already loaded',
+  );
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
 await browser.close();
 server.close();
 if (failures) {

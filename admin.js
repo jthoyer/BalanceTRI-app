@@ -898,6 +898,16 @@ const DECISIONS = {
 // Batch approval: at most this many in one go, so a mis-tap can't approve the
 // whole queue. admin_approve_requests() enforces the same limit.
 const BATCH_LIMIT = 50;
+// The club roster (spec A10): a hint, never an approval. The admin loads a
+// file of addresses (a JustGo export, say); it is read in this browser only,
+// kept in page memory until reload, and never sent anywhere. Waiting requests
+// whose email is on it are marked, and "Choose all on roster" ticks them.
+let rosterEmails = null;
+const EMAIL_IN_TEXT = /[^\s,;:"'<>()[\]]+@[^\s,;:"'<>()[\]]+\.[^\s,;:"'<>()[\]]+/g;
+function parseRoster(text) {
+  return new Set((text.match(EMAIL_IN_TEXT) || []).map(e => e.trim().toLowerCase()));
+}
+const onRoster = r => !!rosterEmails && !!r.email && rosterEmails.has(r.email.trim().toLowerCase());
 function requestsSection(requests, notice) {
   if (requests === null) {
     return el(
@@ -927,7 +937,63 @@ function requestsSection(requests, notice) {
     'Clear',
   );
   const chooseAll = el('button', { class: 'text-button', type: 'button' }, 'Choose all waiting');
-  const batchBar = el('div', { class: 'admin-batch' }, approveChosen, chooseAll, clearChosen);
+  const chooseRoster = el(
+    'button',
+    { class: 'text-button', type: 'button' },
+    'Choose all on roster',
+  );
+  const rosterFile = el('input', {
+    type: 'file',
+    accept: '.csv,.txt,text/csv,text/plain',
+    class: 'admin-roster-file',
+    'aria-label': 'Load club roster',
+  });
+  const rosterStatus = el('span', { class: 'admin-hint admin-roster-status', role: 'status' });
+  const rosterLabel = el(
+    'label',
+    { class: 'text-button admin-roster-load' },
+    'Load club roster',
+    rosterFile,
+  );
+  const batchBar = el(
+    'div',
+    { class: 'admin-batch' },
+    approveChosen,
+    chooseAll,
+    chooseRoster,
+    clearChosen,
+    rosterLabel,
+    rosterStatus,
+  );
+  function syncRoster() {
+    const waiting = requests.filter(r => r.status === 'pending');
+    chooseRoster.hidden = !rosterEmails;
+    rosterStatus.textContent = rosterEmails
+      ? `Roster: ${rosterEmails.size} addresses. ${waiting.filter(onRoster).length} of ${waiting.length} waiting are on it.`
+      : '';
+  }
+  rosterFile.addEventListener('change', async () => {
+    const file = rosterFile.files?.[0];
+    if (!file) return;
+    batchError.set('');
+    const found = parseRoster(await file.text());
+    rosterFile.value = '';
+    if (!found.size) {
+      batchError.set('No email addresses found in that file.');
+      return;
+    }
+    rosterEmails = found;
+    render();
+    syncBatch();
+    syncRoster();
+  });
+  chooseRoster.onclick = () => {
+    batchError.set('');
+    for (const r of requests) {
+      if (r.status === 'pending' && onRoster(r) && chosen.size < BATCH_LIMIT) chosen.add(r.user_id);
+    }
+    syncBatch();
+  };
   function syncBatch() {
     const n = chosen.size;
     approveChosen.textContent = n ? `Approve chosen (${n})` : 'Approve chosen';
@@ -1019,6 +1085,7 @@ function requestsSection(requests, notice) {
   });
   render();
   syncBatch();
+  syncRoster();
   return el(
     'section',
     { class: 'admin-card', id: 'requests' },
@@ -1109,6 +1176,10 @@ function requestItem(r, choose) {
     return button;
   });
   const notes = [];
+  // A hint only: the admin still reads the name and note before approving.
+  if (r.status === 'pending' && onRoster(r)) {
+    notes.push(el('span', { class: 'admin-badge admin-roster' }, 'On club roster'));
+  }
   // The Telegram message is the alert; the console is the record. A pending
   // request whose message never went shows that here (spec 6.4, step 8).
   if (r.status === 'pending' && !r.notified_at) {
