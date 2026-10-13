@@ -2421,4 +2421,255 @@ $('#authSheetBackdrop').addEventListener('keydown', e => {
     first.focus();
   }
 });
+
+// ---------------------------------------------------------------------------
+// App feedback: the "Send feedback" button at the foot of the page opens an
+// inline form. Sending goes to the send-feedback Edge Function, which checks
+// everything again (origin, a signed form token, honeypot, minimum fill time,
+// lengths, hCaptcha, rate limits) and emails the maintainer. The recipient
+// address is a server secret: it is never in this file or any request.
+//
+// Nothing a member types is lost: the draft is kept in sessionStorage as they
+// type, so it survives a failed send, a collapse of the panel and a reload,
+// and is cleared only once the server says it was sent.
+const FEEDBACK_URL = `${SUPABASE_URL}/functions/v1/send-feedback`;
+const FEEDBACK_DRAFT_KEY = 'balance-feedback-draft';
+// The server refuses a send under 4 seconds after the form token was issued.
+// Wait a little longer than that here, so a quick typist never sees it.
+const FEEDBACK_MIN_FILL_MS = 4500;
+const FEEDBACK_MIN_LENGTH = 5;
+const FEEDBACK_MAX_LENGTH = 2000;
+const FEEDBACK_ERRORS = {
+  too_short: `Write a little more: at least ${FEEDBACK_MIN_LENGTH} characters.`,
+  too_long: `That's over ${FEEDBACK_MAX_LENGTH.toLocaleString('en-AU')} characters. Trim it a little and try again.`,
+  contact_too_long: 'The name or email is too long. Keep it under 120 characters.',
+  too_many_links: 'Please include no more than three links.',
+  too_fast: 'That was quick! Give it a second and press Send again.',
+  form_expired: 'This form timed out. Press Send again.',
+  captcha: "The bot check didn't pass. Please try again.",
+  rate_limited: "You've sent a few messages in a short time. Try again in a little while.",
+  daily_limit: "We've had a lot of feedback today. Please try again tomorrow.",
+  not_configured: "Feedback isn't switched on yet. Please try again later.",
+  mail_failed: "We couldn't send it just now. Please try again in a minute.",
+  unavailable: "We couldn't send it just now. Please try again in a minute.",
+};
+const feedback = {
+  token: null,
+  tokenAt: 0,
+  tokenLoading: null,
+  sending: false,
+};
+const feedbackChars = s => Array.from(s).length;
+
+function saveFeedbackDraft() {
+  try {
+    sessionStorage.setItem(
+      FEEDBACK_DRAFT_KEY,
+      JSON.stringify({
+        message: $('#feedbackMessage').value,
+        contact: $('#feedbackContact').value,
+      }),
+    );
+  } catch {
+    // Storage full or blocked: the text is still in the form.
+  }
+}
+function restoreFeedbackDraft() {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(FEEDBACK_DRAFT_KEY) || 'null');
+    if (draft && !$('#feedbackMessage').value && !$('#feedbackContact').value) {
+      $('#feedbackMessage').value = typeof draft.message === 'string' ? draft.message : '';
+      $('#feedbackContact').value = typeof draft.contact === 'string' ? draft.contact : '';
+    }
+  } catch {
+    clearFeedbackDraft();
+  }
+}
+// Storage can be blocked (private modes, strict settings). A failure to
+// forget a draft must never turn a successful send into an error.
+function clearFeedbackDraft() {
+  try {
+    sessionStorage.removeItem(FEEDBACK_DRAFT_KEY);
+  } catch {
+    // Nothing stored, or nothing we can reach.
+  }
+}
+function updateFeedbackCount() {
+  const n = feedbackChars($('#feedbackMessage').value);
+  $('#feedbackCount').textContent =
+    `${n.toLocaleString('en-AU')} of ${FEEDBACK_MAX_LENGTH.toLocaleString('en-AU')} characters`;
+}
+function showFeedbackError(message, focusEl) {
+  $('#feedbackStatus').textContent = message;
+  if (focusEl) {
+    focusEl.setAttribute('aria-invalid', 'true');
+    focusEl.setAttribute(
+      'aria-describedby',
+      `${focusEl.id === 'feedbackMessage' ? 'feedbackCount' : 'feedbackContactHint'} feedbackStatus`,
+    );
+    focusEl.focus();
+  }
+}
+function clearFeedbackError() {
+  $('#feedbackStatus').textContent = '';
+  for (const el of [$('#feedbackMessage'), $('#feedbackContact')]) {
+    el.removeAttribute('aria-invalid');
+  }
+  $('#feedbackMessage').setAttribute('aria-describedby', 'feedbackCount');
+  $('#feedbackContact').setAttribute('aria-describedby', 'feedbackContactHint');
+}
+
+// The form token is the server's signed record of when the form opened. It is
+// fetched as the panel opens, so the minimum fill time is usually long past
+// by the time anyone presses Send. A failure here is retried at send.
+async function postFeedback(body) {
+  const {
+    data: { session },
+  } = await db.auth.getSession();
+  const res = await fetch(FEEDBACK_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      // A signed-in member's own token, so the email says who they are.
+      authorization: `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+  let out = {};
+  try {
+    out = await res.json();
+  } catch {
+    out = {};
+  }
+  return { ok: res.ok, out };
+}
+function loadFeedbackToken() {
+  feedback.tokenLoading ||= postFeedback({ action: 'start' })
+    .then(({ ok, out }) => {
+      if (!ok || typeof out.form_token !== 'string') throw new Error(out.error || 'no token');
+      feedback.token = out.form_token;
+      feedback.tokenAt = Date.now();
+    })
+    .finally(() => {
+      feedback.tokenLoading = null;
+    });
+  return feedback.tokenLoading;
+}
+
+function openFeedback() {
+  const panel = $('#feedbackPanel');
+  $('#feedbackButton').setAttribute('aria-expanded', 'true');
+  panel.classList.remove('hidden');
+  $('#feedbackForm').classList.remove('hidden');
+  $('#feedbackDone').classList.add('hidden');
+  restoreFeedbackDraft();
+  updateFeedbackCount();
+  if (!feedback.token) loadFeedbackToken().catch(() => {});
+  panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  $('#feedbackMessage').focus({ preventScroll: true });
+}
+function closeFeedback() {
+  // Collapsing keeps whatever was typed, both in the form and in storage.
+  $('#feedbackPanel').classList.add('hidden');
+  $('#feedbackButton').setAttribute('aria-expanded', 'false');
+  $('#feedbackButton').focus();
+}
+function setFeedbackSending(sending) {
+  feedback.sending = sending;
+  setBusy($('#feedbackSend'), sending, 'Send', 'Sending…');
+  $('#feedbackForm').setAttribute('aria-busy', String(sending));
+}
+
+async function sendFeedback() {
+  if (feedback.sending) return;
+  clearFeedbackError();
+  const message = $('#feedbackMessage').value.trim();
+  const contact = $('#feedbackContact').value.trim();
+  if (feedbackChars(message) < FEEDBACK_MIN_LENGTH) {
+    showFeedbackError(FEEDBACK_ERRORS.too_short, $('#feedbackMessage'));
+    return;
+  }
+  if (feedbackChars(message) > FEEDBACK_MAX_LENGTH) {
+    showFeedbackError(FEEDBACK_ERRORS.too_long, $('#feedbackMessage'));
+    return;
+  }
+  saveFeedbackDraft();
+  setFeedbackSending(true);
+  try {
+    if (!feedback.token) await loadFeedbackToken();
+    const wait = feedback.tokenAt + FEEDBACK_MIN_FILL_MS - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    const captchaToken = await getCaptchaToken($('#feedbackForm'));
+    const { ok, out } = await postFeedback({
+      action: 'send',
+      form_token: feedback.token,
+      captcha_token: captchaToken || '',
+      message,
+      contact,
+      page: location.pathname.slice(0, 200),
+      website: $('#feedbackWebsite').value,
+    });
+    if (ok && out.sent) {
+      clearFeedbackDraft();
+      $('#feedbackForm').reset();
+      updateFeedbackCount();
+      $('#feedbackForm').classList.add('hidden');
+      $('#feedbackDone').classList.remove('hidden');
+      $('#feedbackDoneTitle').focus();
+      return;
+    }
+    if (out.error === 'form_expired') feedback.token = null;
+    const focusEl = {
+      too_short: $('#feedbackMessage'),
+      too_long: $('#feedbackMessage'),
+      too_many_links: $('#feedbackMessage'),
+      contact_too_long: $('#feedbackContact'),
+    }[out.error];
+    showFeedbackError(
+      (FEEDBACK_ERRORS[out.error] ||
+        "We couldn't send it just now. Please try again in a minute.") +
+        ' Your message is still here.',
+      focusEl,
+    );
+  } catch (err) {
+    // A network failure, or the bot check couldn't load or was closed.
+    console.error('send feedback failed:', err);
+    feedback.token = null;
+    const reason = err?.message?.startsWith('the bot check')
+      ? `Couldn't send: ${err.message}`
+      : "Couldn't reach the server. Check your connection and try again.";
+    showFeedbackError(reason + ' Your message is still here.');
+  } finally {
+    setFeedbackSending(false);
+  }
+}
+
+$('#feedbackButton').onclick = () => {
+  if ($('#feedbackButton').getAttribute('aria-expanded') === 'true') closeFeedback();
+  else openFeedback();
+};
+$('#feedbackCancel').onclick = closeFeedback;
+$('#feedbackDoneClose').onclick = closeFeedback;
+$('#feedbackAgain').onclick = () => {
+  $('#feedbackDone').classList.add('hidden');
+  $('#feedbackForm').classList.remove('hidden');
+  feedback.token = null;
+  loadFeedbackToken().catch(() => {});
+  $('#feedbackMessage').focus();
+};
+$('#feedbackForm').addEventListener('submit', e => {
+  e.preventDefault();
+  sendFeedback();
+});
+$('#feedbackForm').addEventListener('input', () => {
+  updateFeedbackCount();
+  saveFeedbackDraft();
+});
+$('#feedbackPanel').addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !feedback.sending) {
+    e.preventDefault();
+    closeFeedback();
+  }
+});
 initAuth();

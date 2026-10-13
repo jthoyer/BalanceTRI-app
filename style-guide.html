@@ -1148,6 +1148,57 @@ showToast('Could not save: ' + err.message, 'error');</pre>
           </div>
         </div>
         <div class="guide-block">
+          <h3>App feedback</h3>
+          <p class="block-note">
+            The page's foot: <code>.app-footer</code> (a <code>--line</code> rule above, a
+            <code>--muted</code> prompt) and <code>.feedback-button</code>, an outlined secondary
+            button — white with a 60% <code>--ink</code> border, <code>--navy-bg</code> on hover,
+            solid <code>--ink</code> while open. It is a disclosure (<code>aria-expanded</code>,
+            <code>aria-controls</code>) for an inline <code>.feedback-panel</code>, not a modal
+            <code>&lt;dialog&gt;</code>: hCaptcha's challenge renders in the page, under a modal's
+            top layer, where it couldn't be answered. Opening moves focus to the text box; Escape or
+            Cancel collapses it and returns focus to the button, keeping the text. Errors go in a
+            <code>.feedback-status</code> <code>role="alert"</code> that stays rendered at zero size
+            when empty, so it is announced. The honeypot (<code>.feedback-trap</code>) is
+            off-screen, <code>aria-hidden</code> and <code>tabindex="-1"</code>. Measured: text
+            floor 5.7:1 (error on <code>#fdecec</code>), UI floor 3.9:1 (button border on
+            <code>--canvas</code>).
+          </p>
+          <div class="specimen demo-card-width">
+            <div class="app-footer" style="padding: 20px 0 0">
+              <div class="app-footer-bar">
+                <p class="app-footer-text">Something broken, or got an idea for the app?</p>
+                <button type="button" class="feedback-button" aria-expanded="false">
+                  Send feedback
+                </button>
+              </div>
+              <div class="feedback-panel">
+                <form class="feedback-form" onsubmit="return false;">
+                  <div class="feedback-heading">
+                    <p class="feedback-eyebrow">App feedback</p>
+                    <h2>Tell us what to fix</h2>
+                  </div>
+                  <div class="feedback-field">
+                    <label for="guide-feedback">Your feedback</label>
+                    <textarea id="guide-feedback" rows="3" aria-invalid="true"></textarea>
+                    <p class="feedback-hint">0 of 2,000 characters</p>
+                  </div>
+                  <p class="feedback-status">
+                    Write a little more: at least 5 characters. Your message is still here.
+                  </p>
+                  <div class="dialog-footer">
+                    <button type="button" class="secondary-button">Cancel</button
+                    ><button type="button" class="primary-button">Send</button>
+                  </div>
+                </form>
+                <p class="feedback-done-title" style="margin-top: 16px">
+                  Thanks, your feedback is on its way.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="guide-block">
           <h3>Reduced motion</h3>
           <p class="block-note">
             A global <code>@media (prefers-reduced-motion: reduce)</code> rule disables
