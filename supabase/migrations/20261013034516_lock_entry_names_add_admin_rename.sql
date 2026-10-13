@@ -6,8 +6,8 @@
 -- Now:    the app fills the name from the profile and shows it read-only, and
 --         this migration enforces the same rule in the database.
 --
--- Not applied to the live project yet. When it is, rename this file to the
--- version Supabase records (see CLAUDE.md).
+-- Applied to the live project on 13 October 2026 and named after the version
+-- Supabase recorded.
 
 -- ---------------------------------------------------------------------------
 -- 1. Entry names follow the profile.
