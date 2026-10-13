@@ -2269,6 +2269,9 @@ document.querySelectorAll('.when-toggle-btn').forEach(
   b =>
     (b.onclick = () => {
       state.whenFilter = b.dataset.when;
+      // Past opens on "View all": few past races are club focus, so the club
+      // view would look empty. The member can still switch back.
+      if (state.whenFilter === 'past') state.viewFilter = 'all';
       persist();
       render();
     }),
