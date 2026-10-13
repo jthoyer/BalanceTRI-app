@@ -155,6 +155,80 @@ function myEntry(race) {
   return race.entries.find(e => e.name === ownName());
 }
 // ---------------------------------------------------------------------------
+// Results on past races. Approved members only: a visitor, or an account that
+// is pending, rejected or revoked, is never sent a result (the results table
+// has no read policy for them) and sees the race screen exactly as before.
+// One result per entry. The database decides who may write one (the entry's
+// owner or an admin); canEditResult only keeps the button off rows that would
+// be refused anyway.
+// ---------------------------------------------------------------------------
+const RESULT_STATUSES = [
+  ['finished', 'Finished'],
+  ['dnf', 'DNF'],
+  ['dns', 'DNS'],
+];
+const RESULT_MAX_SECONDS = 48 * 3600;
+const RESULT_NOTE_MAX = 280;
+// Results open on race day, in Sydney time, and never on a Balance Bolt race
+// (sign-up and results live on its own site).
+function resultsOpen(race) {
+  return race.balanceBolt !== 'Y' && race.date <= sydneyToday();
+}
+function formatFinishTime(total) {
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+// "1:23:45" or "45:30" to whole seconds. Null when it is not a time, is zero,
+// or runs past 48 hours.
+function parseFinishTime(text) {
+  const m = /^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})$/.exec(String(text).trim());
+  if (!m) return null;
+  const h = m[1] ? Number(m[1]) : 0;
+  const mins = Number(m[2]);
+  const secs = Number(m[3]);
+  if (secs > 59 || (m[1] && mins > 59)) return null;
+  const total = h * 3600 + mins * 60 + secs;
+  return total >= 1 && total <= RESULT_MAX_SECONDS ? total : null;
+}
+// A place: empty is fine (null); otherwise a whole number from 1 to 100000.
+// Returns undefined for anything else, so null and "invalid" stay apart.
+function parsePlace(text) {
+  const t = String(text).trim();
+  if (!t) return null;
+  if (!/^\d{1,6}$/.test(t)) return undefined;
+  const n = Number(t);
+  return n >= 1 && n <= 100000 ? n : undefined;
+}
+function canEditResult(entry) {
+  if (!session || !isMember) return false;
+  // Admins may write any result; the server also wants their two-factor session.
+  if (isAdmin) return true;
+  if (entry.created_by) return entry.created_by === session.user.id;
+  // Entries from before created_by existed: the member whose display name matches.
+  const mine = ownName().trim().toLowerCase();
+  return !!mine && entry.name.trim().toLowerCase() === mine;
+}
+// The form's values while it is open. Kept here, not in the DOM, because
+// render() rebuilds the race screen (a toast re-renders it) and would
+// otherwise wipe what was typed. Not saved to localStorage.
+let resultDraft = null;
+function draftFrom(entry) {
+  const r = entry.result;
+  return {
+    entryId: entry.id,
+    status: r?.status || 'finished',
+    time: r?.finish_seconds ? formatFinishTime(r.finish_seconds) : '',
+    overall: r?.place_overall ? String(r.place_overall) : '',
+    ageGroup: r?.place_age_group ? String(r.place_age_group) : '',
+    pb: !!r?.is_pb,
+    note: r?.note || '',
+    error: '',
+  };
+}
+// ---------------------------------------------------------------------------
 // Auth. Email and password via Supabase Auth, behind an approval step.
 // Browsing the calendar and every roster stays open to everyone signed out —
 // but saving, editing or removing a commitment requires being signed in
@@ -1307,6 +1381,36 @@ async function addEntry(raceId, name, events, level) {
     throw await friendlyWriteError(error.message);
   }
 }
+// Results. One row per entry, so a save is an upsert on entry_id. RLS lets
+// the entry's owner or an admin through, and only from race day. A refused
+// INSERT comes back as a "row-level security" error, so that message is
+// reworded for what it means here.
+function friendlyResultError(message) {
+  if (/row-level security/i.test(message))
+    return new Error(
+      'Only the member on this entry, or a club admin, can save a result here. Results open on race day.',
+    );
+  if (/check constraint/i.test(message))
+    return new Error('That result is not valid. Check the time and the places.');
+  return new Error(message);
+}
+async function saveResult(entryId, fields) {
+  const { data, error } = await db
+    .from('results')
+    .upsert({ entry_id: entryId, ...fields }, { onConflict: 'entry_id' })
+    .select('id');
+  if (error) throw friendlyResultError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(new Error('This action is for approved members only.'));
+}
+async function removeResult(entryId) {
+  const { data, error } = await db.from('results').delete().eq('entry_id', entryId).select('id');
+  if (error) throw friendlyResultError(error.message);
+  if (!data || !data.length)
+    throw await refusedWrite(
+      new Error('That result is already gone, or it is not yours to remove.'),
+    );
+}
 async function addRace(payload) {
   const { error } = await db.from('races').insert({
     name: payload.name,
@@ -1598,7 +1702,7 @@ async function loadRaces() {
     const fullNames = isMember;
     const racesQuery = db
       .from('races')
-      .select(fullNames ? '*, entries(name,events,level)' : '*')
+      .select(fullNames ? '*, entries(id,name,events,level,created_by)' : '*')
       // Signed-in members can read removed races (the select policy has to
       // let them, or the soft delete itself is rejected — see the
       // races_auth_writes_and_soft_delete migration). Filter them here so a
@@ -1606,11 +1710,21 @@ async function loadRaces() {
       // signed in. Anonymous visitors never see them at all.
       .is('deleted_at', null)
       .order('date');
-    const [{ data, error }, firstNames] = await Promise.all([
+    const [{ data, error }, firstNames, resultRows] = await Promise.all([
       racesQuery,
       fullNames ? null : db.rpc('public_entries'),
+      // Results are for approved members only; nobody else asks for them.
+      fullNames
+        ? db
+            .from('results')
+            .select('entry_id,status,finish_seconds,place_overall,place_age_group,is_pb,note')
+        : null,
     ]);
     if (error) throw error;
+    // A database without the results table (or a failed read) shows the
+    // calendar with no results rather than failing the whole load.
+    if (resultRows?.error) console.warn('results not loaded:', resultRows.error);
+    const resultByEntry = new Map((resultRows?.data || []).map(r => [r.entry_id, r]));
     // PGRST202: public_entries() isn't on this database yet. Show the races
     // with empty rosters rather than fail the whole calendar.
     if (firstNames?.error && firstNames.error.code !== 'PGRST202') throw firstNames.error;
@@ -1635,6 +1749,7 @@ async function loadRaces() {
         ...e,
         events: (e.events || []).map(String),
         level: String(e.level),
+        result: resultByEntry.get(e.id) || null,
       })),
     }));
   } catch (err) {
@@ -1764,8 +1879,12 @@ function render() {
       h2.append(b);
     }
     const locked = race.entries.filter(e => e.level === 'locked').length;
+    // Approved members also see how many results are in; everyone else gets
+    // the line they always had.
+    const resultCount = isMember ? race.entries.filter(e => e.result).length : 0;
     node.querySelector('.race-meta').textContent = past
-      ? `${locked} raced`
+      ? `${locked} raced` +
+        (resultCount ? ` · ${resultCount} result${resultCount === 1 ? '' : 's'}` : '')
       : `${locked} locked in of ${race.entries.length}`;
     summary.href = racePath(race);
     summary.onclick = e => {
@@ -1797,8 +1916,20 @@ function render() {
       };
       gateButton($('#raceScreenEditButton'));
       const body = $('#raceScreenBody');
+      // A toast re-renders this screen. Keep keyboard focus on a row's result
+      // button across the rebuild instead of dropping it to the page.
+      const focused = document.activeElement;
+      const focusedResultId = focused?.classList?.contains('result-edit')
+        ? focused.closest('.result-entry')?.dataset.entryId
+        : null;
       body.innerHTML = '';
       body.append(makeDetails(openRace));
+      if (focusedResultId)
+        body
+          .querySelector(
+            `.result-entry[data-entry-id="${CSS.escape(focusedResultId)}"] .result-edit`,
+          )
+          ?.focus({ preventScroll: true });
     } else {
       openId = null;
       $('#raceScreen').classList.add('hidden');
@@ -1855,9 +1986,375 @@ function buildRoster(host, eventKeys, eventGroups, levelLabel) {
     host.append(group);
   });
 }
+// ---------------------------------------------------------------------------
+// The race screen for an approved member once results are open: "Club
+// results" in place of "Club commitments". Everything member-supplied (names,
+// notes, event labels) goes in via textContent, never as markup.
+// ---------------------------------------------------------------------------
+function resultEl(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+// Where focus goes once the screen has been rebuilt: the form's first field
+// when it opens, the row's Edit button when it closes.
+let resultFocusEntryId = null;
+// Within a group: fastest finishers first, then DNF, then DNS, then members
+// with no result yet, each by name.
+function resultOrder(a, b) {
+  const rank = e =>
+    !e.result ? 3 : e.result.status === 'finished' ? 0 : e.result.status === 'dnf' ? 1 : 2;
+  if (rank(a) !== rank(b)) return rank(a) - rank(b);
+  if (rank(a) === 0 && a.result.finish_seconds !== b.result.finish_seconds)
+    return a.result.finish_seconds - b.result.finish_seconds;
+  return a.name.localeCompare(b.name);
+}
+function resultSummary(result) {
+  const who = resultEl('span', 'result-summary');
+  const status = RESULT_STATUSES.find(([key]) => key === result.status);
+  who.append(
+    resultEl(
+      'span',
+      `result-status result-${status ? result.status : 'other'}`,
+      result.status === 'finished' && result.finish_seconds
+        ? formatFinishTime(result.finish_seconds)
+        : status
+          ? status[1]
+          : result.status,
+    ),
+  );
+  const places = [];
+  if (result.place_overall) places.push(`Overall ${result.place_overall}`);
+  if (result.place_age_group) places.push(`Age group ${result.place_age_group}`);
+  if (places.length) who.append(resultEl('span', 'result-places', places.join(' · ')));
+  if (result.is_pb) who.append(resultEl('span', 'result-pb', 'PB'));
+  return who;
+}
+function buildResultForm(entry) {
+  const d = resultDraft;
+  const form = resultEl('form', 'result-form');
+  form.noValidate = true;
+  const set = resultEl('fieldset', 'result-fieldset');
+  set.append(resultEl('legend', 'result-legend', `Result for ${entry.name}`));
+
+  set.append(resultEl('p', 'choice-label', 'How did it go?'));
+  const statusRow = resultEl('div', 'choices');
+  statusRow.setAttribute('role', 'group');
+  statusRow.setAttribute('aria-label', 'Result status');
+  const statusButtons = RESULT_STATUSES.map(([key, label]) => {
+    const b = resultEl('button', 'choice', label);
+    b.type = 'button';
+    b.onclick = () => {
+      d.status = key;
+      sync();
+    };
+    statusRow.append(b);
+    return [key, b];
+  });
+  set.append(statusRow);
+
+  // Fields that only a finished race has: hidden for DNF and DNS.
+  const finishedOnly = resultEl('div', 'result-finished-fields');
+  const field = (labelText, id, value, attrs, hint) => {
+    const wrap = resultEl('div', 'result-field');
+    const label = resultEl('label', 'choice-label', labelText);
+    label.htmlFor = id;
+    const input = resultEl('input', 'result-input');
+    input.id = id;
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.value = value;
+    for (const [k, v] of Object.entries(attrs)) input.setAttribute(k, v);
+    wrap.append(label, input);
+    if (hint) {
+      const h = resultEl('p', 'helper-text', hint);
+      h.id = id + '-hint';
+      input.setAttribute('aria-describedby', h.id);
+      wrap.append(h);
+    }
+    return [wrap, input];
+  };
+  const [timeWrap, timeInput] = field(
+    'Finish time',
+    'result-time',
+    d.time,
+    { placeholder: '1:23:45', inputmode: 'numeric' },
+    'Hours, minutes and seconds, like 1:23:45. Under an hour: 45:30.',
+  );
+  timeInput.oninput = () => (d.time = timeInput.value);
+  const [overallWrap, overallInput] = field('Overall place', 'result-overall', d.overall, {
+    inputmode: 'numeric',
+  });
+  overallInput.oninput = () => (d.overall = overallInput.value);
+  const [ageWrap, ageInput] = field('Age-group place', 'result-age', d.ageGroup, {
+    inputmode: 'numeric',
+  });
+  ageInput.oninput = () => (d.ageGroup = ageInput.value);
+  const placesRow = resultEl('div', 'result-places-row');
+  placesRow.append(overallWrap, ageWrap);
+  const pbLabel = resultEl('label', 'result-pb-check');
+  const pb = document.createElement('input');
+  pb.type = 'checkbox';
+  pb.checked = d.pb;
+  pb.onchange = () => (d.pb = pb.checked);
+  pbLabel.append(pb, ' Personal best');
+  finishedOnly.append(timeWrap, placesRow, pbLabel);
+  set.append(finishedOnly);
+
+  const noteWrap = resultEl('div', 'result-field');
+  const noteLabel = resultEl('label', 'choice-label', 'Note ');
+  noteLabel.htmlFor = 'result-note';
+  noteLabel.append(resultEl('span', 'optional', 'optional'));
+  const note = resultEl('textarea', 'result-input result-note-input');
+  note.id = 'result-note';
+  note.rows = 2;
+  note.maxLength = RESULT_NOTE_MAX;
+  note.value = d.note;
+  note.oninput = () => (d.note = note.value);
+  noteWrap.append(noteLabel, note);
+  set.append(noteWrap);
+
+  const error = resultEl('p', 'result-error', d.error);
+  error.setAttribute('role', 'alert');
+  error.classList.toggle('hidden', !d.error);
+  set.append(error);
+
+  const actions = resultEl('div', 'save-row');
+  const save = resultEl('button', 'save-button', 'Save result');
+  save.type = 'submit';
+  actions.append(save);
+  if (entry.result) {
+    const remove = resultEl('button', 'remove-commit-button', 'Remove result');
+    remove.type = 'button';
+    remove.onclick = async () => {
+      if (!requireSignIn('Sign in to remove this result')) return;
+      if (
+        !(await confirmDialog({
+          title: 'Remove result?',
+          body: `Remove ${entry.name}'s result from this race?`,
+        }))
+      )
+        return;
+      remove.disabled = true;
+      remove.textContent = 'Removing…';
+      try {
+        await removeResult(entry.id);
+        resultDraft = null;
+        await loadRaces();
+        resultFocusEntryId = entry.id;
+        showToast('Result removed.');
+      } catch (err) {
+        remove.disabled = false;
+        remove.textContent = 'Remove result';
+        showToast('Could not remove: ' + err.message, 'error');
+      }
+    };
+    actions.append(remove);
+  }
+  const cancel = resultEl('button', 'roster-edit', 'Cancel');
+  cancel.type = 'button';
+  cancel.onclick = () => {
+    resultDraft = null;
+    resultFocusEntryId = entry.id;
+    render();
+  };
+  actions.append(cancel);
+  set.append(actions);
+  form.append(set);
+
+  // Show only what the chosen status needs.
+  function sync() {
+    for (const [key, b] of statusButtons) {
+      b.classList.toggle('selected', d.status === key);
+      b.setAttribute('aria-pressed', String(d.status === key));
+    }
+    finishedOnly.classList.toggle('hidden', d.status !== 'finished');
+  }
+  sync();
+
+  const fail = (message, input) => {
+    d.error = message;
+    error.textContent = message;
+    error.classList.remove('hidden');
+    input.focus();
+  };
+  form.onsubmit = async ev => {
+    ev.preventDefault();
+    if (!requireSignIn('Sign in to save your result')) return;
+    const fields = {
+      status: d.status,
+      finish_seconds: null,
+      place_overall: null,
+      place_age_group: null,
+      is_pb: false,
+      note: d.note.trim() || null,
+    };
+    if (d.status === 'finished') {
+      const seconds = parseFinishTime(d.time);
+      if (seconds === null)
+        return fail(
+          'Enter the time as h:mm:ss, like 1:23:45. It must be under 48 hours.',
+          timeInput,
+        );
+      const overall = parsePlace(d.overall);
+      if (overall === undefined)
+        return fail('Overall place must be a whole number, 1 or more.', overallInput);
+      const age = parsePlace(d.ageGroup);
+      if (age === undefined)
+        return fail('Age-group place must be a whole number, 1 or more.', ageInput);
+      Object.assign(fields, {
+        finish_seconds: seconds,
+        place_overall: overall,
+        place_age_group: age,
+        is_pb: d.pb,
+      });
+    }
+    d.error = '';
+    error.classList.add('hidden');
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    try {
+      await saveResult(entry.id, fields);
+      resultDraft = null;
+      await loadRaces();
+      resultFocusEntryId = entry.id;
+      showToast('Result saved.');
+    } catch (err) {
+      save.disabled = false;
+      save.textContent = 'Save result';
+      d.error = err.message;
+      showToast('Could not save: ' + err.message, 'error');
+      // The toast rebuilt the form from the draft; put focus back on Save.
+      $('#raceScreenBody .result-form button[type=submit]')?.focus();
+    }
+  };
+  if (d.focus) {
+    d.focus = false;
+    setTimeout(() => (d.status === 'finished' ? timeInput : statusButtons[0][1]).focus(), 0);
+  }
+  return form;
+}
+function buildResultsRoster(host, race, eventKeys, eventGroups) {
+  if (!eventKeys.length) {
+    host.append(resultEl('p', 'helper-text', 'Nobody was on the roster for this race.'));
+    return;
+  }
+  eventKeys.forEach(key => {
+    const group = resultEl('div', 'roster-group');
+    group.append(resultEl('p', 'roster-group-label', key));
+    eventGroups[key].forEach(entry => {
+      const item = resultEl('div', 'result-entry');
+      item.dataset.entryId = entry.id;
+      const row = resultEl('div', 'roster-entry');
+      const who = resultEl('div', 'roster-who');
+      who.append(resultEl('span', 'roster-name', entry.name));
+      if (entry.result) who.append(resultSummary(entry.result));
+      row.append(who);
+      const editing = resultDraft?.entryId === entry.id;
+      if (canEditResult(entry) && !editing) {
+        const btn = resultEl(
+          'button',
+          'roster-edit result-edit',
+          entry.result ? 'Edit result' : 'Add result',
+        );
+        btn.type = 'button';
+        btn.setAttribute(
+          'aria-label',
+          `${entry.result ? 'Edit' : 'Add'} ${entry.name}'s result for this race`,
+        );
+        btn.onclick = () => {
+          if (!requireSignIn('Sign in to add a result')) return;
+          resultDraft = draftFrom(entry);
+          resultDraft.focus = true;
+          render();
+        };
+        row.append(btn);
+        if (resultFocusEntryId === entry.id) {
+          resultFocusEntryId = null;
+          setTimeout(() => btn.focus({ preventScroll: true }), 0);
+        }
+      }
+      item.append(row);
+      if (entry.result?.note) item.append(resultEl('p', 'result-note', entry.result.note));
+      if (editing) item.append(buildResultForm(entry));
+      group.append(item);
+    });
+    host.append(group);
+  });
+}
+function makeResultsDetails(race) {
+  const wrap = resultEl('div', 'details-card');
+  const section = title => {
+    wrap.append(resultEl('div', 'card-header', title));
+    const body = resultEl('div', 'card-body');
+    wrap.append(body);
+    return body;
+  };
+  const websiteUrl = race.url ? safeLinkUrl(race.url) : null;
+  if (websiteUrl) {
+    const a = resultEl('a', 'race-link', websiteUrl);
+    a.href = websiteUrl;
+    a.title = websiteUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.setAttribute('aria-label', `${race.name} website: ${websiteUrl}`);
+    section('Race website').append(a);
+  }
+  // A draft left over from another race is dropped.
+  if (resultDraft && !race.entries.some(e => e.id === resultDraft.entryId)) resultDraft = null;
+  const entries = race.entries.filter(e => e.level !== 'not');
+  const eventGroups = {};
+  entries.forEach(e => {
+    const key = e.events.length ? e.events.join(', ') : 'Event TBC';
+    (eventGroups[key] ||= []).push(e);
+  });
+  const eventKeys = Object.keys(eventGroups).sort((a, b) => a.localeCompare(b));
+  eventKeys.forEach(k => eventGroups[k].sort(resultOrder));
+  buildResultsRoster(section('Club results'), race, eventKeys, eventGroups);
+
+  // A member who raced without ever committing: add them to the roster as
+  // locked in, then open the form on their new row.
+  if (ownName() && !myEntry(race)) {
+    const body = section('Your result');
+    body.append(
+      resultEl(
+        'p',
+        'helper-text',
+        'You are not on this race’s roster. If you raced, add yourself, then record your result.',
+      ),
+    );
+    const raced = resultEl('button', 'commit-toggle-button', 'I raced this');
+    raced.type = 'button';
+    raced.onclick = async () => {
+      if (!requireSignIn('Sign in to add your result')) return;
+      raced.disabled = true;
+      raced.textContent = 'Adding…';
+      try {
+        await addEntry(race.id, ownName(), [], 'locked');
+        await loadRaces();
+        const fresh = races.find(r => r.id === race.id)?.entries.find(e => e.name === ownName());
+        if (fresh) {
+          resultDraft = draftFrom(fresh);
+          resultDraft.focus = true;
+          render();
+        }
+      } catch (err) {
+        raced.disabled = false;
+        raced.textContent = 'I raced this';
+        showToast('Could not add you: ' + err.message, 'error');
+      }
+    };
+    gateButton(raced);
+    body.append(raced);
+  }
+  return wrap;
+}
 function makeDetails(race) {
   const wrap = document.createElement('div');
   wrap.className = 'details-card';
+  // Approved members get the results view once the race has started.
+  if (isMember && resultsOpen(race)) return makeResultsDetails(race);
   if (race.balanceBolt === 'Y') {
     const embedUrl = safeLinkUrl(boltEmbedUrl(race) || '');
     const canEmbed = embedUrl !== null && isEmbeddableBoltUrl(embedUrl);

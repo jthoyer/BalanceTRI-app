@@ -129,17 +129,19 @@ window.supabase = { createClient: () => ({
   },
   from: table => {
     let writing = false;
+    window.__reads = window.__reads || [];
+    window.__reads.push(table);
     const q = {
       insert: () => { writing = true; window.__calls.push(['write', table, 'insert']); return q; },
       update: () => { writing = true; window.__calls.push(['write', table, 'update']); return q; },
       delete: () => { writing = true; window.__calls.push(['write', table, 'delete']); return q; },
-      upsert: () => { writing = true; window.__calls.push(['write', table, 'upsert']); return q; },
+      upsert: p => { writing = true; window.__calls.push(['write', table, 'upsert', p]); return q; },
       select: () => q,
       is: () => q,
       eq: () => q,
       order: () => q,
       single: () => res({ data: { display_name: window.__access?.display_name || 'Sam' }, error: null }),
-      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : { data: table === 'races' ? fx().races : [], error: null }).then(ok, bad),
+      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : { data: table === 'races' ? fx().races : table === 'results' ? fx().results || [] : [], error: null }).then(ok, bad),
     };
     return q;
   },
@@ -1497,6 +1499,262 @@ console.log('17. App feedback: the footer form (keyboard, errors, no lost text, 
       fullPage: true,
     });
     check(errors.length === 0, 'no page errors at phone width');
+    await page.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Results on past races. Approved members see "Club results" and can save a
+// result on their own row; everyone else sees the race screen as before and
+// is never sent a result.
+// ---------------------------------------------------------------------------
+{
+  console.log('\nresults on past races');
+  const PAST = {
+    id: 'rp',
+    name: 'Manly Sprint',
+    date: '2026-09-20',
+    location: 'Manly',
+    slug: 'manly-2026',
+    events: ['Sprint'],
+    event_type: 'Triathlon',
+    club_focus: true,
+    entries: [
+      { id: 'e1', name: 'Sam Lee', events: ['Sprint'], level: 'locked', created_by: 'u1' },
+      { id: 'e2', name: 'Alex Kim', events: ['Sprint'], level: 'locked', created_by: null },
+      { id: 'e3', name: 'Jo Park', events: ['Sprint'], level: 'locked', created_by: null },
+    ],
+  };
+  const RESULTS = [
+    {
+      entry_id: 'e2',
+      status: 'finished',
+      finish_seconds: 4500,
+      place_overall: 12,
+      place_age_group: 3,
+      is_pb: true,
+      note: 'Hot day, strong run',
+    },
+    {
+      entry_id: 'e3',
+      status: 'dnf',
+      finish_seconds: null,
+      place_overall: null,
+      place_age_group: null,
+      is_pb: false,
+      note: null,
+    },
+  ];
+  const pastView = JSON.stringify({
+    user: '',
+    filter: '',
+    form: {},
+    whenFilter: 'past',
+    viewFilter: 'all',
+  });
+  const openPast = async (fx, opts = {}) => {
+    const { page, errors } = await open(
+      { races: [PAST], results: RESULTS, ...fx },
+      { storage: { 'balance-race-ui': pastView }, ...opts },
+    );
+    // A signed-out visitor is greeted by the sign-in sheet; set it aside.
+    if (await page.locator('#authSheetBackdrop').isVisible()) await page.keyboard.press('Escape');
+    await page.locator('.race-summary').first().click();
+    await page.locator('#raceScreenBody .details-card').waitFor();
+    return { page, errors };
+  };
+  const reads = page => page.evaluate(() => window.__reads);
+  const approved = signedIn(accessOf('approved'));
+
+  // a. An approved member, on a laptop.
+  {
+    const { page, errors } = await openPast(approved);
+    const body = '#raceScreenBody';
+    check(
+      (await page.locator(body).textContent()).includes('Club results'),
+      'the card is headed Club results',
+    );
+    const names = await page.locator(`${body} .roster-name`).allInnerTexts();
+    check(
+      names.join(',') === 'Alex Kim,Jo Park,Sam Lee',
+      'finishers first, then DNF, then no result: ' + names.join(','),
+    );
+    const alex = await page.locator(`${body} .result-entry`).first().innerText();
+    check(
+      alex.includes('1:15:00') && alex.includes('Overall 12') && alex.includes('Age group 3'),
+      'a finished row shows time and places',
+    );
+    check(
+      alex.includes('PB') && alex.includes('Hot day, strong run'),
+      'it shows the PB chip and the note',
+    );
+    check(
+      (await page.locator(`${body} .result-entry`).nth(1).innerText()).includes('DNF'),
+      'a DNF row says DNF',
+    );
+    const buttons = await page.locator(`${body} .result-edit`).all();
+    check(buttons.length === 1, 'only one row offers a result button (not Alex or Jo)');
+    check(
+      (await buttons[0].getAttribute('aria-label')).includes('Sam Lee'),
+      "the button is on the member's own row and names them",
+    );
+    check(
+      (await page.locator('.race-meta').first().innerText()).includes('2 results'),
+      'the Past list counts the results',
+    );
+
+    // The form: a bad time is refused where it is typed, with no write.
+    await buttons[0].click();
+    await page.locator('#result-time').waitFor();
+    // The app moves focus on a timer once the form is on the page.
+    const focusedTime = await page
+      .waitForFunction(() => document.activeElement?.id === 'result-time', null, { timeout: 2000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check(focusedTime, 'focus lands on the time field');
+    await page.locator('#result-time').fill('abc');
+    await page.locator('.result-form button[type=submit]').click();
+    check(
+      (await text(page, '.result-error')).startsWith('Enter the time as h:mm:ss'),
+      'a bad time gets a plain message',
+    );
+    check((await called(page, 'write')).length === 0, 'and nothing is written');
+    check(
+      (await page.evaluate(() => document.activeElement.id)) === 'result-time',
+      'focus stays on the field to fix',
+    );
+    await page.locator('#result-time').fill('1:30:00');
+    await page.locator('#result-overall').fill('5');
+    await page.locator('.result-pb-check input').check();
+    await page.locator('#result-note').fill('Windy swim');
+    await page.locator('.result-form button[type=submit]').click();
+    await page.waitForFunction(
+      () => document.querySelector('#updateBannerText')?.textContent === 'Result saved.',
+    );
+    const writes = await called(page, 'write');
+    const upsert = writes.find(c => c[1] === 'results' && c[2] === 'upsert');
+    check(!!upsert, 'a save is an upsert on results');
+    check(
+      upsert?.[3].entry_id === 'e1' &&
+        upsert[3].status === 'finished' &&
+        upsert[3].finish_seconds === 5400 &&
+        upsert[3].place_overall === 5 &&
+        upsert[3].place_age_group === null &&
+        upsert[3].is_pb === true &&
+        upsert[3].note === 'Windy swim',
+      'with the right fields: ' + JSON.stringify(upsert?.[3]),
+    );
+    check(
+      (await page.locator('.result-form').count()) === 0,
+      'the form closes once the result is saved',
+    );
+    check(
+      (await page.evaluate(() => document.activeElement.className)).includes('result-edit'),
+      'focus returns to the row button',
+    );
+
+    // DNF: no time or places are sent.
+    await page.locator(`${body} .result-edit`).click();
+    await page.locator('.result-form').waitFor();
+    await page.getByRole('button', { name: 'DNF', exact: true }).click();
+    check(await page.locator('#result-time').isHidden(), 'DNF hides the time field');
+    await page.locator('.result-form button[type=submit]').click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector('#updateBannerText')?.textContent === 'Result saved.' &&
+        !document.querySelector('.result-form'),
+    );
+    const dnf = (await called(page, 'write')).filter(c => c[2] === 'upsert')[1]?.[3];
+    check(
+      dnf?.status === 'dnf' &&
+        dnf.finish_seconds === null &&
+        dnf.place_overall === null &&
+        dnf.is_pb === false,
+      'a DNF sends no time, places or PB: ' + JSON.stringify(dnf),
+    );
+    check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+    await page.close();
+  }
+
+  // b. A phone.
+  {
+    const { page, errors } = await openPast(approved, { width: 390 });
+    await page.locator('#raceScreenBody .result-edit').click();
+    await page.locator('.result-form').waitFor();
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    check(!over, 'no sideways scroll at 390px');
+    const tall = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '.result-form input[type=text], .result-form textarea, .result-form button, .result-edit',
+        ),
+      ]
+        .filter(el => el.offsetParent)
+        .every(el => el.getBoundingClientRect().height >= 44 - 0.5),
+    );
+    check(tall, 'every form control is at least 44px tall');
+    await page.screenshot({
+      path: `${process.env.SCREENSHOT_DIR || '/tmp'}/results-390.png`,
+      fullPage: true,
+    });
+    check(errors.length === 0, 'no page errors at phone width');
+    await page.close();
+  }
+
+  // c. A member who raced but never committed.
+  {
+    const noSam = { ...PAST, entries: PAST.entries.slice(1) };
+    const { page } = await openPast({ ...approved, races: [noSam] });
+    const raced = page.getByRole('button', { name: 'I raced this' });
+    check(await raced.isVisible(), 'a member with no entry is offered "I raced this"');
+    await raced.click();
+    await page.waitForFunction(() =>
+      window.__calls.some(c => c[0] === 'write' && c[1] === 'entries'),
+    );
+    const insert = (await called(page, 'write')).find(c => c[1] === 'entries');
+    check(insert?.[2] === 'insert', 'it adds the member to the roster first');
+    await page.close();
+  }
+
+  // d. Visitors and unapproved accounts are never sent results.
+  for (const [label, fx] of [
+    ['a signed-out visitor', { session: null, access: null }],
+    ['a member waiting for approval', signedIn(accessOf('pending'))],
+  ]) {
+    const { page, errors } = await openPast({
+      ...fx,
+      publicEntries: PAST.entries.map(e => ({
+        race_id: 'rp',
+        name: e.name.split(' ')[0],
+        events: e.events,
+        level: e.level,
+      })),
+    });
+    const bodyText = await page.locator('#raceScreenBody').textContent();
+    check(
+      bodyText.includes('Club commitments') && !bodyText.includes('Club results'),
+      `${label}: commitments, not results`,
+    );
+    check(
+      !(await reads(page)).includes('results'),
+      `${label}: the results table is never asked for`,
+    );
+    check(
+      !bodyText.includes('1:15:00') &&
+        !bodyText.includes('Hot day') &&
+        !bodyText.includes('Result'),
+      `${label}: no result text anywhere`,
+    );
+    check(
+      !(await page.locator('.race-meta').first().innerText()).includes('result'),
+      `${label}: the Past list line is unchanged`,
+    );
+    check((await page.locator('.result-edit').count()) === 0, `${label}: no result buttons`);
+    check(errors.length === 0, `${label}: no page errors`);
     await page.close();
   }
 }

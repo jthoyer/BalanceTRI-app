@@ -8,6 +8,8 @@
   --green-bg: #e8f6ee;
   --navy-bg: #eef2fb;
   --brand-blue: #00a3e0;
+  /* Brand blue for text on white: 5.4:1. --brand-blue itself is 2.9:1, fine for fills only. */
+  --brand-blue-text: #0070a8;
   --blue-tint: #eaf7fc;
 }
 * {
