@@ -397,7 +397,8 @@
   align-items: center;
   margin-bottom: 12px;
 }
-.admin-batch[hidden] {
+.admin-batch[hidden],
+.admin-batch [hidden] {
   display: none;
 }
 .admin-request .admin-choose {
@@ -406,6 +407,28 @@
   height: 22px;
   margin: 2px 0 0;
   accent-color: var(--ink);
+}
+.admin-roster-load {
+  position: relative;
+  cursor: pointer;
+}
+.admin-roster-file {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.admin-roster-load:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.admin-roster-status {
+  margin: 0;
+}
+.admin-badge.admin-roster {
+  background: #e3f4ea;
+  color: #116b43;
+  border-color: #9fd3b4;
 }
 .admin-batch-notice {
   margin-bottom: 12px;
