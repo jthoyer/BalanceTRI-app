@@ -1,8 +1,8 @@
 -- ---------------------------------------------------------------------------
 -- Privacy: visitors see first names only. Full names are for approved members.
 --
--- NOT APPLIED. Apply it only after the owner's go, then rename this file to
--- the version Supabase recorded (list_migrations), as CLAUDE.md says.
+-- Applied to the live project on 13 October 2026 and named after the version
+-- Supabase recorded.
 --
 -- Until now "Public can read entries" let anyone with the public anon key read
 -- every full name over the API, so hiding names in the page alone would have

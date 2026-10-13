@@ -1,4 +1,4 @@
--- Tests for migration 20261013020000_first_names_for_visitors.sql: visitors and
+-- Tests for migration 20261013011548_first_names_for_visitors.sql: visitors and
 -- unapproved accounts see first names only; approved members see full names.
 -- Run with supabase/tests/run.sh.
 begin;
