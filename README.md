@@ -402,3 +402,7 @@ If setting the password fails after step 3, the function undoes the reset (`admi
 **It is live** (12 October 2026): migration `20261012205858_add_admin_password_reset.sql` is applied, and `admin-reset-password` is deployed with `verify_jwt = true`. The console's **Reset password** button (B6) works for any non-admin account.
 
 **Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.
+
+## Claude Code agents and skills
+
+Claude Code agents and skills live in [agent-skills-library](https://github.com/jthoyer/agent-skills-library). This repo keeps no copies: attach that library to a Claude Code session when the work needs its agents.
