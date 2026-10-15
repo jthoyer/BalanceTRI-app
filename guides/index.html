@@ -187,6 +187,80 @@
           width: 320px;
         }
       }
+      /* Side navigation: desktop only. Below 1000px the page is a single column. */
+      .guide-nav {
+        display: none;
+      }
+      @media (min-width: 1000px) {
+        .guide-layout {
+          display: grid;
+          grid-template-columns: 230px minmax(0, 1fr);
+          gap: 48px;
+          align-items: start;
+        }
+        .guide-layout .guide {
+          margin: 0;
+          width: 100%;
+        }
+        .guide-nav {
+          display: block;
+          position: sticky;
+          top: 24px;
+          max-height: calc(100vh - 48px);
+          overflow-y: auto;
+          padding: 8px 0 24px;
+          font-size: 15px;
+        }
+        .guide-nav ul {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        .guide-nav ul ul {
+          margin: 2px 0 14px;
+        }
+        .guide-nav a {
+          display: block;
+          padding: 6px 12px;
+          border-left: 3px solid transparent;
+          border-radius: 0 8px 8px 0;
+          color: var(--muted);
+          text-decoration: none;
+          line-height: 1.35;
+        }
+        .guide-nav a.group {
+          font:
+            700 16px/1.3 Outfit,
+            sans-serif;
+          color: var(--ink);
+        }
+        .guide-nav ul ul a {
+          padding-left: 24px;
+        }
+        .guide-nav a:hover {
+          background: var(--navy-bg);
+          color: var(--ink);
+        }
+        .guide-nav a:focus-visible {
+          outline: 2px solid var(--focus);
+          outline-offset: 1px;
+        }
+        .guide-nav a[aria-current='true'] {
+          border-left-color: var(--ink);
+          background: var(--navy-bg);
+          color: var(--ink);
+          font-weight: 600;
+        }
+        html {
+          scroll-padding-top: 24px;
+          scroll-behavior: smooth;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
     </style>
   </head>
   <body>
@@ -201,602 +275,664 @@
         </div>
       </header>
 
-      <main id="main" class="guide">
-        <div class="hero guide-hero">
-          <div class="hero-copy">
-            <p class="eyebrow">HOW-TO GUIDE</p>
-            <h1>Find your race. <em>Lock it in.</em></h1>
-            <p>
-              How to join the club, share your race plans, add your results, and keep the calendar
-              up to date.
-            </p>
+      <div class="guide-layout">
+        <nav class="guide-nav" aria-label="Guide sections">
+          <ul>
+            <li>
+              <a class="group" href="#part-1-racers">Part 1: Racers</a>
+              <ul>
+                <li><a href="#open-the-calendar">1. Open the calendar</a></li>
+                <li><a href="#join-the-club">2. Join the club</a></li>
+                <li><a href="#find-a-race">3. Find a race</a></li>
+                <li><a href="#read-a-race-page">4. Read a race page</a></li>
+                <li><a href="#make-your-commitment">5. Make your commitment</a></li>
+                <li><a href="#add-your-result">6. Add your result</a></li>
+                <li><a href="#balance-bolt-races">7. Balance Bolt races</a></li>
+                <li><a href="#if-something-goes-wrong">If something goes wrong</a></li>
+              </ul>
+            </li>
+            <li>
+              <a class="group" href="#part-2-running-the-calendar">Part 2: Running the calendar</a>
+              <ul>
+                <li><a href="#add-a-race">Add a race</a></li>
+                <li><a href="#edit-or-remove-a-race">Edit or remove a race</a></li>
+                <li><a href="#what-the-club-admin-does">What the club admin does</a></li>
+                <li><a href="#send-feedback">Send feedback</a></li>
+                <li><a href="#quick-checklist">Quick checklist</a></li>
+              </ul>
+            </li>
+          </ul>
+        </nav>
+
+        <main id="main" class="guide">
+          <div class="hero guide-hero">
+            <div class="hero-copy">
+              <p class="eyebrow">HOW-TO GUIDE</p>
+              <h1>Find your race. <em>Lock it in.</em></h1>
+              <p>
+                How to join the club, share your race plans, add your results, and keep the calendar
+                up to date.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <p>
-          The Balance Tri Club race calendar shows what the crew is racing. You say which races you
-          are in. Everyone sees who will be on the start line. After the race, you add your time.
-        </p>
-        <p>This guide has two parts:</p>
-        <ul>
-          <li>
-            <strong><a href="#part-1-racers">Part 1: Racers</a></strong> is for every club member.
-          </li>
-          <li>
-            <strong><a href="#part-2-running-the-calendar">Part 2: Running the calendar</a></strong>
-            is for anyone who adds races, and for the club admin.
-          </li>
-        </ul>
-
-        <div class="board-wrap" role="region" aria-label="Pages" tabindex="0">
-          <table class="board">
-            <thead>
-              <tr>
-                <th>Page</th>
-                <th>Address</th>
-                <th>Who uses it</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Race calendar</td>
-                <td><code>https://jthoyer.github.io/BalanceTRI-app/</code></td>
-                <td>Everyone. You can look without an account.</td>
-              </tr>
-              <tr>
-                <td>Race page</td>
-                <td>
-                  <code>https://jthoyer.github.io/BalanceTRI-app/race/</code> plus the race name
-                </td>
-                <td>Anyone with the link. Every race has its own address.</td>
-              </tr>
-              <tr>
-                <td>Balance Bolt sign-up</td>
-                <td><code>https://jthoyer.github.io/BalanceBolt/</code></td>
-                <td>
-                  Racers in a Balance Bolt race. It has
-                  <a href="https://jthoyer.github.io/BalanceBolt/guide.html">its own guide</a>.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p>The screenshots use made-up names and a practice race.</p>
-
-        <h2 id="part-1-racers">Part 1: Racers</h2>
-        <p>
-          You need about a minute. A club admin approves new accounts, so join a few days before you
-          need to add anything.
-        </p>
-
-        <h3 id="open-the-calendar">1. Open the calendar</h3>
-        <p>
-          Open the calendar address on your phone or laptop. A welcome screen offers three buttons:
-          <strong>Sign In</strong>, <strong>Join</strong> and <strong>View Calendar</strong>.
-        </p>
-        <blockquote>
           <p>
-            <strong>Just looking?</strong> Tap View Calendar. You can browse every race and see who
-            is racing. You do not need an account for that.
+            The Balance Tri Club race calendar shows what the crew is racing. You say which races
+            you are in. Everyone sees who will be on the start line. After the race, you add your
+            time.
           </p>
-        </blockquote>
-        <figure>
-          <img
-            src="assets/guide/gate.png"
-            alt="The welcome screen with Sign In, Join and View Calendar buttons"
-            width="640"
-            height="647"
-            loading="lazy"
-          />
-          <figcaption>The welcome screen</figcaption>
-        </figure>
-        <p>
-          Tick <em>Don't ask me to sign in again for 10 days</em> if you do not want the prompt
-          every visit.
-        </p>
+          <p>This guide has two parts:</p>
+          <ul>
+            <li>
+              <strong><a href="#part-1-racers">Part 1: Racers</a></strong> is for every club member.
+            </li>
+            <li>
+              <strong
+                ><a href="#part-2-running-the-calendar">Part 2: Running the calendar</a></strong
+              >
+              is for anyone who adds races, and for the club admin.
+            </li>
+          </ul>
 
-        <h3 id="join-the-club">2. Join the club</h3>
-        <p>
-          You need an account to share your plans. Tap <strong>Join</strong> and fill in the form.
-        </p>
-        <ul>
-          <li><strong>Email.</strong> Use the one you check.</li>
-          <li>
-            <strong>Password.</strong> Use 12 to 72 characters. Any characters work. A few random
-            words make a good password. The app turns down very common ones.
-          </li>
-          <li><strong>Confirm password.</strong> Type it again.</li>
-          <li>
-            <strong>Display name.</strong> This is how you appear on race rosters. Use 2 to 40
-            characters: letters, spaces, apostrophes, hyphens and full stops. Share a first name
-            with someone? Add a surname or initial.
-          </li>
-          <li>
-            <strong>Note.</strong> Optional. Say how you know the club. Your squad, your JustGo
-            number or who invited you all help.
-          </li>
-        </ul>
-        <figure>
-          <img
-            src="assets/guide/join.png"
-            alt="The Join the club form"
-            width="640"
-            height="1226"
-            loading="lazy"
-          />
-          <figcaption>The Join form</figcaption>
-        </figure>
-        <p>
-          Tap <strong>Join</strong>. The club admin then approves your account. This usually takes a
-          day or two. The app sends no email, so check back and sign in. You can look at races while
-          you wait.
-        </p>
-        <p>
-          Already have an account? Tap <strong>Sign in</strong> and enter your email and password.
-        </p>
-        <blockquote>
+          <div class="board-wrap" role="region" aria-label="Pages" tabindex="0">
+            <table class="board">
+              <thead>
+                <tr>
+                  <th>Page</th>
+                  <th>Address</th>
+                  <th>Who uses it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Race calendar</td>
+                  <td><code>https://jthoyer.github.io/BalanceTRI-app/</code></td>
+                  <td>Everyone. You can look without an account.</td>
+                </tr>
+                <tr>
+                  <td>Race page</td>
+                  <td>
+                    <code>https://jthoyer.github.io/BalanceTRI-app/race/</code> plus the race name
+                  </td>
+                  <td>Anyone with the link. Every race has its own address.</td>
+                </tr>
+                <tr>
+                  <td>Balance Bolt sign-up</td>
+                  <td><code>https://jthoyer.github.io/BalanceBolt/</code></td>
+                  <td>
+                    Racers in a Balance Bolt race. It has
+                    <a href="https://jthoyer.github.io/BalanceBolt/guide.html">its own guide</a>.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>The screenshots use made-up names and a practice race.</p>
+
+          <h2 id="part-1-racers">Part 1: Racers</h2>
           <p>
-            <strong>Forgot your password?</strong> Ask the club admin to reset it. Email
-            <a href="mailto:mail@balancetriclub.com">mail@balancetriclub.com</a>. A temporary
-            password runs out. If yours has, ask for a new one.
+            You need about a minute. A club admin approves new accounts, so join a few days before
+            you need to add anything.
           </p>
-        </blockquote>
 
-        <h3 id="find-a-race">3. Find a race</h3>
-        <p>
-          The top of the calendar shows the next club race and a countdown. Tap
-          <strong>Open race</strong> to go straight to it.
-        </p>
-        <figure>
-          <img
-            src="assets/guide/calendar.png"
-            alt="The calendar home with the next club race, the Club races and View all toggle, and filters"
-            width="640"
-            height="1546"
-            loading="lazy"
-          />
-          <figcaption>The top of the calendar</figcaption>
-        </figure>
-        <p>Narrow the list with these controls:</p>
-        <ul>
-          <li>
-            <strong>Club races or View all.</strong> Club races shows the races the club is backing.
-            View all shows every race on the calendar.
-          </li>
-          <li>
-            <strong>Filter by event type.</strong> Pick Balance Bolt, Bike, Multi-sport, Run, Swim
-            or Triathlon.
-          </li>
-          <li>
-            <strong>Upcoming or Past.</strong> Past races stay on the calendar after their date.
-          </li>
-          <li>
-            <strong>Filter by athlete.</strong> Type a name to see the races that person is in.
-          </li>
-        </ul>
-        <p>
-          Each race row shows the date, the name, a badge for the type and a gold
-          <strong>Club focus</strong> badge. It also shows a count such as
-          <em>3 locked in of 5</em>. That means five people have made a commitment, and three of
-          them are locked in. Past races show how many raced and how many results are in.
-        </p>
-        <figure>
-          <img
-            src="assets/guide/race-list.png"
-            alt="A list of upcoming races, each with date, type badge and locked-in count"
-            width="640"
-            height="1546"
-            loading="lazy"
-          />
-          <figcaption>The race list, grouped by month</figcaption>
-        </figure>
-        <p>
-          Nothing showing? The page tells you which filters are on. Clear the name search, choose
-          <strong>All types</strong>, or tap <strong>View all</strong>.
-        </p>
-
-        <h3 id="read-a-race-page">4. Read a race page</h3>
-        <p>
-          Tap any race to open it. You see the date, the race name and a link to the race website,
-          if someone added one. Below that, <strong>Club commitments</strong> lists everyone who has
-          made a plan. Names sit in groups by event or distance.
-        </p>
-        <figure>
-          <img
-            src="assets/guide/roster.png"
-            alt="A race page with the club roster grouped by distance, showing Locked in and Considering tags"
-            width="640"
-            height="802"
-            loading="lazy"
-          />
-          <figcaption>A race page and its roster</figcaption>
-        </figure>
-        <p>Each name has a tag that says how sure that person is.</p>
-        <div class="board-wrap" role="region" aria-label="Commitment levels" tabindex="0">
-          <table class="board">
-            <thead>
-              <tr>
-                <th>Tag</th>
-                <th>What it means</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Considering</td>
-                <td>They are thinking about it.</td>
-              </tr>
-              <tr>
-                <td>Planning</td>
-                <td>They are working towards it.</td>
-              </tr>
-              <tr>
-                <td>Locked in</td>
-                <td>They are racing.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Want to share a race? Copy the address from your browser. It opens that race for anyone
-          you send it to.
-        </p>
-
-        <h3 id="make-your-commitment">5. Make your commitment</h3>
-        <p>Sign in first. Then open the race and tap <strong>Add your commitment</strong>.</p>
-        <ol>
-          <li>
-            <strong>Your name.</strong> This shows your display name. You cannot change it here. Ask
-            the club admin if it needs fixing.
-          </li>
-          <li><strong>Commitment level.</strong> Pick Considering, Planning or Locked in.</li>
-          <li>
-            <strong>Participation type.</strong> Pick every option that applies. The choices come
-            from the race's events and distances. <em>Team</em> and
-            <em>TO (Technical official)</em> are always there. Tap <em>Other</em> to type your own
-            event or distance.
-          </li>
-          <li>Tap <strong>Save commitment</strong>.</li>
-        </ol>
-        <figure>
-          <img
-            src="assets/guide/commitment.png"
-            alt="The commitment form with level and participation type choices"
-            width="640"
-            height="847"
-            loading="lazy"
-          />
-          <figcaption>The commitment form</figcaption>
-        </figure>
-        <p>Your name shows up on the roster straight away.</p>
-        <h4>Change or remove your commitment</h4>
-        <p>
-          Tap <strong>Edit</strong> on your own row. Change your level or events, then tap
-          <strong>Save commitment</strong>. To leave a race, tap
-          <strong>Remove commitment</strong> and confirm.
-        </p>
-        <p>
-          Set your level to <strong>Locked in</strong> once you are racing. The result reminder in
-          the next step looks for it.
-        </p>
-
-        <h3 id="add-your-result">6. Add your result</h3>
-        <p>
-          Results open on race day, by Sydney time. Once they open, an approved member sees
-          <strong>Club results</strong> where <strong>Club commitments</strong> used to be.
-        </p>
-        <p>
-          For 14 days after a race, a reminder card appears at the top of the calendar if you were
-          locked in and have no result yet.
-        </p>
-        <figure>
-          <img
-            src="assets/guide/result-reminder.png"
-            alt="A reminder card asking how a race went, with Add my time, I didn't start and Later buttons"
-            width="640"
-            height="296"
-            loading="lazy"
-          />
-          <figcaption>The result reminder</figcaption>
-        </figure>
-        <ul>
-          <li><strong>Add my time.</strong> Opens the result form.</li>
-          <li>
-            <strong>I didn't start.</strong> Saves a DNS for that race. You can change it later from
-            the race page.
-          </li>
-          <li><strong>Later.</strong> Hides the card on this device only.</li>
-        </ul>
-        <p>You can also add a result from the race page. Fill in the form:</p>
-        <ol>
-          <li><strong>How did it go?</strong> Pick Finished, DNF or DNS.</li>
-          <li>
-            <strong>Finish time.</strong> Type hours, minutes and seconds, like
-            <code>1:23:45</code>. Under an hour, type <code>45:30</code>.
-          </li>
-          <li>
-            <strong>Overall place</strong> and <strong>Age-group place.</strong> Add them if you
-            know them.
-          </li>
-          <li><strong>Personal best.</strong> Tick the box if you set one.</li>
-          <li><strong>Note.</strong> Optional. You get 280 characters.</li>
-          <li>Tap <strong>Save result</strong>.</li>
-        </ol>
-        <div class="board-wrap" role="region" aria-label="Result statuses" tabindex="0">
-          <table class="board">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Use it when</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Finished</td>
-                <td>You crossed the line. Add your time.</td>
-              </tr>
-              <tr>
-                <td>DNF</td>
-                <td>You started but did not finish.</td>
-              </tr>
-              <tr>
-                <td>DNS</td>
-                <td>You did not start.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Later, use <strong>Edit result</strong> to fix a mistake or
-          <strong>Remove result</strong> to take it back.
-        </p>
-        <p>
-          The results list puts the fastest finishers first. DNFs come next, then DNSs, then members
-          with no result yet. Places and personal bests show beside each name. Only you or a club
-          admin can save or remove your result.
-        </p>
-
-        <h3 id="balance-bolt-races">7. Balance Bolt races</h3>
-        <p>
-          Balance Bolt is the club's prediction race. Its sign-up and results live on their own
-          site, so this calendar does not take results for it.
-        </p>
-        <p>
-          Open a Balance Bolt race on the calendar. The <strong>Race details</strong> section shows
-          the Bolt sign-up. Read the
-          <a href="https://jthoyer.github.io/BalanceBolt/guide.html">Balance Bolt guide</a> for the
-          full steps.
-        </p>
-
-        <h3 id="if-something-goes-wrong">If something goes wrong</h3>
-        <p>The app tells you what to fix. These are the messages you may see.</p>
-        <div class="board-wrap" role="region" aria-label="Messages" tabindex="0">
-          <table class="board">
-            <thead>
-              <tr>
-                <th>You see</th>
-                <th>What it means</th>
-                <th>What to do</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>"That email and password don't match. Check them and try again."</td>
-                <td>One of them is wrong.</td>
-                <td>Check your typing. Still stuck? Ask the club admin for a reset.</td>
-              </tr>
-              <tr>
-                <td>"Too many tries just now. Wait a few minutes, then try again."</td>
-                <td>The app paused sign-in.</td>
-                <td>Wait a few minutes.</td>
-              </tr>
-              <tr>
-                <td>"That password is too common. Try a few random words instead."</td>
-                <td>Many people use that password.</td>
-                <td>Pick a few random words.</td>
-              </tr>
-              <tr>
-                <td>"Your name needs to be 2 to 40 characters."</td>
-                <td>Your display name is too short or too long.</td>
-                <td>Change it to fit.</td>
-              </tr>
-              <tr>
-                <td>"Use letters, spaces, apostrophes, hyphens and full stops in your name."</td>
-                <td>Your display name has a character the app does not allow.</td>
-                <td>Remove numbers and symbols.</td>
-              </tr>
-              <tr>
-                <td>
-                  "You're signed in, but you can't add or edit races yet. Ask to join, and the club
-                  admin will approve you."
-                </td>
-                <td>Your account is waiting for approval.</td>
-                <td>Wait a day or two. Check back.</td>
-              </tr>
-              <tr>
-                <td>"Your account wasn't approved." or "Your access has been removed."</td>
-                <td>The club admin has closed the account.</td>
-                <td>Contact the club admin.</td>
-              </tr>
-              <tr>
-                <td>
-                  "[Your name] is already on this race. If that's you, use their 'Edit' link on the
-                  roster instead of adding a new entry."
-                </td>
-                <td>That name has a commitment already.</td>
-                <td>
-                  Tap Edit on your row. Share a first name? Ask the admin to change your display
-                  name.
-                </td>
-              </tr>
-              <tr>
-                <td>"That result is not valid. Check the time and the places."</td>
-                <td>The app could not read the time or a place.</td>
-                <td>Type the time like <code>1:23:45</code>. Check your places too.</td>
-              </tr>
-              <tr>
-                <td>
-                  "Only the member on this entry, or a club admin, can save a result here. Results
-                  open on race day."
-                </td>
-                <td>The race has not happened yet, or the entry is not yours.</td>
-                <td>Wait for race day, or ask the club admin.</td>
-              </tr>
-              <tr>
-                <td>"That race link no longer works — showing the race list instead."</td>
-                <td>Someone removed the race, or the link is wrong.</td>
-                <td>Find the race in the list.</td>
-              </tr>
-              <tr>
-                <td>"The calendar could not load. Check your connection and try refreshing."</td>
-                <td>The app could not reach its data.</td>
-                <td>Check your signal. Tap Refresh.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h2 id="part-2-running-the-calendar">Part 2: Running the calendar</h2>
-        <p>Any approved member can add and edit races. The club admin looks after accounts.</p>
-
-        <h3 id="add-a-race">Add a race</h3>
-        <p>Tap <strong>Add a race</strong> at the top right. Sign in if the app asks.</p>
-        <figure>
-          <img
-            src="assets/guide/add-race.png"
-            alt="The Add to the calendar form"
-            width="640"
-            height="1257"
-            loading="lazy"
-          />
-          <figcaption>The Add a race form</figcaption>
-        </figure>
-        <div class="board-wrap" role="region" aria-label="Race form fields" tabindex="0">
-          <table class="board">
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>What to put in it</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Event type</td>
-                <td>
-                  Optional. Pick Balance Bolt, Bike, Multi-sport, Run, Swim or Triathlon. The race
-                  filter uses this.
-                </td>
-              </tr>
-              <tr>
-                <td>Race name</td>
-                <td>The name racers will look for, such as <em>Melbourne Marathon</em>.</td>
-              </tr>
-              <tr>
-                <td>Date</td>
-                <td>The race day.</td>
-              </tr>
-              <tr>
-                <td>Race website</td>
-                <td>
-                  Optional. A link such as <code>ironman.com/melbourne</code>. It shows on the race
-                  page.
-                </td>
-              </tr>
-              <tr>
-                <td>Events or distances</td>
-                <td>
-                  Optional. Separate them with commas, like <em>70.3, Olympic, Sprint</em>. These
-                  become the choices racers pick from.
-                </td>
-              </tr>
-              <tr>
-                <td>Club focus race</td>
-                <td>
-                  Tick it if the club is backing this race. It gets a gold badge and shows under
-                  <em>Club races</em>.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p>Tap <strong>Create race</strong>. The race lands in its month on the calendar.</p>
-        <blockquote>
+          <h3 id="open-the-calendar">1. Open the calendar</h3>
           <p>
-            <strong>Adding a Balance Bolt race?</strong> Put the race number in the name, such as
-            <code>BALANCE BOLT #3</code>. Keep it as the only number in the name. The calendar uses
-            that number to open the right Bolt sign-up.
+            Open the calendar address on your phone or laptop. A welcome screen offers three
+            buttons:
+            <strong>Sign In</strong>, <strong>Join</strong> and <strong>View Calendar</strong>.
           </p>
-        </blockquote>
+          <blockquote>
+            <p>
+              <strong>Just looking?</strong> Tap View Calendar. You can browse every race and see
+              who is racing. You do not need an account for that.
+            </p>
+          </blockquote>
+          <figure>
+            <img
+              src="assets/guide/gate.png"
+              alt="The welcome screen with Sign In, Join and View Calendar buttons"
+              width="640"
+              height="647"
+              loading="lazy"
+            />
+            <figcaption>The welcome screen</figcaption>
+          </figure>
+          <p>
+            Tick <em>Don't ask me to sign in again for 10 days</em> if you do not want the prompt
+            every visit.
+          </p>
 
-        <h3 id="edit-or-remove-a-race">Edit or remove a race</h3>
-        <ol>
-          <li>Open the race.</li>
-          <li>Tap <strong>Edit race</strong>.</li>
-          <li>Change what you need, then tap <strong>Save changes</strong>.</li>
-        </ol>
-        <p>
-          The same screen has <strong>Remove race</strong>. The app asks you to confirm. Check
-          first. People may have made commitments to that race.
-        </p>
+          <h3 id="join-the-club">2. Join the club</h3>
+          <p>
+            You need an account to share your plans. Tap <strong>Join</strong> and fill in the form.
+          </p>
+          <ul>
+            <li><strong>Email.</strong> Use the one you check.</li>
+            <li>
+              <strong>Password.</strong> Use 12 to 72 characters. Any characters work. A few random
+              words make a good password. The app turns down very common ones.
+            </li>
+            <li><strong>Confirm password.</strong> Type it again.</li>
+            <li>
+              <strong>Display name.</strong> This is how you appear on race rosters. Use 2 to 40
+              characters: letters, spaces, apostrophes, hyphens and full stops. Share a first name
+              with someone? Add a surname or initial.
+            </li>
+            <li>
+              <strong>Note.</strong> Optional. Say how you know the club. Your squad, your JustGo
+              number or who invited you all help.
+            </li>
+          </ul>
+          <figure>
+            <img
+              src="assets/guide/join.png"
+              alt="The Join the club form"
+              width="640"
+              height="1226"
+              loading="lazy"
+            />
+            <figcaption>The Join form</figcaption>
+          </figure>
+          <p>
+            Tap <strong>Join</strong>. The club admin then approves your account. This usually takes
+            a day or two. The app sends no email, so check back and sign in. You can look at races
+            while you wait.
+          </p>
+          <p>
+            Already have an account? Tap <strong>Sign in</strong> and enter your email and password.
+          </p>
+          <blockquote>
+            <p>
+              <strong>Forgot your password?</strong> Ask the club admin to reset it. Email
+              <a href="mailto:mail@balancetriclub.com">mail@balancetriclub.com</a>. A temporary
+              password runs out. If yours has, ask for a new one.
+            </p>
+          </blockquote>
 
-        <h3 id="what-the-club-admin-does">What the club admin does</h3>
-        <ul>
-          <li>Approves new accounts. Most take a day or two.</li>
-          <li>Resets passwords when members ask.</li>
-          <li>Changes a member's display name when it needs fixing.</li>
-          <li>Saves or corrects a result for another member.</li>
-        </ul>
+          <h3 id="find-a-race">3. Find a race</h3>
+          <p>
+            The top of the calendar shows the next club race and a countdown. Tap
+            <strong>Open race</strong> to go straight to it.
+          </p>
+          <figure>
+            <img
+              src="assets/guide/calendar.png"
+              alt="The calendar home with the next club race, the Club races and View all toggle, and filters"
+              width="640"
+              height="1546"
+              loading="lazy"
+            />
+            <figcaption>The top of the calendar</figcaption>
+          </figure>
+          <p>Narrow the list with these controls:</p>
+          <ul>
+            <li>
+              <strong>Club races or View all.</strong> Club races shows the races the club is
+              backing. View all shows every race on the calendar.
+            </li>
+            <li>
+              <strong>Filter by event type.</strong> Pick Balance Bolt, Bike, Multi-sport, Run, Swim
+              or Triathlon.
+            </li>
+            <li>
+              <strong>Upcoming or Past.</strong> Past races stay on the calendar after their date.
+            </li>
+            <li>
+              <strong>Filter by athlete.</strong> Type a name to see the races that person is in.
+            </li>
+          </ul>
+          <p>
+            Each race row shows the date, the name, a badge for the type and a gold
+            <strong>Club focus</strong> badge. It also shows a count such as
+            <em>3 locked in of 5</em>. That means five people have made a commitment, and three of
+            them are locked in. Past races show how many raced and how many results are in.
+          </p>
+          <figure>
+            <img
+              src="assets/guide/race-list.png"
+              alt="A list of upcoming races, each with date, type badge and locked-in count"
+              width="640"
+              height="1546"
+              loading="lazy"
+            />
+            <figcaption>The race list, grouped by month</figcaption>
+          </figure>
+          <p>
+            Nothing showing? The page tells you which filters are on. Clear the name search, choose
+            <strong>All types</strong>, or tap <strong>View all</strong>.
+          </p>
 
-        <h3 id="send-feedback">Send feedback</h3>
-        <p>
-          Spot a bug or have an idea? Tap <strong>Send feedback</strong> at the bottom of the
-          calendar. Write up to 2,000 characters. Add a name or email only if you want a reply.
-          Every message gets read.
-        </p>
+          <h3 id="read-a-race-page">4. Read a race page</h3>
+          <p>
+            Tap any race to open it. You see the date, the race name and a link to the race website,
+            if someone added one. Below that, <strong>Club commitments</strong> lists everyone who
+            has made a plan. Names sit in groups by event or distance.
+          </p>
+          <figure>
+            <img
+              src="assets/guide/roster.png"
+              alt="A race page with the club roster grouped by distance, showing Locked in and Considering tags"
+              width="640"
+              height="802"
+              loading="lazy"
+            />
+            <figcaption>A race page and its roster</figcaption>
+          </figure>
+          <p>Each name has a tag that says how sure that person is.</p>
+          <div class="board-wrap" role="region" aria-label="Commitment levels" tabindex="0">
+            <table class="board">
+              <thead>
+                <tr>
+                  <th>Tag</th>
+                  <th>What it means</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Considering</td>
+                  <td>They are thinking about it.</td>
+                </tr>
+                <tr>
+                  <td>Planning</td>
+                  <td>They are working towards it.</td>
+                </tr>
+                <tr>
+                  <td>Locked in</td>
+                  <td>They are racing.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Want to share a race? Copy the address from your browser. It opens that race for anyone
+            you send it to.
+          </p>
 
-        <h3 id="quick-checklist">Quick checklist</h3>
-        <p><strong>For racers</strong></p>
-        <ul>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Account approved, and you can sign in.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Display name tells teammates who you are.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>A commitment saved for each race, at the right level.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Level set to <em>Locked in</em> once you are racing.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Result added within 14 days of the race.</span>
-          </li>
-        </ul>
-        <p><strong>For anyone adding a race</strong></p>
-        <ul>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span><span>Name and date are right.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Distances added, so racers can pick them.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Club focus ticked if the club is going.</span>
-          </li>
-          <li class="check">
-            <span class="box" aria-hidden="true"></span
-            ><span>Balance Bolt race number in the name, if it is a Bolt race.</span>
-          </li>
-        </ul>
-      </main>
+          <h3 id="make-your-commitment">5. Make your commitment</h3>
+          <p>Sign in first. Then open the race and tap <strong>Add your commitment</strong>.</p>
+          <ol>
+            <li>
+              <strong>Your name.</strong> This shows your display name. You cannot change it here.
+              Ask the club admin if it needs fixing.
+            </li>
+            <li><strong>Commitment level.</strong> Pick Considering, Planning or Locked in.</li>
+            <li>
+              <strong>Participation type.</strong> Pick every option that applies. The choices come
+              from the race's events and distances. <em>Team</em> and
+              <em>TO (Technical official)</em> are always there. Tap <em>Other</em> to type your own
+              event or distance.
+            </li>
+            <li>Tap <strong>Save commitment</strong>.</li>
+          </ol>
+          <figure>
+            <img
+              src="assets/guide/commitment.png"
+              alt="The commitment form with level and participation type choices"
+              width="640"
+              height="847"
+              loading="lazy"
+            />
+            <figcaption>The commitment form</figcaption>
+          </figure>
+          <p>Your name shows up on the roster straight away.</p>
+          <h4>Change or remove your commitment</h4>
+          <p>
+            Tap <strong>Edit</strong> on your own row. Change your level or events, then tap
+            <strong>Save commitment</strong>. To leave a race, tap
+            <strong>Remove commitment</strong> and confirm.
+          </p>
+          <p>
+            Set your level to <strong>Locked in</strong> once you are racing. The result reminder in
+            the next step looks for it.
+          </p>
+
+          <h3 id="add-your-result">6. Add your result</h3>
+          <p>
+            Results open on race day, by Sydney time. Once they open, an approved member sees
+            <strong>Club results</strong> where <strong>Club commitments</strong> used to be.
+          </p>
+          <p>
+            For 14 days after a race, a reminder card appears at the top of the calendar if you were
+            locked in and have no result yet.
+          </p>
+          <figure>
+            <img
+              src="assets/guide/result-reminder.png"
+              alt="A reminder card asking how a race went, with Add my time, I didn't start and Later buttons"
+              width="640"
+              height="296"
+              loading="lazy"
+            />
+            <figcaption>The result reminder</figcaption>
+          </figure>
+          <ul>
+            <li><strong>Add my time.</strong> Opens the result form.</li>
+            <li>
+              <strong>I didn't start.</strong> Saves a DNS for that race. You can change it later
+              from the race page.
+            </li>
+            <li><strong>Later.</strong> Hides the card on this device only.</li>
+          </ul>
+          <p>You can also add a result from the race page. Fill in the form:</p>
+          <ol>
+            <li><strong>How did it go?</strong> Pick Finished, DNF or DNS.</li>
+            <li>
+              <strong>Finish time.</strong> Type hours, minutes and seconds, like
+              <code>1:23:45</code>. Under an hour, type <code>45:30</code>.
+            </li>
+            <li>
+              <strong>Overall place</strong> and <strong>Age-group place.</strong> Add them if you
+              know them.
+            </li>
+            <li><strong>Personal best.</strong> Tick the box if you set one.</li>
+            <li><strong>Note.</strong> Optional. You get 280 characters.</li>
+            <li>Tap <strong>Save result</strong>.</li>
+          </ol>
+          <div class="board-wrap" role="region" aria-label="Result statuses" tabindex="0">
+            <table class="board">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Use it when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Finished</td>
+                  <td>You crossed the line. Add your time.</td>
+                </tr>
+                <tr>
+                  <td>DNF</td>
+                  <td>You started but did not finish.</td>
+                </tr>
+                <tr>
+                  <td>DNS</td>
+                  <td>You did not start.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Later, use <strong>Edit result</strong> to fix a mistake or
+            <strong>Remove result</strong> to take it back.
+          </p>
+          <p>
+            The results list puts the fastest finishers first. DNFs come next, then DNSs, then
+            members with no result yet. Places and personal bests show beside each name. Only you or
+            a club admin can save or remove your result.
+          </p>
+
+          <h3 id="balance-bolt-races">7. Balance Bolt races</h3>
+          <p>
+            Balance Bolt is the club's prediction race. Its sign-up and results live on their own
+            site, so this calendar does not take results for it.
+          </p>
+          <p>
+            Open a Balance Bolt race on the calendar. The <strong>Race details</strong> section
+            shows the Bolt sign-up. Read the
+            <a href="https://jthoyer.github.io/BalanceBolt/guide.html">Balance Bolt guide</a> for
+            the full steps.
+          </p>
+
+          <h3 id="if-something-goes-wrong">If something goes wrong</h3>
+          <p>The app tells you what to fix. These are the messages you may see.</p>
+          <div class="board-wrap" role="region" aria-label="Messages" tabindex="0">
+            <table class="board">
+              <thead>
+                <tr>
+                  <th>You see</th>
+                  <th>What it means</th>
+                  <th>What to do</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>"That email and password don't match. Check them and try again."</td>
+                  <td>One of them is wrong.</td>
+                  <td>Check your typing. Still stuck? Ask the club admin for a reset.</td>
+                </tr>
+                <tr>
+                  <td>"Too many tries just now. Wait a few minutes, then try again."</td>
+                  <td>The app paused sign-in.</td>
+                  <td>Wait a few minutes.</td>
+                </tr>
+                <tr>
+                  <td>"That password is too common. Try a few random words instead."</td>
+                  <td>Many people use that password.</td>
+                  <td>Pick a few random words.</td>
+                </tr>
+                <tr>
+                  <td>"Your name needs to be 2 to 40 characters."</td>
+                  <td>Your display name is too short or too long.</td>
+                  <td>Change it to fit.</td>
+                </tr>
+                <tr>
+                  <td>"Use letters, spaces, apostrophes, hyphens and full stops in your name."</td>
+                  <td>Your display name has a character the app does not allow.</td>
+                  <td>Remove numbers and symbols.</td>
+                </tr>
+                <tr>
+                  <td>
+                    "You're signed in, but you can't add or edit races yet. Ask to join, and the
+                    club admin will approve you."
+                  </td>
+                  <td>Your account is waiting for approval.</td>
+                  <td>Wait a day or two. Check back.</td>
+                </tr>
+                <tr>
+                  <td>"Your account wasn't approved." or "Your access has been removed."</td>
+                  <td>The club admin has closed the account.</td>
+                  <td>Contact the club admin.</td>
+                </tr>
+                <tr>
+                  <td>
+                    "[Your name] is already on this race. If that's you, use their 'Edit' link on
+                    the roster instead of adding a new entry."
+                  </td>
+                  <td>That name has a commitment already.</td>
+                  <td>
+                    Tap Edit on your row. Share a first name? Ask the admin to change your display
+                    name.
+                  </td>
+                </tr>
+                <tr>
+                  <td>"That result is not valid. Check the time and the places."</td>
+                  <td>The app could not read the time or a place.</td>
+                  <td>Type the time like <code>1:23:45</code>. Check your places too.</td>
+                </tr>
+                <tr>
+                  <td>
+                    "Only the member on this entry, or a club admin, can save a result here. Results
+                    open on race day."
+                  </td>
+                  <td>The race has not happened yet, or the entry is not yours.</td>
+                  <td>Wait for race day, or ask the club admin.</td>
+                </tr>
+                <tr>
+                  <td>"That race link no longer works — showing the race list instead."</td>
+                  <td>Someone removed the race, or the link is wrong.</td>
+                  <td>Find the race in the list.</td>
+                </tr>
+                <tr>
+                  <td>"The calendar could not load. Check your connection and try refreshing."</td>
+                  <td>The app could not reach its data.</td>
+                  <td>Check your signal. Tap Refresh.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="part-2-running-the-calendar">Part 2: Running the calendar</h2>
+          <p>Any approved member can add and edit races. The club admin looks after accounts.</p>
+
+          <h3 id="add-a-race">Add a race</h3>
+          <p>Tap <strong>Add a race</strong> at the top right. Sign in if the app asks.</p>
+          <figure>
+            <img
+              src="assets/guide/add-race.png"
+              alt="The Add to the calendar form"
+              width="640"
+              height="1257"
+              loading="lazy"
+            />
+            <figcaption>The Add a race form</figcaption>
+          </figure>
+          <div class="board-wrap" role="region" aria-label="Race form fields" tabindex="0">
+            <table class="board">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>What to put in it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Event type</td>
+                  <td>
+                    Optional. Pick Balance Bolt, Bike, Multi-sport, Run, Swim or Triathlon. The race
+                    filter uses this.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Race name</td>
+                  <td>The name racers will look for, such as <em>Melbourne Marathon</em>.</td>
+                </tr>
+                <tr>
+                  <td>Date</td>
+                  <td>The race day.</td>
+                </tr>
+                <tr>
+                  <td>Race website</td>
+                  <td>
+                    Optional. A link such as <code>ironman.com/melbourne</code>. It shows on the
+                    race page.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Events or distances</td>
+                  <td>
+                    Optional. Separate them with commas, like <em>70.3, Olympic, Sprint</em>. These
+                    become the choices racers pick from.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Club focus race</td>
+                  <td>
+                    Tick it if the club is backing this race. It gets a gold badge and shows under
+                    <em>Club races</em>.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Tap <strong>Create race</strong>. The race lands in its month on the calendar.</p>
+          <blockquote>
+            <p>
+              <strong>Adding a Balance Bolt race?</strong> Put the race number in the name, such as
+              <code>BALANCE BOLT #3</code>. Keep it as the only number in the name. The calendar
+              uses that number to open the right Bolt sign-up.
+            </p>
+          </blockquote>
+
+          <h3 id="edit-or-remove-a-race">Edit or remove a race</h3>
+          <ol>
+            <li>Open the race.</li>
+            <li>Tap <strong>Edit race</strong>.</li>
+            <li>Change what you need, then tap <strong>Save changes</strong>.</li>
+          </ol>
+          <p>
+            The same screen has <strong>Remove race</strong>. The app asks you to confirm. Check
+            first. People may have made commitments to that race.
+          </p>
+
+          <h3 id="what-the-club-admin-does">What the club admin does</h3>
+          <ul>
+            <li>Approves new accounts. Most take a day or two.</li>
+            <li>Resets passwords when members ask.</li>
+            <li>Changes a member's display name when it needs fixing.</li>
+            <li>Saves or corrects a result for another member.</li>
+          </ul>
+
+          <h3 id="send-feedback">Send feedback</h3>
+          <p>
+            Spot a bug or have an idea? Tap <strong>Send feedback</strong> at the bottom of the
+            calendar. Write up to 2,000 characters. Add a name or email only if you want a reply.
+            Every message gets read.
+          </p>
+
+          <h3 id="quick-checklist">Quick checklist</h3>
+          <p><strong>For racers</strong></p>
+          <ul>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Account approved, and you can sign in.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Display name tells teammates who you are.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>A commitment saved for each race, at the right level.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Level set to <em>Locked in</em> once you are racing.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Result added within 14 days of the race.</span>
+            </li>
+          </ul>
+          <p><strong>For anyone adding a race</strong></p>
+          <ul>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span><span>Name and date are right.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Distances added, so racers can pick them.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Club focus ticked if the club is going.</span>
+            </li>
+            <li class="check">
+              <span class="box" aria-hidden="true"></span
+              ><span>Balance Bolt race number in the name, if it is a Bolt race.</span>
+            </li>
+          </ul>
+        </main>
+      </div>
     </div>
+    <script>
+      // Highlight the nav link for the section being read.
+      (function () {
+        var links = document.querySelectorAll('.guide-nav a');
+        var byId = {};
+        links.forEach(function (a) {
+          byId[a.getAttribute('href').slice(1)] = a;
+        });
+        var heads = Array.prototype.filter.call(
+          document.querySelectorAll('.guide h2[id], .guide h3[id]'),
+          function (h) {
+            return byId[h.id];
+          },
+        );
+        function update() {
+          var current = null;
+          heads.forEach(function (h) {
+            if (h.getBoundingClientRect().top <= 120) current = h;
+          });
+          links.forEach(function (a) {
+            if (current && a === byId[current.id]) a.setAttribute('aria-current', 'true');
+            else a.removeAttribute('aria-current');
+          });
+        }
+        window.addEventListener('scroll', update, { passive: true });
+        update();
+      })();
+    </script>
   </body>
 </html>
