@@ -46,7 +46,9 @@ const BALANCE_BOLT_URL = 'https://jthoyer.github.io/BalanceBolt/';
 // "BALANCE BOLT #1" lead-in older rows have — either way the number is the
 // only digits in the name, and that's what BalanceBolt's own ?race= param wants.
 function boltEmbedUrl(race) {
-  if (race.url) return race.url;
+  // A stored URL wins only when it is BalanceBolt itself. Typed-in junk such as
+  // "https://www.balancebolt/#2.com" falls through to the number-built address.
+  if (race.url && isEmbeddableBoltUrl(race.url)) return race.url;
   const n = (race.name || '').match(/\d+/);
   return n ? `${BALANCE_BOLT_URL}?race=${n[0]}` : null;
 }
