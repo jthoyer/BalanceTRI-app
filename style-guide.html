@@ -928,7 +928,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
           <p class="block-note">
             Balance Bolt races replace the usual "Club commitments"/"Your commitment" sections
             entirely with an embedded iframe of the BalanceBolt sign-up page
-            (<code>.race-embed</code>, under a "Race details" <code>.card-header</code>) — there's
+            (<code>.race-embed</code>, under a "Race website" <code>.card-header</code>) — there's
             no roster or commitment form for these, since sign-up happens on BalanceBolt itself. The
             iframe resizes to its own content height via a same-origin <code>ResizeObserver</code>,
             and hides BalanceBolt's own topbar chrome once loaded, rather than showing a
@@ -941,7 +941,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             style="padding: 0; background: transparent; border: 0"
           >
             <div class="details-card">
-              <div class="card-header">Race details</div>
+              <div class="card-header">Race website</div>
               <div class="card-body race-embed-body">
                 <div
                   class="race-embed"
@@ -962,7 +962,7 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             </div>
           </div>
           <pre class="code">
-&lt;div class="card-header"&gt;Race details&lt;/div&gt;
+&lt;div class="card-header"&gt;Race website&lt;/div&gt;
 &lt;div class="card-body race-embed-body"&gt;
   &lt;iframe class="race-embed" src="…" loading="lazy" title="…"&gt;&lt;/iframe&gt;
 &lt;/div&gt;</pre>
