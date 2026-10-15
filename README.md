@@ -88,7 +88,7 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 - **Your password:** set a password for your own account, or change it.
 - **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
-Signed-in admins see an **Admin** link in the calendar header.
+Signed-in admins see an **Admin** item in the account menu: the member's name in the calendar header. A badge on it counts requests waiting.
 
 **Access.** Admins are rows in `private.admins` (`add_admin_console` migration); at launch that's one account. Every action is a `public.admin_*` function that refuses anyone else. Admins also need **two-factor sign-in**: the first visit sets up an authenticator app, and every later sign-in asks for its code. The functions check the session's `aal2` claim, so a stolen inbox alone isn't enough.
 

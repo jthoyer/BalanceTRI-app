@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026101501" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026101502" />
   </head>
   <body>
     <main class="shell">
@@ -60,7 +60,28 @@
              primary action, then the account cluster at the far edge. -->
         <div class="header-actions">
           <a class="text-button guide-link" href="guides/">Guide</a>
-          <button class="text-button" id="resetButton">Refresh</button>
+          <button
+            class="text-button"
+            id="resetButton"
+            type="button"
+            aria-label="Refresh the calendar"
+            title="Refresh the calendar"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+              <path d="M20 4v5h-5" />
+            </svg>
+          </button>
           <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button>
           <div class="auth-widget" id="authWidget"></div>
         </div>
@@ -577,6 +598,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026100901"></script>
-    <script src="app.js?v=2026101304"></script>
+    <script src="app.js?v=2026101502"></script>
   </body>
 </html>
