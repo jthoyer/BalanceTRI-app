@@ -392,19 +392,59 @@ function closeAccountMenu() {
   button.setAttribute('aria-expanded', 'false');
   menu.classList.add('hidden');
 }
-function renderAccountMenu() {
+// "Jamie Rowe" -> "JR"; an email address (no spaces) -> its first letter.
+function initialsOf(name) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters =
+    words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] || '?')[0];
+  return letters.toUpperCase();
+}
+// One header control for the whole account: the member's name opens a menu
+// with Admin (admins only), Refresh (phones only), Change password and
+// Sign out. On a phone the name shrinks to an initials circle.
+function renderAccountMenu(displayName) {
   const wrap = elt('div', { class: 'account-menu-wrap' });
+  const waitingNote = isAdmin && adminWaiting ? `, ${adminWaiting} requests waiting` : '';
   const button = elt(
     'button',
     {
       type: 'button',
-      class: 'text-button',
+      class: 'text-button account-button',
       id: 'accountMenuButton',
+      'aria-label': `Account menu, ${displayName}${waitingNote}`,
       'aria-haspopup': 'true',
       'aria-expanded': 'false',
       'aria-controls': 'accountMenu',
     },
-    'Account',
+    elt('span', { class: 'auth-name', 'aria-hidden': 'true' }, displayName),
+    elt('span', { class: 'account-initials', 'aria-hidden': 'true' }, initialsOf(displayName)),
+    isAdmin && adminWaiting
+      ? elt('span', { class: 'badge account-badge', 'aria-hidden': 'true' }, String(adminWaiting))
+      : '',
+    elt('span', { class: 'account-caret', 'aria-hidden': 'true' }, '\u25BE'),
+  );
+  const heading = elt(
+    'div',
+    { class: 'account-menu-head' },
+    'Signed in as',
+    elt('b', {}, displayName),
+  );
+  const adminLink = isAdmin
+    ? elt(
+        'a',
+        {
+          class: 'account-menu-item',
+          id: 'adminMenuLink',
+          href: adminWaiting ? 'admin.html#requests' : 'admin.html',
+        },
+        'Admin',
+        adminWaiting ? elt('span', { class: 'badge' }, `${adminWaiting} waiting`) : '',
+      )
+    : null;
+  const refresh = elt(
+    'button',
+    { type: 'button', class: 'account-menu-item account-menu-refresh', id: 'refreshMenuButton' },
+    'Refresh',
   );
   const changePassword = elt(
     'button',
@@ -419,6 +459,9 @@ function renderAccountMenu() {
   const menu = elt(
     'div',
     { class: 'account-menu hidden', id: 'accountMenu' },
+    heading,
+    ...(adminLink ? [adminLink] : []),
+    refresh,
     changePassword,
     signOut,
   );
@@ -426,7 +469,18 @@ function renderAccountMenu() {
     const open = button.getAttribute('aria-expanded') !== 'true';
     button.setAttribute('aria-expanded', String(open));
     menu.classList.toggle('hidden', !open);
-    if (open) changePassword.focus();
+    // Focus the first item that is on screen: Admin for an admin, else
+    // Change password (Refresh only shows on phones).
+    if (open) {
+      const first = [...menu.querySelectorAll('.account-menu-item')].find(
+        item => item.offsetParent !== null,
+      );
+      first?.focus();
+    }
+  };
+  refresh.onclick = () => {
+    closeAccountMenu();
+    loadRaces();
   };
   wrap.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || menu.classList.contains('hidden')) return;
@@ -472,22 +526,11 @@ function renderAuth() {
   widget.textContent = '';
   if (session) {
     // profiles is readable only by its owner, so this name is the viewer's
-    // own — self-XSS rather than one member reaching another. Same mistake
-    // either way, and textContent costs nothing.
-    const name = document.createElement('span');
-    name.className = 'auth-name';
-    name.textContent = profile?.display_name || session.user.email;
-    // Name first, the account menu last: Sign out lives inside it, so it sits
-    // at the edge where it's easy to find and hard to hit by mistake.
-    widget.append(name);
-    if (isAdmin) {
-      const adminLink = document.createElement('a');
-      adminLink.className = 'text-button';
-      adminLink.href = adminWaiting ? 'admin.html#requests' : 'admin.html';
-      adminLink.textContent = adminWaiting ? `Admin (${adminWaiting} waiting)` : 'Admin';
-      widget.append(adminLink);
-    }
-    widget.append(renderAccountMenu());
+    // own — self-XSS rather than one member reaching another. elt() sets it
+    // as text, which costs nothing. Everything account-related (Admin,
+    // Change password, Sign out) lives in the one menu at the edge, where
+    // Sign out is easy to find and hard to hit by mistake.
+    widget.append(renderAccountMenu(profile?.display_name || session.user.email));
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
     // Opens the same auth sheet the nudge/gate use, rather than expanding a
