@@ -622,6 +622,11 @@
   #authWidget .text-button {
     display: inline-flex;
   }
+  /* The guide link is a .text-button too; keep it on phones, where people
+     most often need the how-to. */
+  .header-actions .guide-link {
+    display: inline-flex;
+  }
 }
 
 /* The sign-in overlay: the front door (shown once per visit, unless
