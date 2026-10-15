@@ -2367,25 +2367,24 @@ function makeDetails(race) {
   if (race.balanceBolt === 'Y') {
     const embedUrl = safeLinkUrl(boltEmbedUrl(race) || '');
     const canEmbed = embedUrl !== null && isEmbeddableBoltUrl(embedUrl);
-    wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div><div class="card-header race-embed-header">Race details</div><div class="card-body race-embed-body"></div>`;
+    wrap.innerHTML = `<div class="card-header race-website-header">Race website</div><div class="card-body race-website-body"></div>`;
+    const body = wrap.querySelector('.race-website-body');
     if (!embedUrl) {
       wrap.querySelector('.race-website-header').remove();
-      wrap.querySelector('.race-website-body').remove();
-    }
-    // Nothing to show under "Race details" unless we are willing to frame it.
-    if (!canEmbed) {
-      wrap.querySelector('.race-embed-header').remove();
-      wrap.querySelector('.race-embed-body').remove();
-    }
-    if (embedUrl) {
+      body.remove();
+    } else if (!canEmbed) {
+      // A URL we will not frame stays a plain link: it is the only way to reach it.
       const a = document.createElement('a');
       a.className = 'race-link';
       a.href = embedUrl;
-      a.textContent = 'Open sign-up in a new tab';
+      a.textContent = embedUrl;
       a.target = '_blank';
       a.rel = 'noopener';
-      a.setAttribute('aria-label', `${race.name} sign-up: ${embedUrl}`);
-      wrap.querySelector('.race-website-body').append(a);
+      a.setAttribute('aria-label', `${race.name} website: ${embedUrl}`);
+      body.append(a);
+    } else {
+      // The framed page fills the card edge to edge.
+      body.classList.add('race-embed-body');
     }
     if (canEmbed) {
       const iframe = document.createElement('iframe');
@@ -2405,7 +2404,7 @@ function makeDetails(race) {
       };
       // BalanceBolt's own topbar (its logo, a "Club calendar" link back to this
       // very app, sync status and refresh) is chrome for when it's visited on
-      // its own — all redundant once it's sitting inside our "Race details" card.
+      // its own — all redundant once it's sitting inside our "Race website" card.
       const hideChrome = () => {
         try {
           const doc = iframe.contentDocument;
@@ -2428,7 +2427,7 @@ function makeDetails(race) {
           new ResizeObserver(resize).observe(iframe.contentDocument.documentElement);
         } catch (e) {}
       });
-      wrap.querySelector('.race-embed-body').append(iframe);
+      body.append(iframe);
     }
     return wrap;
   }
