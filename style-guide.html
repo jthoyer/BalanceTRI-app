@@ -586,11 +586,11 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
           </label>
           <label style="display: block; font-size: 14px; font-weight: 700"
             >Race name
-            <input style="margin-top: 6px" placeholder="e.g. Melbourne Marathon" />
+            <input style="margin-top: 4px" placeholder="e.g. Melbourne Marathon" />
           </label>
           <label style="display: block; font-size: 14px; font-weight: 700"
             >Date
-            <input style="margin-top: 6px" type="date" />
+            <input style="margin-top: 4px" type="date" />
           </label>
           <div class="input-add">
             <input placeholder="Add an event or distance" /><button>+ Add</button>
@@ -631,11 +631,11 @@ font-family: Outfit, sans-serif;                    /* headings only, via .brand
             </label>
             <label style="display: block; font-size: 14px; font-weight: 700"
               >Race #
-              <input style="margin-top: 6px" placeholder="e.g. 3" />
+              <input style="margin-top: 4px" placeholder="e.g. 3" />
             </label>
             <label style="display: block; font-size: 14px; font-weight: 700"
               >Date
-              <input style="margin-top: 6px" type="date" />
+              <input style="margin-top: 4px" type="date" />
             </label>
           </div>
         </div>
@@ -1291,7 +1291,7 @@ showToast('Could not save: ' + err.message, 'error');</pre>
             (text to its control, field to field), 16px (group to group), 20px (card padding sides)
             and 18px (card padding top and bottom). Helper text inside a
             <code>.card-body</code> sits flush by default, so the element after it gets
-            <code>margin-top: 12px</code>. Never let a button touch the text above it.
+            <code>margin-top: 12px</code>. Never let a button touch the text above it. Field hints sit 4px under their input. A margin on a <code>label</code> only works if the label is <code>display: block</code>. Flex rows that hold text beside a button, such as headings and dialog headers, use <code>gap: 12px</code>. Button rows wrap and use an 8px gap. Set margins on <code>p</code> and <code>h2</code> explicitly, because browser defaults add space you did not plan.
           </p>
         </div>
 
