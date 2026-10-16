@@ -53,7 +53,7 @@
   max-width: 560px;
 }
 .admin-hint {
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   color: var(--muted);
 }
 .admin-notice {
@@ -505,4 +505,17 @@
 .admin-rename .admin-error {
   white-space: normal;
   max-width: 280px;
+}
+.admin-reveal-dialog h2 {
+  margin: 0 0 12px;
+  font:
+    700 24px Outfit,
+    sans-serif;
+}
+.admin-card > :last-child {
+  margin-bottom: 0;
+}
+.admin-loading,
+.admin-empty {
+  margin: 0;
 }

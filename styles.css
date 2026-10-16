@@ -296,8 +296,9 @@ body {
 .save-row,
 .input-add {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 .save-row input {
   flex: 1;
@@ -361,6 +362,7 @@ dialog::backdrop {
 }
 .dialog-header {
   display: flex;
+  gap: 12px;
   align-items: start;
   justify-content: space-between;
   margin-bottom: 20px;
@@ -381,7 +383,7 @@ dialog::backdrop {
   font-weight: 700;
 }
 .dialog-card input {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 .optional,
 .helper-text {

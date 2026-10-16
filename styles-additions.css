@@ -9,6 +9,7 @@
 }
 .add-form-heading {
   display: flex;
+  gap: 12px;
   align-items: start;
   justify-content: space-between;
 }
@@ -34,7 +35,7 @@
 .add-form-fields input,
 .add-form-fields select {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   width: 100%;
   min-height: 44px;
   border: 1px solid #aab5c6;
@@ -93,7 +94,7 @@
   text-underline-offset: 3px;
 }
 .toolbar {
-  gap: 30px;
+  gap: 12px 30px;
 }
 .race-link {
   display: inline-block;
@@ -112,7 +113,7 @@
   border-top: 1px solid var(--line);
 }
 .card-header {
-  padding: 14px 20px;
+  padding: 12px 20px;
   color: var(--muted);
   background: #eef0f3;
   font-size: 12px;
@@ -179,6 +180,10 @@
 .card-body .helper-text {
   margin: 0;
 }
+/* Spacing rule: anything that follows helper text in a card sits 12px below it. */
+.card-body > .helper-text + * {
+  margin-top: 12px;
+}
 .card-body .choices:first-child {
   margin-top: 0;
 }
@@ -186,7 +191,7 @@
   margin: 0 0 12px;
 }
 .other-row {
-  margin: -4px 0 12px;
+  margin: 0 0 12px;
 }
 .name-row input,
 .other-row input {
@@ -213,7 +218,7 @@
 .club-focus-badge {
   display: inline-block;
   vertical-align: middle;
-  margin-left: 8px;
+  margin-left: 4px;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--yellow);
@@ -644,7 +649,7 @@
 }
 .app-footer-guide {
   display: inline-block;
-  margin-left: 6px;
+  margin-left: 0;
   color: inherit;
   font-weight: 600;
 }
@@ -1614,9 +1619,6 @@
   color: #b3261e;
   font-weight: 600;
 }
-.result-form .save-row {
-  margin-top: 14px;
-}
 .result-form .choice-label {
   color: var(--brand-blue-text);
 }
@@ -1659,4 +1661,18 @@
   color: #fff;
   font: 700 14px 'DM Sans';
   cursor: pointer;
+}
+/* Spacing fixes from the UX audit. */
+.result-field > .choice-label {
+  display: block;
+  margin: 0 0 4px;
+}
+.card-body .result-input + .helper-text {
+  margin-top: 4px;
+}
+@media (max-width: 700px) {
+  #raceScreen .card-header,
+  #raceScreen .card-body:not(.race-embed-body) {
+    padding-inline: 12px;
+  }
 }
