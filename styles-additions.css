@@ -179,6 +179,10 @@
 .card-body .helper-text {
   margin: 0;
 }
+/* Spacing rule: anything that follows helper text in a card sits 12px below it. */
+.card-body > .helper-text + * {
+  margin-top: 12px;
+}
 .card-body .choices:first-child {
   margin-top: 0;
 }

@@ -1285,6 +1285,17 @@ showToast('Could not save: ' + err.message, 'error');</pre>
         </table>
 
         <div class="guide-block">
+          <h3>Vertical rhythm</h3>
+          <p class="block-note">
+            Space between stacked elements comes from a short scale: 4px (label to field), 12px
+            (text to its control, field to field), 16px (group to group), 20px (card padding sides)
+            and 18px (card padding top and bottom). Helper text inside a
+            <code>.card-body</code> sits flush by default, so the element after it gets
+            <code>margin-top: 12px</code>. Never let a button touch the text above it.
+          </p>
+        </div>
+
+        <div class="guide-block">
           <h3>Touch targets</h3>
           <p class="block-note">
             Every interactive element (<code>.text-button</code>, <code>.icon-button</code>,
