@@ -271,6 +271,10 @@
 .header-actions .text-button {
   font-size: 14px;
 }
+/* display on .text-button would otherwise beat the hidden attribute. */
+.header-actions .guide-link[hidden] {
+  display: none;
+}
 .hero-copy .view-toggle {
   display: flex;
   gap: 4px;

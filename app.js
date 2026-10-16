@@ -494,6 +494,8 @@ function renderMemberBanner() {
 function renderAuth() {
   const widget = $('#authWidget');
   widget.textContent = '';
+  // Signed in, the Guide lives in the Menu; the header link is for signed-out visitors.
+  $('.guide-link').hidden = Boolean(session);
   if (session) {
     // One Menu at the edge: Guide, Admin, Change password and Sign out live
     // inside it, so the header stays calm and Sign out is hard to hit by
