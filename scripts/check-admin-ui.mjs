@@ -247,6 +247,12 @@ async function open(fx, path = '/admin.html') {
   return { page, errors };
 }
 const calls = page => page.evaluate(() => window.__calls);
+// Edit name and Reset password sit in a row's Manage menu: open it, pick the item.
+const manageButton = (page, who) => page.getByRole('button', { name: `Manage ${who}` });
+const pickAction = async (page, who, item) => {
+  await manageButton(page, who).click();
+  await page.getByRole('menuitem', { name: item }).click();
+};
 
 console.log('1. The console with requests waiting');
 {
@@ -367,10 +373,21 @@ console.log('3. Resetting a password shows it once');
   const { page } = await open(fixtures());
   await page.waitForSelector('#requests');
   check(
-    (await page.getByRole('button', { name: 'Reset password' }).count()) === 1,
-    'only the non-admin account has Reset password',
+    (await page.locator('.admin-reset').count()) === 1,
+    'only the non-admin account has a Reset password menu',
   );
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await manageButton(page, 'Sam Lee').click();
+  check(
+    (await page.getByRole('menuitem').allTextContents()).join('|') ===
+      'Edit name|Link entries|Reset password',
+    'the menu lists Edit name, Link entries and Reset password',
+  );
+  await page.keyboard.press('Escape');
+  check(
+    await page.evaluate(() => document.activeElement?.classList.contains('admin-menu-button')),
+    'Escape closes the menu and returns focus to Manage',
+  );
+  await pickAction(page, 'Sam Lee', 'Reset password');
   await page.locator('#confirmDialogConfirm').click();
   await page.waitForSelector('.admin-temp-password');
   check(
@@ -408,17 +425,42 @@ console.log('3. Resetting a password shows it once');
   await page.close();
 }
 
+console.log('3a. Renaming from the menu edits the name in place');
+{
+  const { page } = await open(fixtures());
+  await page.waitForSelector('#requests');
+  await pickAction(page, 'Sam Lee', 'Edit name');
+  check(
+    await page.evaluate(() => document.activeElement?.tagName === 'INPUT'),
+    'focus moves to the name input',
+  );
+  check(await manageButton(page, 'Sam Lee').isDisabled(), 'Manage waits while editing');
+  await page.keyboard.press('Escape');
+  check(await manageButton(page, 'Sam Lee').isEnabled(), 'Escape cancels and Manage works again');
+  await pickAction(page, 'Sam Lee', 'Edit name');
+  await page.locator('.admin-rename-form input:visible').fill('Samantha Lee');
+  await page.keyboard.press('Enter');
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForFunction(() => window.__calls.some(c => c[1] === 'admin_rename_member'));
+  const rename = (await calls(page)).find(c => c[1] === 'admin_rename_member');
+  check(
+    rename[2].p_user_id === 'u1' && rename[2].p_name === 'Samantha Lee',
+    'Save sends the new name',
+  );
+  await page.close();
+}
+
 console.log('3b. A re-render while the reset is in flight does not lose the password (R1 M1)');
 {
   const { page } = await open(fixtures({ invokeDelay: 1500 }));
   await page.waitForSelector('#requests');
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await pickAction(page, 'Sam Lee', 'Reset password');
   await page.locator('#confirmDialogConfirm').click();
   await page.waitForSelector('#confirmDialog:not([open])', { state: 'attached' });
   await page.getByRole('button', { name: 'Resetting…' }).waitFor();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await page.waitForFunction(() => window.__calls.filter(c => c[1] === 'admin_stats').length === 2);
-  await page.getByRole('button', { name: 'Reset password' }).waitFor();
+  await manageButton(page, 'Sam Lee').waitFor();
   check(
     (await page.locator('.admin-temp-password').count()) === 0,
     'the console really re-rendered before the reset answered',
@@ -447,16 +489,13 @@ for (const [invokeError, want, label] of [
 ]) {
   const { page } = await open(fixtures({ invokeError }));
   await page.waitForSelector('#requests');
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await pickAction(page, 'Sam Lee', 'Reset password');
   await page.locator('#confirmDialogConfirm').click();
   await page.waitForFunction(
     () => document.querySelector('.admin-reset .admin-error')?.textContent,
   );
   check((await page.locator('.admin-reset .admin-error').textContent()) === want, label);
-  check(
-    await page.getByRole('button', { name: 'Reset password' }).isEnabled(),
-    'and the button works again',
-  );
+  check(await manageButton(page, 'Sam Lee').isEnabled(), 'and the button works again');
   await page.close();
 }
 
@@ -474,13 +513,10 @@ console.log('5. Before the migration is applied');
     'Requests says not set up yet',
   );
   check((await page.locator('.admin-waiting').count()) === 0, 'no waiting badge');
+  await page.locator('.admin-menu-button').first().click();
   check(
-    (await page.getByRole('button', { name: 'Reset password' }).count()) === 0,
-    'no Reset password buttons',
-  );
-  check(
-    (await page.locator('th', { hasText: 'Password' }).count()) === 0,
-    'and no empty Password column',
+    (await page.getByRole('menuitem', { name: 'Reset password' }).count()) === 0,
+    'no Reset password item in any menu',
   );
   check(
     (await page.locator('h2', { hasText: 'Activity' }).count()) === 1,
@@ -830,10 +866,15 @@ const rpcCalls = async (page, name) =>
 {
   const { page, errors } = await open(linkFx());
   await page.waitForSelector('#accounts');
+  await manageButton(page, 'Sam Lee').click();
+  const withName = await page.getByRole('menuitem', { name: 'Link entries' }).count();
+  await page.keyboard.press('Escape');
+  await manageButton(page, 'anon@example.com').click();
   check(
-    (await page.getByRole('button', { name: 'Link entries', exact: true }).count()) === 2,
-    'Link entries shows on the two accounts with a display name, not the one without',
+    withName === 1 && (await page.getByRole('menuitem', { name: 'Link entries' }).count()) === 0,
+    'Link entries is in the menu of an account with a display name, not the one without',
   );
+  await page.keyboard.press('Escape');
   check(
     (await rpcCalls(page, 'admin_link_candidates')).length === 0,
     'the candidate list is not fetched until the button is pressed',
@@ -844,15 +885,13 @@ const rpcCalls = async (page, name) =>
       (await page.locator('.admin-orphans').count()) === 1,
     'the waiting request with matches shows the badge (once)',
   );
+  await manageButton(page, 'Sam Lee').click();
   check(
-    (await page.getByRole('button', { name: 'Edit name' }).count()) === 2,
+    (await page.getByRole('menuitem', { name: 'Edit name' }).count()) === 1,
     'Edit name is still there beside it',
   );
-  await page
-    .locator('.admin-link-entries', { hasText: 'Link entries' })
-    .nth(1)
-    .getByRole('button', { name: 'Link entries', exact: true })
-    .click();
+  await page.keyboard.press('Escape');
+  await pickAction(page, 'Sam Lee', 'Link entries');
   await page.waitForSelector('.admin-link-panel:not([hidden])');
   const asked = await rpcCalls(page, 'admin_link_candidates');
   check(
@@ -931,7 +970,7 @@ console.log('11b. Unlink, server errors, nothing ticked, and the 50 limit');
     ),
   );
   await page.waitForSelector('#accounts');
-  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await pickAction(page, 'Sam Lee', 'Link entries');
   await page.waitForSelector('.admin-link-panel:not([hidden])');
   const unlinkBtn = page.getByRole('button', { name: 'Unlink chosen', exact: true });
   check(await unlinkBtn.isDisabled(), 'Unlink chosen is disabled with nothing ticked');
@@ -997,7 +1036,7 @@ console.log('11b. Unlink, server errors, nothing ticked, and the 50 limit');
   }));
   const big = await open(linkFx({ admin_link_candidates: many }));
   await big.page.waitForSelector('#accounts');
-  await big.page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await pickAction(big.page, 'Sam Lee', 'Link entries');
   await big.page.waitForSelector('.admin-link-panel:not([hidden])');
   await big.page.getByRole('button', { name: 'Link chosen', exact: true }).click();
   await big.page.waitForSelector(OPEN_ERR + ':not(:empty)');
@@ -1027,12 +1066,11 @@ console.log('11c. The migration is not applied yet');
       (await page.locator('.admin-orphans').count()) === 0,
     'the console loads and no badge shows when admin_orphan_match_counts is missing',
   );
-  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await pickAction(page, 'Sam Lee', 'Link entries');
   await page.waitForSelector(OPEN_ERR + ':not(:empty)');
   check(
     (await page.locator(OPEN_ERR).first().textContent()).includes("isn't set up yet") &&
-      (await page.getByRole('button', { name: 'Link entries', exact: true }).count()) === 2 &&
-      (await page.getByRole('button', { name: 'Edit name' }).count()) === 2,
+      (await manageButton(page, 'Sam Lee').isEnabled()),
     'PGRST202 says linking is not set up yet; the rest of the row is unchanged',
   );
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
@@ -1155,7 +1193,7 @@ console.log('11e. At 375px the Link panel and Edit name row fit the viewport');
   }, linkFx());
   await page.goto(base + '/admin.html');
   await page.waitForSelector('#accounts');
-  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await pickAction(page, 'Sam Lee', 'Link entries');
   await page.waitForSelector('.admin-link-panel:not([hidden])');
   const over = await page.evaluate(() =>
     [...document.querySelectorAll('.admin-link-entries *, .admin-rename *')]

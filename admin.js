@@ -804,27 +804,26 @@ function usersSection(users, resetsReady, notice) {
       { class: flag ? 'admin-yes' : 'admin-no' },
       flag ? text : `Not ${text.toLowerCase()}`,
     );
-  const rows = users.map(u =>
-    el(
+  const rows = users.map(u => {
+    const { account, actions } = accountCells(u, resetsReady);
+    return el(
       'tr',
       {},
       el(
         'td',
         {},
         el('span', { class: 'admin-user-email' }, u.email || '—'),
-        u.display_name ? el('span', { class: 'admin-change-meta' }, u.display_name) : null,
+        account,
         u.is_admin ? el('span', { class: 'admin-badge' }, 'Admin') : null,
-        u.display_name ? renameControl(u) : null,
-        u.display_name ? linkControl(u) : null,
       ),
       el('td', {}, yes(u.on_allow_list, 'Listed')),
       el('td', {}, yes(u.confirmed, 'Confirmed')),
       el('td', {}, when(u.created_at)),
       el('td', {}, u.last_sign_in_at ? when(u.last_sign_in_at) : 'Never'),
       el('td', { class: 'admin-num' }, fmt(u.changes_30d)),
-      resetsReady ? el('td', {}, u.is_admin ? null : resetCell(u)) : null,
-    ),
-  );
+      el('td', {}, actions),
+    );
+  });
   const accounts = card(
     'Accounts',
     notice || null,
@@ -852,10 +851,8 @@ function usersSection(users, resetsReady, notice) {
               'Signed up',
               'Last sign-in',
               'Changes (30d)',
-              resetsReady ? 'Password' : null,
-            ]
-              .filter(Boolean)
-              .map(h => el('th', { scope: 'col' }, h)),
+              'Actions',
+            ].map(h => el('th', { scope: 'col' }, h)),
           ),
         ),
         el('tbody', {}, rows),
@@ -1305,18 +1302,128 @@ function requestItem(r, choose, orphanCount) {
   );
 }
 
+// ----- Account actions: one "Manage" menu per row -----
+// Edit name, Link entries and Reset password sit behind a single button, so the row stays
+// one line tall. Edit name swaps the name under the email for an input in
+// place; Reset password keeps its confirm dialog.
+function accountCells(u, resetsReady) {
+  const name = u.display_name || u.email;
+  const manage = el(
+    'button',
+    {
+      class: 'secondary-button admin-small-button admin-menu-button',
+      type: 'button',
+      'aria-haspopup': 'menu',
+      'aria-expanded': 'false',
+      'aria-label': `Manage ${name}`,
+    },
+    'Manage',
+  );
+  const items = [];
+  let account = null;
+  if (u.display_name) {
+    const rename = renameControl(u, manage);
+    const link = linkControl(u, manage);
+    account = [rename.node, link.node];
+    items.push({ label: 'Edit name', run: rename.start });
+    items.push({ label: 'Link entries', run: link.start });
+  }
+  const resetError = errorLine();
+  const canReset = resetsReady && !u.is_admin;
+  if (canReset) {
+    items.push({ label: 'Reset password', run: () => resetPassword(u, manage, resetError) });
+  }
+  if (!items.length) return { account, actions: null };
+  return {
+    account,
+    actions: el(
+      'div',
+      { class: canReset ? 'admin-reset' : null },
+      actionsMenu(manage, name, items),
+      resetError,
+    ),
+  };
+}
+
+// A menu button with the keyboard behaviour a screen reader expects: Enter,
+// Space or Down opens it, arrows move, Escape closes and returns focus, Tab
+// or a click elsewhere closes it. The list is fixed to the window, because
+// the table's scroll box would clip a menu on the last row.
+function actionsMenu(button, name, items) {
+  const menu = el('div', {
+    class: 'admin-menu',
+    role: 'menu',
+    'aria-label': `Manage ${name}`,
+    hidden: true,
+  });
+  const buttons = items.map(item => {
+    const b = el(
+      'button',
+      { class: 'admin-menu-item', type: 'button', role: 'menuitem', tabindex: '-1' },
+      item.label,
+    );
+    b.onclick = () => {
+      close(false);
+      item.run();
+    };
+    return b;
+  });
+  menu.append(...buttons);
+  const away = e => {
+    if (!menu.contains(e.target) && !button.contains(e.target)) close(false);
+  };
+  // The list is fixed to the window, so it follows the button as the page
+  // scrolls or resizes.
+  const place = () => {
+    const box = button.getBoundingClientRect();
+    menu.style.top = `${box.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, box.right - menu.offsetWidth)}px`;
+  };
+  function close(refocus) {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', away, true);
+    window.removeEventListener('resize', place);
+    window.removeEventListener('scroll', place, true);
+    if (refocus) button.focus();
+  }
+  function open(focusIndex) {
+    menu.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    place();
+    buttons.at(focusIndex)?.focus();
+    document.addEventListener('click', away, true);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+  }
+  button.onclick = () => (menu.hidden ? open(0) : close(true));
+  button.onkeydown = e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (menu.hidden) open(e.key === 'ArrowDown' ? 0 : -1);
+    }
+  };
+  menu.onkeydown = e => {
+    const at = buttons.indexOf(document.activeElement);
+    const move = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: -1 }[e.key];
+    if (e.key === 'Escape') close(true);
+    else if (e.key === 'Tab') close(false);
+    else if (move !== undefined) {
+      e.preventDefault();
+      buttons.at(move % buttons.length)?.focus();
+    }
+  };
+  return el('span', { class: 'admin-menu-anchor' }, button, menu);
+}
+
 // ----- Display name (admin_rename_member) -----
 // The one place a member's name changes. It updates the profile and every
 // commitment that member created, so the roster follows. Members see their
 // name read-only on the commitment form.
-function renameControl(u) {
-  const box = el('div', { class: 'admin-rename' });
+function renameControl(u, manage) {
+  const nameLine = el('span', { class: 'admin-change-meta' }, u.display_name);
   const error = errorLine();
-  const open = el(
-    'button',
-    { class: 'secondary-button admin-small-button', type: 'button' },
-    'Edit name',
-  );
   const input = el('input', {
     type: 'text',
     value: u.display_name,
@@ -1330,17 +1437,27 @@ function renameControl(u) {
     'Cancel',
   );
   const form = el('div', { class: 'admin-rename-form', hidden: true }, input, save, cancel);
+  const node = el('div', { class: 'admin-rename' }, nameLine, form, error);
   const show = on => {
     form.hidden = !on;
-    open.hidden = on;
+    nameLine.hidden = on;
+    // One thing at a time: the menu waits while the name is open for editing.
+    manage.disabled = on;
     error.set('');
     if (on) {
       input.value = u.display_name;
       input.focus();
-    }
+    } else manage.focus();
   };
-  open.onclick = () => show(true);
   cancel.onclick = () => show(false);
+  input.onkeydown = e => {
+    if (e.key === 'Enter') {
+      // Without this, the same keypress lands on the confirm button that
+      // Save is about to open, and confirms the rename unseen.
+      e.preventDefault();
+      save.click();
+    } else if (e.key === 'Escape') show(false);
+  };
   save.onclick = async () => {
     const name = input.value.trim();
     if (!name || name === u.display_name) return show(false);
@@ -1360,8 +1477,7 @@ function renameControl(u) {
       clearBusy(save);
     }
   };
-  box.append(open, form, error);
-  return box;
+  return { node, start: () => show(true) };
 }
 
 // ----- Link entries (admin_link_candidates / admin_link_entries / admin_unlink_entries) -----
@@ -1371,14 +1487,9 @@ function renameControl(u) {
 // fetched when the button is pressed, so the console loads without the migration.
 const LINK_LIMIT = 50;
 const fullDay = isoDate => `${day(isoDate)} ${isoDate.slice(0, 4)}`;
-function linkControl(u) {
+function linkControl(u, manage) {
   const box = el('div', { class: 'admin-link-entries' });
   const error = errorLine();
-  const open = el(
-    'button',
-    { class: 'secondary-button admin-small-button', type: 'button', 'aria-expanded': 'false' },
-    'Link entries',
-  );
   const panel = el('div', { class: 'admin-link-panel', hidden: true });
   const label = u.display_name;
   let rows = [];
@@ -1559,9 +1670,8 @@ function linkControl(u) {
     };
     close.onclick = () => {
       panel.hidden = true;
-      open.hidden = false;
-      open.setAttribute('aria-expanded', 'false');
-      open.focus();
+      manage.disabled = false;
+      manage.focus();
     };
     panel.replaceChildren(
       el(
@@ -1575,11 +1685,11 @@ function linkControl(u) {
     );
   }
 
-  open.onclick = async () => {
+  async function start() {
     if (loading) return;
     loading = true;
     error.set('');
-    setBusy(open, 'Loading…');
+    manage.disabled = true;
     try {
       const result = await rpcOptional('admin_link_candidates', { p_user_id: u.id });
       if (result.missing) {
@@ -1590,70 +1700,63 @@ function linkControl(u) {
         rows = result.data || [];
         render();
         panel.hidden = false;
-        open.hidden = true;
-        open.setAttribute('aria-expanded', 'true');
         panel.querySelector('input')?.focus();
       }
     } catch (err) {
       error.set("Couldn't load entries: " + err.message);
     }
     loading = false;
-    clearBusy(open);
-  };
-  box.append(open, panel, error);
-  return box;
+    // The menu waits while the panel is open; a failed load gives it back.
+    if (panel.hidden) manage.disabled = false;
+  }
+  box.append(panel, error);
+  return { node: box, start };
 }
 
 // ----- Password reset (admin-reset-password Edge Function) -----
-function resetCell(u) {
+// The Manage button carries the "Resetting…" state, since the menu item is
+// out of sight once the menu closes.
+async function resetPassword(u, manage, error) {
   const name = u.display_name || u.email;
-  const cell = el('div', { class: 'admin-reset' });
-  const error = errorLine();
-  const button = el(
-    'button',
-    { class: 'secondary-button admin-small-button', type: 'button' },
-    'Reset password',
-  );
-  button.onclick = async () => {
-    const ok = await confirmDialog({
-      title: `Reset ${name}'s password?`,
-      body: `${name} will be signed out on every device. You'll get a temporary password to give them; they choose their own when they next sign in.`,
-      confirmLabel: 'Reset',
-    });
-    if (!ok) return;
-    error.set('');
-    // Disabled while in flight: a second click would set a second password,
-    // and only the last one would work.
-    setBusy(button, 'Resetting…');
-    const { data, error: fnError } = await db.functions.invoke('admin-reset-password', {
-      body: { user_id: u.id },
-    });
-    clearBusy(button);
-    if (fnError) {
-      // An HTTP error carries the function's Response; a network or CORS
-      // failure (for example, the function isn't deployed) carries none.
-      const res = fnError.context;
-      let text = 'Couldn’t reach the password reset service. It may not be set up yet.';
-      if (res instanceof Response) {
-        text = fnError.message;
-        if (res.status === 404) text = 'Password resets aren’t set up yet.';
-        else {
-          try {
-            text = (await res.json()).error || text;
-          } catch {
-            // keep the generic message
-          }
+  const ok = await confirmDialog({
+    title: `Reset ${name}'s password?`,
+    body: `${name} will be signed out on every device. You'll get a temporary password to give them; they choose their own when they next sign in.`,
+    confirmLabel: 'Reset',
+  });
+  if (!ok) return;
+  error.set('');
+  // Disabled while in flight: a second click would set a second password,
+  // and only the last one would work.
+  const label = manage.getAttribute('aria-label');
+  manage.removeAttribute('aria-label');
+  setBusy(manage, 'Resetting…');
+  const { data, error: fnError } = await db.functions.invoke('admin-reset-password', {
+    body: { user_id: u.id },
+  });
+  clearBusy(manage);
+  manage.setAttribute('aria-label', label);
+  if (fnError) {
+    // An HTTP error carries the function's Response; a network or CORS
+    // failure (for example, the function isn't deployed) carries none.
+    const res = fnError.context;
+    let text = 'Couldn’t reach the password reset service. It may not be set up yet.';
+    if (res instanceof Response) {
+      text = fnError.message;
+      if (res.status === 404) text = 'Password resets aren’t set up yet.';
+      else {
+        try {
+          text = (await res.json()).error || text;
+        } catch {
+          // keep the generic message
         }
       }
-      error.set("Couldn't reset: " + text);
-      return;
     }
-    // A dialog outside the console, so a re-render (Refresh, a decision, an
-    // Undo) can't wipe the password, even one that arrives mid-render.
-    showPasswordDialog(name, data);
-  };
-  cell.append(button, error);
-  return cell;
+    error.set("Couldn't reset: " + text);
+    return;
+  }
+  // A dialog outside the console, so a re-render (Refresh, a decision, an
+  // Undo) can't wipe the password, even one that arrives mid-render.
+  showPasswordDialog(name, data);
 }
 // Shown once, in a dialog that only Done closes (Escape doesn't, so a stray
 // key can't lose it). Nothing keeps the password after that.
