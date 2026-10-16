@@ -378,7 +378,7 @@ It needs a running Postgres 16 or newer with `pgcrypto`, and a user who can crea
 
 Members get no email, so Supabase's own "reset password" email isn't used. The owner resets a password from the console instead (step B5). **Not deployed or applied yet.**
 
-1. The console's **Reset password** button calls the Edge Function `admin-reset-password` with the owner's own session.
+1. The **Reset password** item in a member's **Manage** menu calls the Edge Function `admin-reset-password` with the owner's own session.
 2. The function calls `public.admin_password_reset_begin(user_id)` **as the owner**, so the usual admin check decides: an admin, signed in with two-factor. Anyone else gets 401 or 403, and nothing changes.
 3. That function flags "must change password" in `private.password_resets` for 7 days, signs the member out on every device (it deletes their sessions and refresh tokens), and logs `password_reset` in `private.admin_actions`.
 4. The Edge Function makes a temporary password (four random words and two digits, such as `maple-river-swift-cloud-47`) and sets it with the service role through the Auth admin API.
@@ -399,7 +399,7 @@ If setting the password fails after step 3, the function undoes the reset (`admi
 
 **Calling it from a browser.** Only `https://jthoyer.github.io` gets CORS headers (`ADMIN_ORIGIN` overrides it). `config.toml` keeps `verify_jwt = true`. The function needs only the settings Supabase provides (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
 
-**It is live** (12 October 2026): migration `20261012205858_add_admin_password_reset.sql` is applied, and `admin-reset-password` is deployed with `verify_jwt = true`. The console's **Reset password** button (B6) works for any non-admin account.
+**It is live** (12 October 2026): migration `20261012205858_add_admin_password_reset.sql` is applied, and `admin-reset-password` is deployed with `verify_jwt = true`. The **Reset password** menu item (B6) works for any non-admin account.
 
 **Tests.** `node --experimental-strip-types --test supabase/functions/admin-reset-password/handler.test.ts` covers the Edge half of spec test T9. `supabase/tests/b5_password_reset.test.sql` (run by `supabase/tests/run.sh`) covers the database half: who may begin a reset, signing out everywhere, the flag and the log.
 
