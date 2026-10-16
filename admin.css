@@ -494,15 +494,73 @@
   gap: 6px;
 }
 .admin-rename-form input {
-  min-height: 36px;
+  min-height: 44px;
   min-width: 0;
   flex: 1 1 160px;
-  border: 1px solid #aab5c6;
+  border: 2px solid var(--ink);
   border-radius: 9px;
-  padding: 6px 10px;
-  font: 14px 'DM Sans';
+  padding: 6px 12px;
+  font: 16px 'DM Sans';
+}
+.admin-rename-form .admin-small-button {
+  min-height: 44px;
 }
 .admin-rename .admin-error {
   white-space: normal;
   max-width: 280px;
+}
+
+/* Account actions: one Manage menu per row */
+.admin-rename-form[hidden],
+.admin-menu[hidden],
+.admin-change-meta[hidden] {
+  display: none;
+}
+.admin-menu-button {
+  min-height: 44px;
+}
+.admin-menu-button::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 0 3px 9px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.admin-menu-button[aria-expanded='true']::after {
+  margin-bottom: -2px;
+  transform: rotate(-135deg);
+}
+.admin-menu-button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.admin-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 200px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(24, 37, 66, 0.14);
+}
+.admin-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: 500 15px 'DM Sans';
+  text-align: left;
+  cursor: pointer;
+}
+.admin-menu-item:hover,
+.admin-menu-item:focus-visible {
+  background: var(--navy-bg);
 }
