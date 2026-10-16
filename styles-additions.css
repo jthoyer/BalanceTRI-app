@@ -263,13 +263,12 @@
   gap: 14px;
 }
 /* Header labels never wrap: a two-line "Sign out" or "Add a race" reads as
-   broken. Refresh drops to the account links' 14px so it stays the quietest
-   thing in the row. */
+   broken. */
 .header-actions button,
 .header-actions a {
   white-space: nowrap;
 }
-#resetButton {
+.header-actions .text-button {
   font-size: 14px;
 }
 .hero-copy .view-toggle {
@@ -579,8 +578,27 @@
 .account-menu.hidden {
   display: none;
 }
+.account-menu-who {
+  margin: 0;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted, #566177);
+  font: 500 13px 'DM Sans';
+  overflow-wrap: anywhere;
+}
+/* A dot on the Menu button when an admin has requests waiting. */
+.account-menu-wrap.has-waiting #accountMenuButton::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
 .account-menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
   width: 100%;
   min-height: 44px;
   padding: 0 12px;
@@ -597,36 +615,34 @@
 }
 @media (max-width: 700px) {
   .auth-widget {
-    padding-left: 8px;
+    padding-left: 0;
   }
-  /* A signed-in admin puts four controls beside the logo; a slightly
-     smaller logo and a tighter primary button keep them on a 360px row. */
+  /* Two controls beside the logo: the primary action and one quiet control. */
   .brand-logo {
     height: 52px;
   }
   .header-actions .primary-button {
-    padding: 10px 12px;
+    padding: 10px 14px;
   }
   .header-actions .primary-button span {
     display: none;
   }
-  /* No room for the name on a phone; Sign out already says who is in. */
-  .auth-widget .auth-name {
-    display: none;
-  }
-  /* #signInButton/#signOutButton are .text-button, hidden by styles.css's
-     blanket mobile rule; the header sign-in control is meant to "stay
-     available regardless" (README), so unhide just this widget's buttons —
-     the dynamically-inserted "Send link" button already avoids that rule by
-     using .send-link-button instead of .text-button. */
+  /* #signInButton and #accountMenuButton are .text-button, hidden by
+     styles.css's blanket mobile rule; the header's sign-in control is meant to
+     "stay available regardless" (README), so unhide just this widget's buttons.
+     The Guide link is not needed in the row: the footer links it. */
   #authWidget .text-button {
     display: inline-flex;
   }
-  /* The guide link is a .text-button too; keep it on phones, where people
-     most often need the how-to. */
   .header-actions .guide-link {
-    display: inline-flex;
+    display: none;
   }
+}
+.app-footer-guide {
+  display: inline-block;
+  margin-left: 6px;
+  color: inherit;
+  font-weight: 600;
 }
 
 /* The sign-in overlay: the front door (shown once per visit, unless

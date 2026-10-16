@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026101501" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026101601" />
   </head>
   <body>
     <main class="shell">
@@ -56,11 +56,13 @@
         <a class="brand" id="brandLink" href="." aria-label="Balance Tri Club home"
           ><img class="brand-logo" src="assets/balance-logo.png" alt="Balance Tri Club"
         /></a>
-        <!-- Order runs from least to most personal: a utility, the page's one
-             primary action, then the account cluster at the far edge. -->
+        <!-- Kept short on purpose: the page's one primary action, then one quiet
+             control at the far edge. Signed in, that control is a Menu holding
+             the Guide, Admin and the account actions. Signed out, it is Sign in,
+             and the Guide link shows beside it from 700px up (the footer links
+             the Guide at every width). -->
         <div class="header-actions">
           <a class="text-button guide-link" href="guides/">Guide</a>
-          <button class="text-button" id="resetButton">Refresh</button>
           <button class="primary-button" id="heroAddButton">Add a race <span>+</span></button>
           <div class="auth-widget" id="authWidget"></div>
         </div>
@@ -346,7 +348,10 @@
            server secret and appears nowhere on this page. -->
       <footer class="app-footer">
         <div class="app-footer-bar">
-          <p class="app-footer-text">Something broken, or got an idea for the app?</p>
+          <p class="app-footer-text">
+            Something broken, or got an idea for the app?
+            <a class="app-footer-guide" href="guides/">New here? Read the guide.</a>
+          </p>
           <button
             type="button"
             class="feedback-button"

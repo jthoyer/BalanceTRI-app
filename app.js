@@ -394,6 +394,19 @@ function closeAccountMenu() {
   button.setAttribute('aria-expanded', 'false');
   menu.classList.add('hidden');
 }
+// The Admin entry for the Menu. The count of waiting requests rides in the
+// label, and a dot on the Menu button (see renderAccountMenu) says it is there
+// before the menu is opened.
+function adminItem() {
+  return elt(
+    'a',
+    {
+      class: 'account-menu-item',
+      href: adminWaiting ? 'admin.html#requests' : 'admin.html',
+    },
+    adminWaiting ? `Admin (${adminWaiting} waiting)` : 'Admin',
+  );
+}
 function renderAccountMenu() {
   const wrap = elt('div', { class: 'account-menu-wrap' });
   const button = elt(
@@ -406,8 +419,13 @@ function renderAccountMenu() {
       'aria-expanded': 'false',
       'aria-controls': 'accountMenu',
     },
-    'Account',
+    'Menu',
   );
+  // profiles is readable only by its owner, so this name is the viewer's own —
+  // self-XSS rather than one member reaching another. Same mistake either way,
+  // and elt() sets it as text, so nothing is parsed as HTML.
+  const who = elt('p', { class: 'account-menu-who' }, profile?.display_name || session.user.email);
+  const guide = elt('a', { class: 'account-menu-item', href: 'guides/' }, 'Guide');
   const changePassword = elt(
     'button',
     { type: 'button', class: 'account-menu-item', id: 'changePasswordButton' },
@@ -421,6 +439,9 @@ function renderAccountMenu() {
   const menu = elt(
     'div',
     { class: 'account-menu hidden', id: 'accountMenu' },
+    who,
+    guide,
+    ...(isAdmin ? [adminItem()] : []),
     changePassword,
     signOut,
   );
@@ -428,7 +449,7 @@ function renderAccountMenu() {
     const open = button.getAttribute('aria-expanded') !== 'true';
     button.setAttribute('aria-expanded', String(open));
     menu.classList.toggle('hidden', !open);
-    if (open) changePassword.focus();
+    if (open) menu.querySelector('.account-menu-item').focus();
   };
   wrap.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || menu.classList.contains('hidden')) return;
@@ -441,6 +462,7 @@ function renderAccountMenu() {
     showPasswordSheet('change');
   };
   signOut.onclick = () => db.auth.signOut();
+  if (isAdmin && adminWaiting) wrap.classList.add('has-waiting');
   wrap.append(button, menu);
   return wrap;
 }
@@ -473,22 +495,9 @@ function renderAuth() {
   const widget = $('#authWidget');
   widget.textContent = '';
   if (session) {
-    // profiles is readable only by its owner, so this name is the viewer's
-    // own — self-XSS rather than one member reaching another. Same mistake
-    // either way, and textContent costs nothing.
-    const name = document.createElement('span');
-    name.className = 'auth-name';
-    name.textContent = profile?.display_name || session.user.email;
-    // Name first, the account menu last: Sign out lives inside it, so it sits
-    // at the edge where it's easy to find and hard to hit by mistake.
-    widget.append(name);
-    if (isAdmin) {
-      const adminLink = document.createElement('a');
-      adminLink.className = 'text-button';
-      adminLink.href = adminWaiting ? 'admin.html#requests' : 'admin.html';
-      adminLink.textContent = adminWaiting ? `Admin (${adminWaiting} waiting)` : 'Admin';
-      widget.append(adminLink);
-    }
+    // One Menu at the edge: Guide, Admin, Change password and Sign out live
+    // inside it, so the header stays calm and Sign out is hard to hit by
+    // mistake. The name sits at the top of the menu, not in the header.
     widget.append(renderAccountMenu());
   } else {
     widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
@@ -2953,9 +2962,6 @@ $('#editForm').addEventListener('submit', async e => {
     submitBtn.disabled = false;
   }
 });
-$('#resetButton').onclick = () => {
-  loadRaces();
-};
 loadRaces();
 $('#authSheetBackdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuthSheet();

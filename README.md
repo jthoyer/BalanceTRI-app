@@ -88,7 +88,7 @@ If the file ever fails to load, `app.js` and `admin.js` check for `window.supaba
 - **Your password:** set a password for your own account, or change it.
 - **Allow-list:** check, add or remove one email address at a time. The list stores only keyed hashes, so it can't be displayed. Add works only for an account that already exists and has confirmed its email (guard G2); new members ask to join and appear under Requests.
 
-Signed-in admins see an **Admin** link in the calendar header.
+Signed-in admins see an **Admin** entry in the header Menu, with a yellow dot on the Menu button when requests are waiting.
 
 **Access.** Admins are rows in `private.admins` (`add_admin_console` migration); at launch that's one account. Every action is a `public.admin_*` function that refuses anyone else. Admins also need **two-factor sign-in**: the first visit sets up an authenticator app, and every later sign-in asks for its code. The functions check the session's `aal2` claim, so a stolen inbox alone isn't enough.
 
@@ -131,7 +131,7 @@ Members join with an email address and a password, then wait for the club admin 
 - `rejected` or `revoked` — a message, then signed out.
 - A reset password (`password_change_due`) — a **Set a new password** step that can't be closed; the only other choice is to sign out. Saving calls `updateUser`, then `password_changed()`. If the second call fails after the first worked, Save only retries the second, since Supabase refuses to set the same password twice. The device also remembers it (`balance-pwchanged-<user id>` in `localStorage`) and retries on the next load, before asking for another password. A reset older than 7 days (`reset_expired`) signs the person out with "This temporary password has expired…" instead (R6, enforced by the app only in phase 1).
 - Older accounts that signed in by emailed code are shown "Set a password so you can sign in without an email code." once (E1). The app marks an account that has a password with `has_password` in its user metadata (set on join, in this step and in Change password), and remembers on the device that the prompt was shown (`localStorage`, `balance-password-prompt-<user id>`). So the prompt can come back on another device, and not at all on this one after **Not now** or a successful save. Closing it any other way, or a failed save, lets it come back on the next load. If Supabase asks for a recent sign-in (`reauthentication_needed`), the prompt says to stay signed in and ask the admin for a temporary password; it never says to sign out, because an account with no password couldn't get back in. Only **Change password** on an account that has a password gives the sign-out-and-in advice.
-- **Change password** is in the header's Account menu, along with Sign out. It uses `updateUser`; with Supabase's "Secure password change" on, an old session is asked to sign in again first.
+- **Change password** is in the header Menu, along with Guide and Sign out. It uses `updateUser`; with Supabase's "Secure password change" on, an old session is asked to sign in again first.
 
 **Refused writes.** When a save is refused (a row-level-security error, or zero rows), the app re-reads the member's standing, so someone whose access was removed while the page was open is told so and signed out at once. While the auth sheet is open the page behind it is `inert`.
 
