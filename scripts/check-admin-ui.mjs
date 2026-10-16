@@ -1,6 +1,10 @@
 // Drives admin.html in headless Chromium against a stand-in Supabase client,
 // to check the console's B6 panels actually work: the Requests panel, the
-// waiting badge, decisions, password reset, "not set up yet", and sign-in.
+// waiting badge, decisions, password reset, "not set up yet", and sign-in;
+// plus Link entries / Unlink on the Accounts table (candidates fetched on
+// click, pre-ticked name matches, confirm lists renames, Cancel sends nothing,
+// 50 limit, server errors, PGRST202), the unlinked-entries match badge on
+// waiting requests, and the Linked/Unlinked activity wording with no Undo.
 //
 //   node scripts/check-admin-ui.mjs
 //
@@ -64,8 +68,9 @@ window.supabase = { createClient: () => ({
   rpc: (name, args) => {
     window.__calls.push(['rpc', name, args || null]);
     const f = fx().rpc[name];
-    if (f && f.error) return res({ data: null, error: f.error });
-    return res({ data: f === undefined ? null : f, error: null });
+    const out = f && f.error ? { data: null, error: f.error } : { data: f === undefined ? null : f, error: null };
+    const delay = (fx().rpcDelay || {})[name];
+    return delay ? new Promise(r => setTimeout(() => r(out), delay)) : res(out);
   },
   from: () => ({ select: () => ({ then: (ok, bad) => res({ data: fx().races, error: null }).then(ok, bad) }) }),
   // invokeError mimics supabase-js 2.117.1: an HTTP error carries the
@@ -759,6 +764,412 @@ console.log('10. The club roster hint');
     'a file with no addresses is refused and keeps the roster already loaded',
   );
   check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
+console.log('11. Link entries and Unlink (Accounts), and the orphan-match badge');
+const LINK_ROWS = [
+  {
+    entry_id: 'e-own',
+    race_id: 'r9',
+    race_name: 'Autumn Tri',
+    race_date: '2026-04-05',
+    name: 'Sam Lee',
+    events: ['Sprint'],
+    level: 'racing',
+    linked: true,
+    name_match: true,
+  },
+  {
+    entry_id: 'e-match',
+    race_id: 'r1',
+    race_name: 'Lake Run',
+    race_date: '2026-03-01',
+    name: 'sam lee ',
+    events: ['Olympic'],
+    level: 'planning',
+    linked: false,
+    name_match: true,
+  },
+  {
+    entry_id: 'e-other',
+    race_id: 'r2',
+    race_name: 'City Duathlon',
+    race_date: '2026-02-01',
+    name: 'Sam',
+    events: [],
+    level: 'considering',
+    linked: false,
+    name_match: false,
+  },
+];
+const linkFx = (rpc = {}, rpcDelay = {}) => {
+  const fx = fixtures({
+    rpcDelay,
+    rpc: {
+      admin_link_candidates: LINK_ROWS,
+      admin_link_entries: { linked: 1, renamed: 1 },
+      admin_unlink_entries: { unlinked: 1 },
+      admin_orphan_match_counts: [{ user_id: 'u1', matches: 2 }],
+      ...rpc,
+    },
+  });
+  // A member with no display name gets no button.
+  fx.rpc.admin_users.push({
+    ...fx.rpc.admin_users[1],
+    id: 'u9',
+    email: 'anon@example.com',
+    display_name: null,
+  });
+  return fx;
+};
+// The error line of the row whose panel (or failed open) is the one being worked on.
+const OPEN_ERR = '.admin-link-entries:has(.admin-link-panel) .admin-error:not(:empty)';
+const rpcCalls = async (page, name) =>
+  (await calls(page)).filter(c => c[0] === 'rpc' && c[1] === name);
+{
+  const { page, errors } = await open(linkFx());
+  await page.waitForSelector('#accounts');
+  check(
+    (await page.getByRole('button', { name: 'Link entries', exact: true }).count()) === 2,
+    'Link entries shows on the two accounts with a display name, not the one without',
+  );
+  check(
+    (await rpcCalls(page, 'admin_link_candidates')).length === 0,
+    'the candidate list is not fetched until the button is pressed',
+  );
+  await page.waitForSelector('.admin-orphans');
+  check(
+    (await page.locator('.admin-orphans').textContent()) === '2 unlinked entries match this name' &&
+      (await page.locator('.admin-orphans').count()) === 1,
+    'the waiting request with matches shows the badge (once)',
+  );
+  check(
+    (await page.getByRole('button', { name: 'Edit name' }).count()) === 2,
+    'Edit name is still there beside it',
+  );
+  await page
+    .locator('.admin-link-entries', { hasText: 'Link entries' })
+    .nth(1)
+    .getByRole('button', { name: 'Link entries', exact: true })
+    .click();
+  await page.waitForSelector('.admin-link-panel:not([hidden])');
+  const asked = await rpcCalls(page, 'admin_link_candidates');
+  check(
+    asked.length === 1 && asked[0][2].p_user_id === 'u1',
+    'pressing it asks for that account’s candidates',
+  );
+  const linkedBox = page.getByRole('checkbox', { name: /^Unlink Autumn Tri/ });
+  const matchBox = page.getByRole('checkbox', { name: /^Link Lake Run/ });
+  const otherBox = page.getByRole('checkbox', { name: /^Link City Duathlon/ });
+  check(
+    (await page.locator('[data-group=unlink]').count()) === 1 &&
+      (await page.locator('[data-group=link]').count()) === 1,
+    'two groups: Linked to this account and Unlinked entries',
+  );
+  check(
+    !(await linkedBox.isChecked()) && (await matchBox.isChecked()) && !(await otherBox.isChecked()),
+    'linked entries start unticked; the name match is pre-ticked; the other is not',
+  );
+  check(
+    (await page.locator('[data-group=link] li').first().textContent()).includes('Lake Run') &&
+      (await page.locator('[data-group=link] li').first().textContent()).includes('Olympic'),
+    'the match is listed first, with its race, date, name and events',
+  );
+
+  // Cancel sends nothing.
+  await page.getByRole('button', { name: 'Link chosen', exact: true }).click();
+  await page.waitForSelector('#confirmDialog[open]');
+  const body = await page.locator('#confirmDialogBody').textContent();
+  check(
+    (await page.locator('#confirmDialogTitle').textContent()) === 'Link 1 entry to Sam Lee?' &&
+      body.includes('sam lee  → Sam Lee, Lake Run'),
+    'the confirm states the count and lists the rename (old name → display name, race)',
+  );
+  await page.locator('#confirmDialogCancel').click();
+  await page.waitForSelector('#confirmDialog:not([open])', { state: 'attached' });
+  check(
+    (await rpcCalls(page, 'admin_link_entries')).length === 0,
+    'Cancel sends no admin_link_entries',
+  );
+  // Confirm sends the ticked ids for this account.
+  await otherBox.check();
+  await page.getByRole('button', { name: 'Link chosen', exact: true }).click();
+  await page.waitForSelector('#confirmDialog[open]');
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForFunction(() => window.__calls.some(c => c[1] === 'admin_link_entries'));
+  const sent = (await rpcCalls(page, 'admin_link_entries'))[0];
+  check(
+    sent[2].p_user_id === 'u1' &&
+      JSON.stringify([...sent[2].p_entry_ids].sort()) === JSON.stringify(['e-match', 'e-other']),
+    'Confirm sends admin_link_entries with p_user_id and exactly the ticked p_entry_ids',
+  );
+  await page.waitForSelector('#accounts .admin-notice');
+  check(
+    (await page.locator('#accounts .admin-notice').textContent()) ===
+      'Linked 1 entry to Sam Lee (1 renamed).',
+    'the console reloads and shows the outcome',
+  );
+  check(
+    (await rpcCalls(page, 'admin_stats')).length === 2,
+    'a success refreshes the console (showConsole)',
+  );
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
+console.log('11b. Unlink, server errors, nothing ticked, and the 50 limit');
+{
+  const { page, errors } = await open(
+    linkFx(
+      {
+        admin_link_entries: {
+          error: { message: 'One of those entries is missing or already linked.' },
+        },
+      },
+      { admin_unlink_entries: 1500 },
+    ),
+  );
+  await page.waitForSelector('#accounts');
+  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await page.waitForSelector('.admin-link-panel:not([hidden])');
+  const unlinkBtn = page.getByRole('button', { name: 'Unlink chosen', exact: true });
+  check(await unlinkBtn.isDisabled(), 'Unlink chosen is disabled with nothing ticked');
+  await page.getByRole('checkbox', { name: /^Link Lake Run/ }).uncheck();
+  check(
+    await page.getByRole('button', { name: 'Link chosen', exact: true }).isDisabled(),
+    'Link chosen is disabled with nothing ticked',
+  );
+  await page.getByRole('checkbox', { name: /^Link Lake Run/ }).check();
+  await page.getByRole('button', { name: 'Link chosen', exact: true }).click();
+  await page.waitForSelector('#confirmDialog[open]');
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForSelector(OPEN_ERR + ':not(:empty)');
+  check(
+    (await page.locator(OPEN_ERR).first().textContent()) ===
+      "Couldn't link: One of those entries is missing or already linked.",
+    'a server error shows in the row, prefixed',
+  );
+  check(
+    await page.getByRole('button', { name: 'Link chosen', exact: true }).isEnabled(),
+    'the buttons re-enable after an error',
+  );
+  await page.getByRole('checkbox', { name: /^Unlink Autumn Tri/ }).check();
+  await unlinkBtn.click();
+  await page.waitForSelector('#confirmDialog[open]');
+  check(
+    (await page.locator('#confirmDialogTitle').textContent()) === 'Unlink 1 entry from Sam Lee?' &&
+      (await page.locator('#confirmDialogBody').textContent()).includes(
+        'The names stay as they are',
+      ),
+    'the Unlink confirm states the count and that names stay',
+  );
+  await page.locator('#confirmDialogCancel').click();
+  await page.waitForSelector('#confirmDialog:not([open])', { state: 'attached' });
+  check(
+    (await rpcCalls(page, 'admin_unlink_entries')).length === 0,
+    'Cancel sends no admin_unlink_entries',
+  );
+  await unlinkBtn.click();
+  await page.waitForSelector('#confirmDialog[open]');
+  await page.locator('#confirmDialogConfirm').click();
+  await page.waitForFunction(() => window.__calls.some(c => c[1] === 'admin_unlink_entries'));
+  // Ticking another box while the call is in flight must not re-enable either button.
+  await page.evaluate(() => document.querySelector('[data-entry="e-other"]').click());
+  // The buttons now read "Linking…" / "Unlinking…", so find them by position.
+  check(
+    (await page.locator('.admin-link-actions button').nth(0).isDisabled()) &&
+      (await page.locator('.admin-link-actions button').nth(1).isDisabled()),
+    'ticking a box mid-flight does not re-enable Link or Unlink',
+  );
+  const sent = (await rpcCalls(page, 'admin_unlink_entries'))[0];
+  check(
+    sent[2].p_user_id === 'u1' && JSON.stringify(sent[2].p_entry_ids) === JSON.stringify(['e-own']),
+    'Unlink sends admin_unlink_entries with the account and the ticked linked entries',
+  );
+  await page.close();
+
+  // More than 50 ticked is refused in the browser, with a visible message.
+  const many = Array.from({ length: 51 }, (_, i) => ({
+    ...LINK_ROWS[1],
+    entry_id: 'm' + i,
+    race_name: 'Race ' + i,
+  }));
+  const big = await open(linkFx({ admin_link_candidates: many }));
+  await big.page.waitForSelector('#accounts');
+  await big.page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await big.page.waitForSelector('.admin-link-panel:not([hidden])');
+  await big.page.getByRole('button', { name: 'Link chosen', exact: true }).click();
+  await big.page.waitForSelector(OPEN_ERR + ':not(:empty)');
+  check(
+    (await big.page.locator(OPEN_ERR).first().textContent()).startsWith(
+      'Link at most 50 at a time.',
+    ) && !(await big.page.locator('#confirmDialog[open]').count()),
+    'ticking 51 is refused with a message and no confirm',
+  );
+  check((await rpcCalls(big.page, 'admin_link_entries')).length === 0, 'and nothing is sent');
+  await big.page.close();
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+}
+
+console.log('11c. The migration is not applied yet');
+{
+  const missing = { error: { code: 'PGRST202', message: 'Could not find the function' } };
+  const { page, errors } = await open(
+    linkFx({
+      admin_link_candidates: missing,
+      admin_orphan_match_counts: missing,
+    }),
+  );
+  await page.waitForSelector('#accounts');
+  check(
+    (await page.locator('.admin-request').count()) === 2 &&
+      (await page.locator('.admin-orphans').count()) === 0,
+    'the console loads and no badge shows when admin_orphan_match_counts is missing',
+  );
+  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await page.waitForSelector(OPEN_ERR + ':not(:empty)');
+  check(
+    (await page.locator(OPEN_ERR).first().textContent()).includes("isn't set up yet") &&
+      (await page.getByRole('button', { name: 'Link entries', exact: true }).count()) === 2 &&
+      (await page.getByRole('button', { name: 'Edit name' }).count()) === 2,
+    'PGRST202 says linking is not set up yet; the rest of the row is unchanged',
+  );
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+{
+  // The badge function erroring (not just missing) must not break the page either.
+  const { page, errors } = await open(
+    linkFx({ admin_orphan_match_counts: { error: { message: 'boom' } } }),
+  );
+  await page.waitForSelector('#requests');
+  check(
+    (await page.locator('.admin-request').count()) === 2 &&
+      (await page.locator('.admin-orphans').count()) === 0,
+    'an error from admin_orphan_match_counts shows no badge and changes nothing else',
+  );
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
+console.log('11d. Activity: a link is described as one and has no Undo');
+{
+  const fx = linkFx();
+  fx.races = [{ id: 'r1', name: 'Lake Run', date: '2026-03-01' }];
+  fx.rpc.admin_activity = [
+    {
+      id: 7,
+      table_name: 'entries',
+      row_id: 'e-match',
+      op: 'UPDATE',
+      old_row: { name: 'sam lee ', race_id: 'r1', created_by: null, level: 'planning' },
+      new_row: { name: 'Sam Lee', race_id: 'r1', created_by: 'u1', level: 'planning' },
+      changed_at: NOW,
+      changed_by: 'owner',
+      changed_by_label: 'Owner',
+      changed_role: 'authenticated',
+      undone_at: null,
+    },
+    {
+      id: 8,
+      table_name: 'entries',
+      row_id: 'e-x',
+      op: 'UPDATE',
+      old_row: { name: 'Jo', race_id: 'r1', created_by: 'u2', level: 'planning' },
+      new_row: { name: 'Jo', race_id: 'r1', created_by: null, level: 'planning' },
+      changed_at: NOW,
+      changed_by: 'owner',
+      changed_by_label: 'Owner',
+      changed_role: 'authenticated',
+      undone_at: null,
+    },
+    {
+      id: 10,
+      table_name: 'entries',
+      row_id: 'e-z',
+      op: 'UPDATE',
+      old_row: { name: 'Al', race_id: 'r1', created_by: 'gone', level: 'planning' },
+      new_row: { name: 'Al', race_id: 'r1', created_by: null, level: 'planning' },
+      changed_at: NOW,
+      changed_by: null,
+      changed_by_label: null,
+      changed_role: null,
+      undone_at: null,
+    },
+    {
+      id: 9,
+      table_name: 'entries',
+      row_id: 'e-y',
+      op: 'UPDATE',
+      old_row: { name: 'Jo', race_id: 'r1', created_by: 'u2', level: 'planning' },
+      new_row: { name: 'Jo', race_id: 'r1', created_by: 'u2', level: 'racing' },
+      changed_at: NOW,
+      changed_by: 'u2',
+      changed_by_label: 'Jo',
+      changed_role: 'authenticated',
+      undone_at: null,
+    },
+  ];
+  const { page, errors } = await open(fx);
+  await page.waitForSelector('.admin-activity');
+  const items = page.locator('.admin-activity > li');
+  const text = i => items.nth(i).locator('.admin-change-text').textContent();
+  check(
+    (await text(0)).startsWith('Linked Sam Lee’s') ||
+      (await text(0)).startsWith("Linked Sam Lee's"),
+    'a created_by change to an account reads "Linked …"',
+  );
+  check(
+    (await text(1)).startsWith('Unlinked Jo'),
+    'a created_by change to null reads "Unlinked …"',
+  );
+  check(
+    (await items.nth(0).getByRole('button', { name: 'Undo' }).count()) === 0 &&
+      (await items.nth(1).getByRole('button', { name: 'Undo' }).count()) === 0,
+    'neither has an Undo button',
+  );
+  check(
+    (await items.nth(3).getByRole('button', { name: 'Undo' }).count()) === 1 &&
+      (await text(3)).startsWith('Changed Jo'),
+    'an ordinary entry change still reads "Changed …" and keeps Undo',
+  );
+  check(
+    (await text(2)).startsWith('Owner changed') &&
+      !(await text(2)).includes('Linked') &&
+      (await items.nth(2).getByRole('button', { name: 'Undo' }).count()) === 0,
+    'an owner change with no admin behind it (deleted account, dashboard) reads neutrally, no Undo',
+  );
+  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+  await page.close();
+}
+
+console.log('11e. At 375px the Link panel and Edit name row fit the viewport');
+{
+  const page = await browser.newPage({ viewport: { width: 375, height: 900 } });
+  await page.route('**/vendor/supabase-js-*.js', r =>
+    r.fulfill({ contentType: 'text/javascript', body: STUB }),
+  );
+  await page.addInitScript(f => {
+    window.__fixtures = f;
+  }, linkFx());
+  await page.goto(base + '/admin.html');
+  await page.waitForSelector('#accounts');
+  await page.getByRole('button', { name: 'Link entries', exact: true }).nth(1).click();
+  await page.waitForSelector('.admin-link-panel:not([hidden])');
+  const over = await page.evaluate(() =>
+    [...document.querySelectorAll('.admin-link-entries *, .admin-rename *')]
+      .filter(n => n.offsetParent && n.getBoundingClientRect().right > innerWidth + 0.5)
+      .map(n => n.tagName + '.' + n.className + ' ' + Math.round(n.getBoundingClientRect().right)),
+  );
+  check(
+    over.length === 0,
+    'no Link / Edit name element extends past 375px: ' + over.slice(0, 4).join(', '),
+  );
+  await page.screenshot({
+    path: process.env.SCREENSHOT_375 || '/tmp/admin-375.png',
+    fullPage: true,
+  });
   await page.close();
 }
 

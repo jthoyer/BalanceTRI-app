@@ -506,3 +506,71 @@
   white-space: normal;
   max-width: 280px;
 }
+
+/* Link entries: a scrolling checklist inside the account row (R8: it can list
+   every unowned entry on the calendar, so it must not push the table wider). */
+.admin-link-entries {
+  display: block;
+  margin-top: 6px;
+}
+/* The table cells are nowrap and the table scrolls sideways, so the controls in
+   the Account cell get an explicit width that fits the viewport (card and cell
+   padding come off 100vw) and wrap inside it. Covers Edit name's row too. */
+.admin-rename,
+.admin-link-entries {
+  white-space: normal;
+  width: min(420px, calc(100vw - 110px));
+}
+.admin-link-panel {
+  min-width: 0;
+}
+.admin-link-group {
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+.admin-link-group legend {
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.admin-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.admin-link-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.admin-link-row input {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.admin-link-row .admin-change-meta {
+  display: block;
+}
+.admin-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.admin-link-entries .admin-error {
+  white-space: normal;
+  max-width: 280px;
+}
+/* The confirm dialog's body is one paragraph; the rename list uses line breaks. */
+#confirmDialogBody {
+  white-space: pre-line;
+  max-height: 50vh;
+  overflow-y: auto;
+}

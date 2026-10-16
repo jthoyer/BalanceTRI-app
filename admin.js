@@ -442,6 +442,9 @@ async function showConsole(opts = {}) {
   const waiting = requests ? requests.filter(r => r.status === 'pending').length : 0;
   const raceNames = new Map(races.map(r => [r.id, `${r.name} (${day(r.date)})`]));
   const me = users.find(u => u.is_admin && u.email);
+  // Only worth asking when someone is waiting, and never allowed to break the page.
+  // Filled in after the first render, so a slow or missing function never delays the page.
+  const matches = new Map();
   show(
     el(
       'div',
@@ -458,11 +461,11 @@ async function showConsole(opts = {}) {
       el('button', { class: 'text-button', type: 'button', onclick: showConsole }, 'Refresh'),
     ),
     me && !me.on_allow_list ? allowListWarning(me.email) : null,
-    requestsSection(requests, opts.notice),
+    requestsSection(requests, opts.notice, matches),
     statsSection(stats),
     activitySection(activity, raceNames),
     removedSection(removed),
-    usersSection(users, requests !== null),
+    usersSection(users, requests !== null, opts.accountNotice),
     passwordSection(),
     allowListSection(),
   );
@@ -472,7 +475,26 @@ async function showConsole(opts = {}) {
     document.getElementById('requests')?.scrollIntoView();
     history.replaceState(null, '', location.pathname + location.search);
   }
+  if (waiting) {
+    orphanMatches().then(found => {
+      if (!found.size) return;
+      found.forEach((n, id) => matches.set(id, n));
+      document.getElementById('requests')?.refresh?.();
+    });
+  }
   if (opts.focus === 'requests') document.querySelector('#requests h2')?.focus();
+  // Back from Link / Unlink: the outcome sits at the top of Accounts.
+  if (opts.accountNotice) document.getElementById('accounts')?.scrollIntoView();
+}
+// Per waiting request, how many unowned entries carry its name (admin_orphan_match_counts,
+// from the link-entries migration). A hint only: no function, or any error, means no badge.
+async function orphanMatches() {
+  try {
+    const { data } = await rpcOptional('admin_orphan_match_counts');
+    return new Map((data || []).map(m => [m.user_id, m.matches]));
+  } catch {
+    return new Map();
+  }
 }
 function allowListWarning(email) {
   return el(
@@ -552,6 +574,14 @@ const HIDDEN_FIELDS = new Set([
   'updated_by',
   'slug',
 ]);
+// An entries UPDATE that moved created_by: Link entries or Unlink (admin_link_entries).
+function ownerChanged(change) {
+  return (
+    change.table_name === 'entries' &&
+    change.op === 'UPDATE' &&
+    (change.old_row?.created_by ?? null) !== (change.new_row?.created_by ?? null)
+  );
+}
 function describe(change, raceNames) {
   const row = change.new_row || change.old_row || {};
   // Profiles are logged on a rename only (add_access_requests migration).
@@ -563,6 +593,15 @@ function describe(change, raceNames) {
     const who = row.name || 'someone';
     if (change.op === 'INSERT') return `Added ${who}'s commitment (${fmt(row.level)}) to ${race}`;
     if (change.op === 'DELETE') return `Removed ${who}'s commitment from ${race}`;
+    if (ownerChanged(change)) {
+      // No admin behind it (null changed_by): the FK clearing a deleted account's
+      // entries, or a dashboard edit. Don't call that a link.
+      if (!change.changed_by)
+        return `Owner changed on ${who}'s commitment on ${race} (dashboard or system)`;
+      return change.new_row.created_by
+        ? `Linked ${who}'s commitment on ${race} to an account`
+        : `Unlinked ${who}'s commitment on ${race} from an account`;
+    }
     return `Changed ${who}'s commitment on ${race}`;
   }
   const race = `${row.name || 'a race'}${row.date ? ` (${day(row.date)})` : ''}`;
@@ -664,6 +703,10 @@ function activityItem(change, raceNames) {
   if (change.table_name === 'profiles') {
     // admin_undo handles entries and races only. A rename is put right by
     // asking the member, or in the dashboard.
+  } else if (ownerChanged(change)) {
+    // admin_undo restores every column but created_by, so undoing this would put
+    // the old name back and leave the entry linked. Reverse it from the account.
+    action = el('span', { class: 'admin-badge' }, 'Reverse in Accounts → Link entries');
   } else if (change.undone_at) {
     action = el('span', { class: 'admin-badge' }, `Undone ${when(change.undone_at)}`);
   } else {
@@ -754,7 +797,7 @@ function removedItem(r) {
 }
 
 // ----- Accounts -----
-function usersSection(users, resetsReady) {
+function usersSection(users, resetsReady, notice) {
   const yes = (flag, text) =>
     el(
       'span',
@@ -772,6 +815,7 @@ function usersSection(users, resetsReady) {
         u.display_name ? el('span', { class: 'admin-change-meta' }, u.display_name) : null,
         u.is_admin ? el('span', { class: 'admin-badge' }, 'Admin') : null,
         u.display_name ? renameControl(u) : null,
+        u.display_name ? linkControl(u) : null,
       ),
       el('td', {}, yes(u.on_allow_list, 'Listed')),
       el('td', {}, yes(u.confirmed, 'Confirmed')),
@@ -781,8 +825,9 @@ function usersSection(users, resetsReady) {
       resetsReady ? el('td', {}, u.is_admin ? null : resetCell(u)) : null,
     ),
   );
-  return card(
+  const accounts = card(
     'Accounts',
+    notice || null,
     el(
       'p',
       { class: 'admin-hint' },
@@ -817,6 +862,8 @@ function usersSection(users, resetsReady) {
       ),
     ),
   );
+  accounts.id = 'accounts';
+  return accounts;
 }
 
 // ----- Allow-list -----
@@ -909,7 +956,7 @@ function parseRoster(text) {
   return new Set((text.match(EMAIL_IN_TEXT) || []).map(e => e.trim().toLowerCase()));
 }
 const onRoster = r => !!rosterEmails && !!r.email && rosterEmails.has(r.email.trim().toLowerCase());
-function requestsSection(requests, notice) {
+function requestsSection(requests, notice, matches) {
   if (requests === null) {
     return el(
       'section',
@@ -1070,7 +1117,7 @@ function requestsSection(requests, notice) {
     batchBar.hidden = !rows.some(r => r.status === 'pending');
     list.replaceChildren(
       ...(rows.length
-        ? rows.map(r => requestItem(r, choose))
+        ? rows.map(r => requestItem(r, choose, matches?.get(r.user_id)))
         : [
             el(
               'li',
@@ -1087,7 +1134,7 @@ function requestsSection(requests, notice) {
   render();
   syncBatch();
   syncRoster();
-  return el(
+  const section = el(
     'section',
     { class: 'admin-card', id: 'requests' },
     el('h2', { tabindex: -1 }, 'Requests'),
@@ -1102,6 +1149,9 @@ function requestsSection(requests, notice) {
     batchError,
     list,
   );
+  // The match badges arrive after the first render.
+  section.refresh = render;
+  return section;
 }
 // What a batch did: how many went through, and who was skipped and why.
 function batchNotice(data, requests) {
@@ -1133,7 +1183,7 @@ function batchNotice(data, requests) {
       : null,
   );
 }
-function requestItem(r, choose) {
+function requestItem(r, choose, orphanCount) {
   const error = errorLine();
   const name = r.display_name;
   const reason = el('input', {
@@ -1190,6 +1240,16 @@ function requestItem(r, choose) {
   // member sees "access removed" (my_access_status), so say so here too.
   if (r.status === 'approved' && !r.listed) {
     notes.push(el('span', { class: 'admin-badge admin-warn' }, 'Not on the allow-list'));
+  }
+  // A hint only: nothing is linked on approval. Link entries is a separate step.
+  if (r.status === 'pending' && orphanCount > 0) {
+    notes.push(
+      el(
+        'span',
+        { class: 'admin-badge admin-orphans' },
+        `${orphanCount} unlinked ${orphanCount === 1 ? 'entry matches' : 'entries match'} this name`,
+      ),
+    );
   }
   if (r.reset_pending) {
     // Spec R6: the console marks an expired temporary password.
@@ -1301,6 +1361,246 @@ function renameControl(u) {
     }
   };
   box.append(open, form, error);
+  return box;
+}
+
+// ----- Link entries (admin_link_candidates / admin_link_entries / admin_unlink_entries) -----
+// Entries with no owner (created_by null) predate attribution or came from the
+// dashboard. Linking attaches them to this account and renames them to its
+// display name; Unlink clears the owner and leaves the name. The list is only
+// fetched when the button is pressed, so the console loads without the migration.
+const LINK_LIMIT = 50;
+const fullDay = isoDate => `${day(isoDate)} ${isoDate.slice(0, 4)}`;
+function linkControl(u) {
+  const box = el('div', { class: 'admin-link-entries' });
+  const error = errorLine();
+  const open = el(
+    'button',
+    { class: 'secondary-button admin-small-button', type: 'button', 'aria-expanded': 'false' },
+    'Link entries',
+  );
+  const panel = el('div', { class: 'admin-link-panel', hidden: true });
+  const label = u.display_name;
+  let rows = [];
+  let loading = false;
+
+  const entryLabel = c =>
+    `${c.race_name}, ${fullDay(c.race_date)}: ${c.name}${c.events?.length ? ` (${c.events.join(', ')}${c.level ? `, ${c.level}` : ''})` : c.level ? ` (${c.level})` : ''}`;
+
+  function group(title, items, kind) {
+    const boxes = items.map(c => {
+      const input = el('input', {
+        type: 'checkbox',
+        'data-entry': c.entry_id,
+        'aria-label': `${kind === 'unlink' ? 'Unlink' : 'Link'} ${entryLabel(c)}`,
+      });
+      input.checked = kind === 'link' && c.name_match;
+      return { c, input };
+    });
+    const fieldset = el(
+      'fieldset',
+      { class: 'admin-link-group', 'data-group': kind },
+      el('legend', {}, `${title} (${items.length})`),
+      items.length
+        ? el(
+            'ul',
+            { class: 'admin-link-list' },
+            boxes.map(({ c, input }) =>
+              el(
+                'li',
+                {},
+                el(
+                  'label',
+                  { class: 'admin-link-row' },
+                  input,
+                  el(
+                    'span',
+                    {},
+                    el('strong', {}, c.race_name),
+                    ` · ${fullDay(c.race_date)} · `,
+                    c.name,
+                    el(
+                      'span',
+                      { class: 'admin-change-meta' },
+                      [c.events?.length ? c.events.join(', ') : null, c.level]
+                        .filter(Boolean)
+                        .join(' · '),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : el(
+            'p',
+            { class: 'admin-empty' },
+            kind === 'unlink' ? 'None yet.' : 'No unlinked entries on live races.',
+          ),
+    );
+    return { fieldset, boxes };
+  }
+
+  function render() {
+    const linked = group(
+      'Linked to this account',
+      rows.filter(c => c.linked),
+      'unlink',
+    );
+    const orphans = group(
+      'Unlinked entries',
+      rows.filter(c => !c.linked),
+      'link',
+    );
+    const linkBtn = el(
+      'button',
+      { class: 'primary-button admin-small-button', type: 'button', disabled: true },
+      'Link chosen',
+    );
+    const unlinkBtn = el(
+      'button',
+      { class: 'secondary-button admin-small-button', type: 'button', disabled: true },
+      'Unlink chosen',
+    );
+    const close = el('button', { class: 'text-button', type: 'button' }, 'Close');
+    const ticked = g => g.boxes.filter(b => b.input.checked).map(b => b.c);
+    // True while a link or unlink is in flight: ticking a box must not re-enable either button.
+    let inFlight = false;
+    const sync = () => {
+      linkBtn.disabled = inFlight || !ticked(orphans).length;
+      unlinkBtn.disabled = inFlight || !ticked(linked).length;
+    };
+    for (const { input } of [...linked.boxes, ...orphans.boxes]) {
+      input.addEventListener('change', () => {
+        error.set('');
+        sync();
+      });
+    }
+    sync();
+    const busy = on => {
+      inFlight = on;
+      sync();
+    };
+    linkBtn.onclick = async () => {
+      const picked = ticked(orphans);
+      if (!picked.length) return;
+      if (picked.length > LINK_LIMIT) {
+        return error.set(
+          `Link at most ${LINK_LIMIT} at a time. Untick ${picked.length - LINK_LIMIT}.`,
+        );
+      }
+      const renames = picked.filter(c => c.name !== label.trim());
+      const ok = await confirmDialog({
+        title: `Link ${picked.length} ${picked.length === 1 ? 'entry' : 'entries'} to ${label}?`,
+        body:
+          `${label} will own ${picked.length === 1 ? 'this entry' : `these ${picked.length} entries`} and can write ${picked.length === 1 ? 'its' : 'their'} results. Every linked entry is named “${label}”.` +
+          (renames.length
+            ? `\n\nRenamed:\n${renames.map(c => `${c.name} → ${label}, ${c.race_name}`).join('\n')}`
+            : '') +
+          '\n\nThe old names are kept in the admin log.',
+        confirmLabel: 'Link',
+      });
+      if (!ok) return;
+      error.set('');
+      busy(true);
+      setBusy(linkBtn, 'Linking…');
+      try {
+        const out = await rpc('admin_link_entries', {
+          p_user_id: u.id,
+          p_entry_ids: picked.map(c => c.entry_id),
+        });
+        showConsole({
+          accountNotice: el(
+            'p',
+            { class: 'admin-notice', role: 'status' },
+            `Linked ${out?.linked ?? picked.length} ${(out?.linked ?? picked.length) === 1 ? 'entry' : 'entries'} to ${label}${out?.renamed ? ` (${out.renamed} renamed)` : ''}.`,
+          ),
+        });
+      } catch (err) {
+        error.set("Couldn't link: " + err.message);
+        clearBusy(linkBtn);
+        busy(false);
+      }
+    };
+    unlinkBtn.onclick = async () => {
+      const picked = ticked(linked);
+      if (!picked.length) return;
+      if (picked.length > LINK_LIMIT) {
+        return error.set(
+          `Unlink at most ${LINK_LIMIT} at a time. Untick ${picked.length - LINK_LIMIT}.`,
+        );
+      }
+      const ok = await confirmDialog({
+        title: `Unlink ${picked.length} ${picked.length === 1 ? 'entry' : 'entries'} from ${label}?`,
+        body: `${label} will no longer own ${picked.length === 1 ? 'it' : 'them'}. The names stay as they are (“${label}”), so by name ${label} can still write the results. Rename in the dashboard to detach fully.`,
+        confirmLabel: 'Unlink',
+      });
+      if (!ok) return;
+      error.set('');
+      busy(true);
+      setBusy(unlinkBtn, 'Unlinking…');
+      try {
+        const out = await rpc('admin_unlink_entries', {
+          p_user_id: u.id,
+          p_entry_ids: picked.map(c => c.entry_id),
+        });
+        const n = out?.unlinked ?? picked.length;
+        showConsole({
+          accountNotice: el(
+            'p',
+            { class: 'admin-notice', role: 'status' },
+            `Unlinked ${n} ${n === 1 ? 'entry' : 'entries'} from ${label}. Names were left as they are.`,
+          ),
+        });
+      } catch (err) {
+        error.set("Couldn't unlink: " + err.message);
+        clearBusy(unlinkBtn);
+        busy(false);
+      }
+    };
+    close.onclick = () => {
+      panel.hidden = true;
+      open.hidden = false;
+      open.setAttribute('aria-expanded', 'false');
+      open.focus();
+    };
+    panel.replaceChildren(
+      el(
+        'p',
+        { class: 'admin-hint' },
+        `Entries that match “${label}” are ticked. Linking renames them to “${label}”.`,
+      ),
+      linked.fieldset,
+      orphans.fieldset,
+      el('div', { class: 'admin-link-actions' }, linkBtn, unlinkBtn, close),
+    );
+  }
+
+  open.onclick = async () => {
+    if (loading) return;
+    loading = true;
+    error.set('');
+    setBusy(open, 'Loading…');
+    try {
+      const result = await rpcOptional('admin_link_candidates', { p_user_id: u.id });
+      if (result.missing) {
+        error.set(
+          "Linking entries isn't set up yet: the link-entries migration hasn't been applied.",
+        );
+      } else {
+        rows = result.data || [];
+        render();
+        panel.hidden = false;
+        open.hidden = true;
+        open.setAttribute('aria-expanded', 'true');
+        panel.querySelector('input')?.focus();
+      }
+    } catch (err) {
+      error.set("Couldn't load entries: " + err.message);
+    }
+    loading = false;
+    clearBusy(open);
+  };
+  box.append(open, panel, error);
   return box;
 }
 
