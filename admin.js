@@ -704,8 +704,9 @@ function activityItem(change, raceNames) {
     // admin_undo handles entries and races only. A rename is put right by
     // asking the member, or in the dashboard.
   } else if (ownerChanged(change)) {
-    // admin_undo restores every column but created_by, so undoing this would put
-    // the old name back and leave the entry linked. Reverse it from the account.
+    // admin_undo refuses this (20261016120000): it restores every column but
+    // created_by, so it would put the old name back and leave the entry linked.
+    // Hiding the button is a courtesy. Reverse it from the account.
     action = el('span', { class: 'admin-badge' }, 'Reverse in Accounts → Link entries');
   } else if (change.undone_at) {
     action = el('span', { class: 'admin-badge' }, `Undone ${when(change.undone_at)}`);
