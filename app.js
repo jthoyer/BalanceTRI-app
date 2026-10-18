@@ -356,6 +356,10 @@ function gateButton(btn) {
 // rebuilds fresh on every render (the roster's per-entry Edit buttons, Add
 // your commitment, Remove commitment) gate themselves inline instead.
 function applyMemberGating() {
+  // Signed out there is nothing to click: the header's Sign in / Sign up
+  // lockup and the race screen's own lockup stand in for these controls.
+  $('#heroAddButton').classList.toggle('hidden', !session);
+  $('#raceScreenEditButton').classList.toggle('hidden', !session);
   gateButton($('#heroAddButton'));
   gateButton($('#removeRaceButton'));
   gateButton($('#raceScreenEditButton'));
@@ -386,6 +390,35 @@ function elt(tag, props = {}, ...kids) {
   }
   node.append(...kids);
   return node;
+}
+// What a signed-out visitor sees where a write control would be: Sign in and
+// Sign up side by side, opening the same auth sheet as everything else. In the
+// header it is a quiet Sign in beside a primary Sign up; on the race screen it
+// is a pair of full buttons under a one-line reason.
+function authLockup({ header = false, message = '' } = {}) {
+  const signIn = elt(
+    'button',
+    {
+      type: 'button',
+      class: header ? 'text-button' : 'primary-button',
+      id: header ? 'signInButton' : null,
+    },
+    'Sign in',
+  );
+  const signUp = elt(
+    'button',
+    { type: 'button', class: header ? 'primary-button' : 'secondary-button' },
+    'Sign up',
+  );
+  signIn.onclick = () => requireSignIn(message || 'Sign in');
+  signUp.onclick = () => requireSignUp();
+  const buttons = elt('div', { class: 'auth-lockup-buttons' }, signIn, signUp);
+  return elt(
+    'div',
+    { class: header ? 'auth-lockup auth-lockup-header' : 'auth-lockup' },
+    ...(message ? [elt('p', { class: 'auth-lockup-message' }, message)] : []),
+    buttons,
+  );
 }
 function closeAccountMenu() {
   const button = $('#accountMenuButton');
@@ -502,12 +535,11 @@ function renderAuth() {
     // mistake. The name sits at the top of the menu, not in the header.
     widget.append(renderAccountMenu());
   } else {
-    widget.innerHTML = `<button type="button" class="text-button" id="signInButton">Sign in</button>`;
-    // Opens the same auth sheet the nudge/gate use, rather than expanding a
-    // form inline into the header — that used to squeeze the topbar's other
-    // buttons on narrow phones (the "condensing" bug: real document flow,
-    // not an overlay, competing for space in .header-actions).
-    $('#signInButton').onclick = () => requireSignIn('Sign in');
+    // Both buttons open the same auth sheet the nudge/gate use, rather than
+    // expanding a form inline into the header — that used to squeeze the
+    // topbar's other buttons on narrow phones (the "condensing" bug: real
+    // document flow, not an overlay, competing for space in .header-actions).
+    widget.append(authLockup({ header: true }));
   }
   renderMemberBanner();
   applyMemberGating();
@@ -1093,6 +1125,15 @@ function requireSignIn(title) {
   showSheetBackdrop();
   focusAuthSheet();
   return false;
+}
+// Same gate as requireSignIn, opened on the Join form for a new member.
+function requireSignUp() {
+  if (session) return;
+  authSheetReturnFocus = document.activeElement;
+  authSheetMode = 'gate';
+  openJoinForm($('#authSheetBody'), { cancel: closeAuthSheet });
+  showSheetBackdrop();
+  focusStep($('#authSheetBody'));
 }
 // The name step for a signed-in account that hasn't asked to join.
 function showNameSheet() {
@@ -1909,7 +1950,9 @@ function render() {
     ? `No ${past ? 'past' : 'upcoming'} races match ${joinWith(active, 'and')}. Try ${joinWith(tips, 'or')}.`
     : past
       ? 'No past races yet. Races move here once their date has passed.'
-      : 'No races here yet. Add a race to get started.';
+      : session
+        ? 'No races here yet. Add a race to get started.'
+        : 'No races here yet.';
   if (!editingId && !openId) {
     $('#emptyState').classList.toggle('hidden', shown.length > 0);
     $('#upcomingHeading').classList.toggle('hidden', shown.length === 0);
@@ -2537,8 +2580,18 @@ function makeDetails(race) {
     wrap.querySelector('.race-website-header').remove();
     wrap.querySelector('.race-website-body').remove();
   }
-  wrap.querySelector('.commit-toggle-button').classList.toggle('hidden', !!state.form.commitOpen);
-  wrap.querySelector('.commitment-fields').classList.toggle('hidden', !state.form.commitOpen);
+  // Signed out, the toggle and the form stay hidden (even if a saved draft
+  // left the form open) and the Sign in / Sign up lockup takes their place.
+  wrap
+    .querySelector('.commit-toggle-button')
+    .classList.toggle('hidden', !session || !!state.form.commitOpen);
+  wrap
+    .querySelector('.commitment-fields')
+    .classList.toggle('hidden', !session || !state.form.commitOpen);
+  if (!session)
+    wrap
+      .querySelector('.commit-toggle-button')
+      .before(authLockup({ message: 'Sign in to add your commitment' }));
   if (!editingEntry) wrap.querySelector('.remove-commit-button').remove();
   if (isMember) buildRoster(wrap.querySelector('.roster-body'), eventKeys, eventGroups, levelLabel);
   else buildMembersOnlyRoster(wrap.querySelector('.roster-body'), race);
