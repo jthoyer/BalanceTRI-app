@@ -1,0 +1,13 @@
+# GitHub Pages builds this site with Jekyll. Publish only the app itself.
+# The migrations, tests, scripts and notes stay in the repository but are not
+# served at jthoyer.github.io/BalanceTRI-app/.
+exclude:
+  - supabase
+  - scripts
+  - README.md
+  - CLAUDE.md
+  - package.json
+  - package-lock.json
+  - eslint.config.mjs
+  - eslint-suppressions.json
+  - node_modules

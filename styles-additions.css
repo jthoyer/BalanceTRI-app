@@ -1660,3 +1660,13 @@
   font: 700 14px 'DM Sans';
   cursor: pointer;
 }
+/* Race screen for a visitor or an account waiting for approval: counts and a
+   way in, no names. */
+.members-only-count {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-weight: 700;
+}
+.members-only-note {
+  margin: 0 0 12px;
+}

@@ -1306,6 +1306,12 @@ async function initAuth() {
       profile = null;
       isMember = false;
       access = null;
+      // Forget the name and the name search on sign-out, so the next person
+      // on a shared device doesn't find them in localStorage.
+      state.user = '';
+      state.filter = '';
+      state.form = { ...state.form, editingName: '' };
+      persist();
       if (authSheetMode === 'locked' || authSheetMode === 'account')
         closeAuthSheet({ force: true });
     }
@@ -1711,10 +1717,10 @@ function closeEditScreen() {
   target.focus({ preventScroll: true });
   editScreenReturnFocus = null;
 }
-// Which names the last load fetched. Full names are for approved members only
-// (the entries read policy); everyone else gets public_entries(), which cuts
-// each name to its first word on the server. When membership changes, the
-// races are loaded again so the roster matches.
+// Which names the last load fetched. Names are for approved members only (the
+// entries read policy). Everyone else gets public_race_counts(): how many
+// members are going to each race and how many are locked in, with no names.
+// When membership changes, the races are loaded again so the roster matches.
 let loadedFullNames = null;
 async function loadRaces() {
   try {
@@ -1730,9 +1736,9 @@ async function loadRaces() {
       // signed in. Anonymous visitors never see them at all.
       .is('deleted_at', null)
       .order('date');
-    const [{ data, error }, firstNames, resultRows] = await Promise.all([
+    const [{ data, error }, publicCounts, resultRows] = await Promise.all([
       racesQuery,
-      fullNames ? null : db.rpc('public_entries'),
+      fullNames ? null : loadPublicCounts(),
       // Results are for approved members only; nobody else asks for them.
       fullNames
         ? db
@@ -1746,33 +1752,37 @@ async function loadRaces() {
     if (resultRows?.error) console.warn('results not loaded:', resultRows.error);
     resultsLoaded = !!resultRows && !resultRows.error;
     const resultByEntry = new Map((resultRows?.data || []).map(r => [r.entry_id, r]));
-    // PGRST202: public_entries() isn't on this database yet. Show the races
-    // with empty rosters rather than fail the whole calendar.
-    if (firstNames?.error && firstNames.error.code !== 'PGRST202') throw firstNames.error;
-    const byRace = new Map();
-    for (const e of firstNames?.data || []) {
-      if (!byRace.has(e.race_id)) byRace.set(e.race_id, []);
-      byRace.get(e.race_id).push(e);
-    }
+    const countsByRace = publicCounts || new Map();
     loadedFullNames = fullNames;
-    races = (data || []).map(r => ({
-      id: r.id,
-      name: r.name,
-      date: r.date,
-      location: r.location,
-      url: r.url,
-      slug: r.slug || null,
-      events: r.events || [],
-      eventType: r.event_type || '',
-      clubFocus: r.club_focus ? 'Y' : 'N',
-      balanceBolt: r.event_type === 'Balance Bolt' ? 'Y' : 'N',
-      entries: (fullNames ? r.entries : byRace.get(r.id) || []).map(e => ({
+    races = (data || []).map(r => {
+      const entries = (fullNames ? r.entries || [] : []).map(e => ({
         ...e,
         events: (e.events || []).map(String),
         level: String(e.level),
         result: resultByEntry.get(e.id) || null,
-      })),
-    }));
+      }));
+      const counts = fullNames
+        ? {
+            committed: entries.filter(e => e.level !== 'not').length,
+            locked: entries.filter(e => e.level === 'locked').length,
+          }
+        : countsByRace.get(r.id) || { committed: 0, locked: 0 };
+      return {
+        id: r.id,
+        name: r.name,
+        date: r.date,
+        location: r.location,
+        url: r.url,
+        slug: r.slug || null,
+        events: r.events || [],
+        eventType: r.event_type || '',
+        clubFocus: r.club_focus ? 'Y' : 'N',
+        balanceBolt: r.event_type === 'Balance Bolt' ? 'Y' : 'N',
+        entries,
+        committed: counts.committed,
+        locked: counts.locked,
+      };
+    });
   } catch (err) {
     // The member sees a generic "could not reach" message; the real cause
     // (network, RLS, a bad column in the select) is only ever visible here.
@@ -1794,6 +1804,30 @@ async function loadRaces() {
   }
   syncOpenRaceUrl();
   render();
+}
+// Counts for everyone who isn't an approved member: race id -> { committed,
+// locked }. No names. public_race_counts() sends counts only. Until that
+// migration is live, fall back to the old public_entries() and keep only the
+// counts, so no name is ever stored or shown on the page. PGRST202 on both
+// means an older database: the races show with no counts.
+async function loadPublicCounts() {
+  const counts = new Map();
+  const res = await db.rpc('public_race_counts');
+  if (!res.error) {
+    for (const c of res.data || [])
+      counts.set(c.race_id, { committed: Number(c.committed) || 0, locked: Number(c.locked) || 0 });
+    return counts;
+  }
+  if (res.error.code !== 'PGRST202') throw res.error;
+  const old = await db.rpc('public_entries');
+  if (old.error && old.error.code !== 'PGRST202') throw old.error;
+  for (const e of old.data || []) {
+    const c = counts.get(e.race_id) || { committed: 0, locked: 0 };
+    if (e.level !== 'not') c.committed += 1;
+    if (e.level === 'locked') c.locked += 1;
+    counts.set(e.race_id, c);
+  }
+  return counts;
 }
 function render() {
   // Supabase fires its start-up auth event, which re-renders, before the
@@ -1835,7 +1869,9 @@ function render() {
     .filter(r => (state.viewFilter === 'club' ? r.clubFocus === 'Y' : true))
     .filter(byType)
     .sort((a, b) => (past ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
-  const query = state.filter.trim().toLocaleLowerCase();
+  // The name search is for approved members: nobody else has names to search.
+  $('#athleteFilterLabel').classList.toggle('hidden', !isMember);
+  const query = isMember ? state.filter.trim().toLocaleLowerCase() : '';
   const shown = query
     ? sorted.filter(r => r.entries.some(e => e.name.toLocaleLowerCase().includes(query)))
     : sorted;
@@ -1900,14 +1936,14 @@ function render() {
       b.textContent = 'Club focus';
       h2.append(b);
     }
-    const locked = race.entries.filter(e => e.level === 'locked').length;
+    const locked = race.locked;
     // Approved members also see how many results are in; everyone else gets
     // the line they always had.
     const resultCount = isMember ? race.entries.filter(e => e.result).length : 0;
     node.querySelector('.race-meta').textContent = past
       ? `${locked} raced` +
         (resultCount ? ` · ${resultCount} result${resultCount === 1 ? '' : 's'}` : '')
-      : `${locked} locked in of ${race.entries.length}`;
+      : `${locked} locked in of ${race.committed}`;
     summary.href = racePath(race);
     summary.onclick = e => {
       // A real href is what makes "open in new tab" and "copy link address" work,
@@ -1961,6 +1997,21 @@ function render() {
     }
   }
   applyMemberGating();
+}
+// What a visitor, or an account waiting for approval, sees in place of the
+// roster: the counts, and why there are no names. They are never sent names.
+function buildMembersOnlyRoster(host, race) {
+  const count = document.createElement('p');
+  count.className = 'members-only-count';
+  count.textContent = race.committed
+    ? `${race.committed} member${race.committed === 1 ? '' : 's'} going · ${race.locked} locked in`
+    : 'No commitments yet.';
+  const note = document.createElement('p');
+  note.className = 'helper-text members-only-note';
+  note.textContent = session
+    ? 'Names show once the club approves your account.'
+    : 'Names are for club members. Sign in to see who is going.';
+  host.append(count, note);
 }
 // Builds the club-commitments roster as DOM nodes. Every member-supplied
 // string — the event-group label and the entry name — goes in via textContent
@@ -2475,7 +2526,8 @@ function makeDetails(race) {
   wrap.querySelector('.commit-toggle-button').classList.toggle('hidden', !!state.form.commitOpen);
   wrap.querySelector('.commitment-fields').classList.toggle('hidden', !state.form.commitOpen);
   if (!editingEntry) wrap.querySelector('.remove-commit-button').remove();
-  buildRoster(wrap.querySelector('.roster-body'), eventKeys, eventGroups, levelLabel);
+  if (isMember) buildRoster(wrap.querySelector('.roster-body'), eventKeys, eventGroups, levelLabel);
+  else buildMembersOnlyRoster(wrap.querySelector('.roster-body'), race);
   const commitToggle = wrap.querySelector('.commit-toggle-button'),
     commitFields = wrap.querySelector('.commitment-fields');
   commitToggle.onclick = () => {

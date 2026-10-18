@@ -124,6 +124,10 @@ window.supabase = { createClient: () => ({
       return res({ data: null, error: null });
     }
     if (name === 'admin_status') return res({ data: { admin: false }, error: null });
+    if (name === 'public_race_counts') {
+      if (!fx().publicCounts) return res({ data: null, error: { code: 'PGRST202', message: 'not found' } });
+      return res({ data: fx().publicCounts, error: null });
+    }
     if (name === 'public_entries') return res({ data: fx().publicEntries || [], error: null });
     return res({ data: null, error: { code: 'PGRST202', message: 'not found' } });
   },
@@ -1272,41 +1276,78 @@ for (const width of [375, 1100]) {
   }
 }
 
-console.log('16. Visitors see first names; approved members see full names');
+console.log('16. Visitors see counts only; approved members see full names');
 {
   const full = [
     { name: 'Sam Lee', events: [], level: 'locked' },
-    { name: 'Jo van der Berg', events: [], level: 'locked' },
+    { name: 'Jo van der Berg', events: [], level: 'considering' },
   ];
   const races = [{ ...withRaces({}).races[0], entries: full }];
+  const publicCounts = [{ race_id: 'r1', committed: 2, locked: 1 }];
+  // The old function, for a database without public_race_counts yet.
   const publicEntries = [
     { race_id: 'r1', name: 'Sam', events: [], level: 'locked' },
-    { race_id: 'r1', name: 'Jo', events: [], level: 'locked' },
+    { race_id: 'r1', name: 'Jo', events: [], level: 'considering' },
   ];
-  const roster = async page => {
+  const openRace = async page => {
     // A visitor first gets the sign-in nudge; close it to reach the calendar.
     if (await page.locator('#authSheetBackdrop').isVisible()) await page.keyboard.press('Escape');
+    const meta = await page.locator('.race-meta').first().innerText();
+    const search = await page.locator('#athleteFilter').isVisible();
     await page.locator('.race-summary').first().click();
-    await page.locator('.roster-name').first().waitFor();
-    return page.locator('.roster-name').allTextContents();
+    await page.locator('#raceScreenBody .roster-body').waitFor();
+    return { meta, search };
   };
-  for (const [label, fx, want] of [
-    ['a visitor', { session: null, access: null }, ['Jo', 'Sam']],
-    ['a pending account', signedIn(accessOf('pending')), ['Jo', 'Sam']],
-    ['an approved member', signedIn(accessOf('approved')), ['Jo van der Berg', 'Sam Lee']],
+  for (const [label, fx, extra] of [
+    ['a visitor', { session: null, access: null }, { publicCounts }],
+    ['a visitor (older database)', { session: null, access: null }, { publicEntries }],
+    ['a pending account', signedIn(accessOf('pending')), { publicCounts }],
   ]) {
-    const { page, errors } = await open({ ...fx, races, publicEntries });
-    const names = (await roster(page)).sort();
-    check(JSON.stringify(names) === JSON.stringify(want), `${label} sees ${want.join(', ')}`);
-    const asked = (await page.evaluate(() => window.__calls)).some(
-      c => c[0] === 'rpc' && c[1] === 'public_entries',
+    const { page, errors } = await open({ ...fx, races, ...extra });
+    const { meta, search } = await openRace(page);
+    check(meta.includes('1 locked in of 2'), `${label}: the race card shows the counts`);
+    check(!search, `${label}: no name search`);
+    check((await page.locator('.roster-name').count()) === 0, `${label}: no roster names`);
+    const body = await page.locator('#raceScreenBody').textContent();
+    check(
+      !body.includes('Sam') && !body.includes('Jo '),
+      `${label}: no name anywhere on the race page`,
     );
-    if (label === 'a visitor')
-      check(asked, 'a visitor loads names from public_entries, not the entries table');
+    check(body.includes('2 members going'), `${label}: the race page shows the count`);
+    const stored = await page.evaluate(() =>
+      JSON.stringify(typeof races === 'undefined' ? '' : races),
+    );
+    check(!stored.includes('Sam'), `${label}: no name kept in page memory`);
+    const calls = await page.evaluate(() => window.__calls);
+    check(
+      !(await page.evaluate(() => window.__reads || [])).includes('entries'),
+      `${label}: the entries table is never asked for`,
+    );
+    if (extra.publicCounts)
+      check(
+        !calls.some(c => c[0] === 'rpc' && c[1] === 'public_entries'),
+        `${label}: never asks for public_entries`,
+      );
     check(
       errors.length === 0,
       `${label}: no page errors` + (errors.length ? ': ' + errors.join('; ') : ''),
     );
+    await page.close();
+  }
+  {
+    const { page, errors } = await open({
+      ...signedIn(accessOf('approved')),
+      races,
+      publicCounts,
+    });
+    await openRace(page);
+    await page.locator('.roster-name').first().waitFor();
+    const names = (await page.locator('.roster-name').allTextContents()).sort();
+    check(
+      JSON.stringify(names) === JSON.stringify(['Jo van der Berg', 'Sam Lee']),
+      'an approved member sees full names',
+    );
+    check(errors.length === 0, 'an approved member: no page errors');
     await page.close();
   }
 }

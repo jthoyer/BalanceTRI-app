@@ -48,7 +48,7 @@
          visitors can get fresh HTML paired with a stale cached stylesheet
          (new markup, old rules: an unstyled, oddly-sized render). -->
     <link rel="stylesheet" href="styles.css?v=2026092403" />
-    <link rel="stylesheet" href="styles-additions.css?v=2026101602" />
+    <link rel="stylesheet" href="styles-additions.css?v=2026101801" />
   </head>
   <body>
     <main class="shell">
@@ -148,7 +148,7 @@
             ><button type="button" class="choice when-toggle-btn" data-when="past">Past</button>
           </div>
         </div>
-        <label class="athlete-filter" for="athleteFilter"
+        <label class="athlete-filter hidden" id="athleteFilterLabel" for="athleteFilter"
           ><span>Filter by athlete</span
           ><input
             id="athleteFilter"
@@ -582,6 +582,6 @@
          hCaptcha switch-on, since neither script carried a version query
          string before this. -->
     <script src="shared.js?v=2026100901"></script>
-    <script src="app.js?v=2026101304"></script>
+    <script src="app.js?v=2026101801"></script>
   </body>
 </html>
