@@ -987,7 +987,7 @@ function openNameStep(host, { error, name = '', note = '', cancel } = {}) {
 // and the write gate) opens this one overlay — a bottom sheet on desktop,
 // full screen on mobile (styles-additions.css), never document flow that
 // could squeeze other layout. As a "nudge" it appears once per visit for a
-// signed-out browser (unless snoozed) offering Sign In, Join or View Calendar;
+// signed-out browser (unless snoozed) offering Sign In, Sign Up or View Calendar;
 // tapping outside it (desktop), the close button, or View Calendar all
 // dismiss it the same way — self-dismissing, never blocking. As a "gate"
 // requireSignIn() opens it to require sign-in before a write goes through
@@ -1062,7 +1062,7 @@ function showAuthSheetNudge() {
   // A bare literal (not built from a variable) for the no-unsanitized rule;
   // the sign-in and join forms the buttons open are built as DOM instead.
   $('#authSheetBody').innerHTML =
-    `<p class="auth-sheet-hint">Sign in to add or edit race information. New here? Join, and the club admin will approve your account. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Want to know more about the club? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a>.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetJoinButton">Join</button><button type="button" class="secondary-button" id="authSheetBrowseButton">View Calendar</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
+    `<p class="auth-sheet-hint">Sign in to add or edit race information. New here? Sign up, and the club admin will approve your account. You can view the calendar anytime without signing in.</p><p class="auth-sheet-hint">Want to know more about the club? Visit <a href="https://balancetriclub.com.au" target="_blank" rel="noopener">balancetriclub.com.au</a>.</p><div class="auth-sheet-actions"><button type="button" class="primary-button" id="authSheetSignInButton">Sign In</button><button type="button" class="secondary-button" id="authSheetJoinButton">Sign Up</button><button type="button" class="secondary-button" id="authSheetBrowseButton">View Calendar</button></div><label class="auth-sheet-checkbox"><input type="checkbox" id="authSheetSnooze" /><span>Don't ask me to sign in again for 10 days</span></label>`;
   $('.auth-sheet').setAttribute('aria-label', 'Sign in');
   $('#authSheetSnooze').onchange = e => {
     authSheetSnoozeWanted = e.target.checked;
