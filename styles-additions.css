@@ -642,6 +642,30 @@
     display: none;
   }
 }
+/* Signed-out stand-in for the write buttons: Sign in and Sign up side by side.
+   In the header it sits where the quiet Sign in control was. */
+.auth-lockup-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-lockup-header .auth-lockup-buttons {
+  gap: 14px;
+}
+.auth-lockup:not(.auth-lockup-header) .auth-lockup-buttons button {
+  flex: 1 1 120px;
+  min-height: 44px;
+}
+.auth-lockup:not(.auth-lockup-header) .secondary-button {
+  background: transparent;
+  border: 1.5px solid rgba(24, 37, 66, 0.4);
+  color: var(--ink);
+}
+.auth-lockup-message {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
 .app-footer-guide {
   display: inline-block;
   margin-left: 6px;
