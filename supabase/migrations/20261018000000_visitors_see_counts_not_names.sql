@@ -18,8 +18,9 @@
 -- only the counts. The old page needs public_entries(), and would show
 -- empty counts once it is dropped.
 --
--- Not yet applied to the live project. After applying, rename this file to
--- the version Supabase records (see CLAUDE.md).
+-- Applied to the live project on 18 October 2026 through the dashboard SQL
+-- editor, after the matching app.js went live. The SQL editor records no
+-- migration version, so this file keeps its own timestamp.
 -- ---------------------------------------------------------------------------
 
 create function public.public_race_counts()
