@@ -140,7 +140,7 @@ window.supabase = { createClient: () => ({
       update: () => { writing = true; window.__calls.push(['write', table, 'update']); return q; },
       delete: () => { writing = true; window.__calls.push(['write', table, 'delete']); return q; },
       upsert: p => { writing = true; window.__calls.push(['write', table, 'upsert', p]); return q; },
-      select: () => q,
+      select: cols => { window.__selects = [...(window.__selects || []), [table, cols]]; return q; },
       is: () => q,
       eq: () => q,
       order: () => q,
@@ -1320,7 +1320,9 @@ console.log('16. Visitors see counts only; approved members see full names');
     check(!stored.includes('Sam'), `${label}: no name kept in page memory`);
     const calls = await page.evaluate(() => window.__calls);
     check(
-      !(await page.evaluate(() => window.__reads || [])).includes('entries'),
+      !(await page.evaluate(() => window.__selects || [])).some(
+        ([table, cols]) => table === 'entries' || String(cols).includes('entries'),
+      ),
       `${label}: the entries table is never asked for`,
     );
     if (extra.publicCounts)

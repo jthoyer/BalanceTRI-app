@@ -1312,6 +1312,9 @@ async function initAuth() {
       state.filter = '';
       state.form = { ...state.form, editingName: '' };
       persist();
+      // Drop the names already in memory now, not when the reload returns.
+      races.forEach(r => (r.entries = []));
+      resultDraft = null;
       if (authSheetMode === 'locked' || authSheetMode === 'account')
         closeAuthSheet({ force: true });
     }
@@ -1813,14 +1816,22 @@ async function loadRaces() {
 async function loadPublicCounts() {
   const counts = new Map();
   const res = await db.rpc('public_race_counts');
+  // Any other failure shows the races with no counts rather than failing the
+  // whole calendar for every visitor.
+  if (res.error && res.error.code !== 'PGRST202') {
+    console.warn('race counts not loaded:', res.error);
+    return counts;
+  }
   if (!res.error) {
     for (const c of res.data || [])
       counts.set(c.race_id, { committed: Number(c.committed) || 0, locked: Number(c.locked) || 0 });
     return counts;
   }
-  if (res.error.code !== 'PGRST202') throw res.error;
   const old = await db.rpc('public_entries');
-  if (old.error && old.error.code !== 'PGRST202') throw old.error;
+  if (old.error) {
+    if (old.error.code !== 'PGRST202') console.warn('race counts not loaded:', old.error);
+    return counts;
+  }
   for (const e of old.data || []) {
     const c = counts.get(e.race_id) || { committed: 0, locked: 0 };
     if (e.level !== 'not') c.committed += 1;
@@ -2003,9 +2014,12 @@ function render() {
 function buildMembersOnlyRoster(host, race) {
   const count = document.createElement('p');
   count.className = 'members-only-count';
-  count.textContent = race.committed
-    ? `${race.committed} member${race.committed === 1 ? '' : 's'} going · ${race.locked} locked in`
-    : 'No commitments yet.';
+  const past = race.date < sydneyToday();
+  count.textContent = past
+    ? `${race.locked} raced`
+    : race.committed
+      ? `${race.committed} member${race.committed === 1 ? '' : 's'} going · ${race.locked} locked in`
+      : 'No commitments yet.';
   const note = document.createElement('p');
   note.className = 'helper-text members-only-note';
   note.textContent = session
