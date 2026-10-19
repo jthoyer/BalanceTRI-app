@@ -1182,27 +1182,30 @@ showToast('Could not save: ' + err.message, 'error');</pre>
         <div class="guide-block">
           <h3>App feedback</h3>
           <p class="block-note">
-            The page's foot: <code>.app-footer</code> (a <code>--line</code> rule above, a
-            <code>--muted</code> prompt) and <code>.feedback-button</code>, an outlined secondary
-            button — white with a 60% <code>--ink</code> border, <code>--navy-bg</code> on hover,
-            solid <code>--ink</code> while open. It is a disclosure (<code>aria-expanded</code>,
-            <code>aria-controls</code>) for an inline <code>.feedback-panel</code>, not a modal
+            The page's foot: <code>.app-footer</code>, full width, outside <code>&lt;main&gt;</code>.
+            A blue band (<code>#3694d7</code>) holds the logo, a short prompt and
+            <code>.feedback-button</code>, a navy pill with white text and a yellow arrow. Below it
+            a navy block (<code>#0d1b2a</code>) holds three link columns and the legal line;
+            column headings are yellow. Text on the blue is navy (5.3:1; white would be 3.4:1).
+            The button is a disclosure (<code>aria-expanded</code>, <code>aria-controls</code>) for
+            an inline <code>.feedback-panel</code>, which opens above the band, not a modal
             <code>&lt;dialog&gt;</code>: hCaptcha's challenge renders in the page, under a modal's
             top layer, where it couldn't be answered. Opening moves focus to the text box; Escape or
             Cancel collapses it and returns focus to the button, keeping the text. Errors go in a
             <code>.feedback-status</code> <code>role="alert"</code> that stays rendered at zero size
             when empty, so it is announced. The honeypot (<code>.feedback-trap</code>) is
-            off-screen, <code>aria-hidden</code> and <code>tabindex="-1"</code>. Measured: text
-            floor 5.7:1 (error on <code>#fdecec</code>), UI floor 3.9:1 (button border on
-            <code>--canvas</code>).
+            off-screen, <code>aria-hidden</code> and <code>tabindex="-1"</code>. Below 700px the
+            band and the columns stack and every link is at least 44px tall.
           </p>
           <div class="specimen demo-card-width">
-            <div class="app-footer" style="padding: 20px 0 0">
-              <div class="app-footer-bar">
-                <p class="app-footer-text">Something broken, or got an idea for the app?</p>
-                <button type="button" class="feedback-button" aria-expanded="false">
-                  Send feedback
-                </button>
+            <div class="app-footer" style="margin-top: 0">
+              <div class="app-footer-band">
+                <div class="app-footer-bar" style="padding: 20px">
+                  <p class="app-footer-text">Something broken? Got an idea?</p>
+                  <button type="button" class="feedback-button" aria-expanded="false">
+                    Tell us what to fix
+                  </button>
+                </div>
               </div>
               <div class="feedback-panel">
                 <form class="feedback-form" onsubmit="return false;">
