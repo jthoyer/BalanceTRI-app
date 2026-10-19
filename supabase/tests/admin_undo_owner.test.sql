@@ -1,4 +1,4 @@
--- Tests for migration 20261016120000_admin_undo_refuses_owner_changes.sql:
+-- Tests for migration 20261016043135_admin_undo_refuses_owner_changes.sql:
 -- admin_undo refuses to undo a Link or Unlink, because undo puts the old name
 -- back but cannot restore created_by. Run with supabase/tests/run.sh.
 --

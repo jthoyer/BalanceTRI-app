@@ -1,10 +1,10 @@
 -- ---------------------------------------------------------------------------
 -- Admin console: link and unlink orphan entries to an account.
 --
--- NOT APPLIED to the live project. Apply with apply_migration (project
--- shkfwuogrldbqldpipxd), then rename this file to the version Supabase
--- recorded (list_migrations), as CLAUDE.md requires. The verification
--- queries a human runs afterwards are at the end of this file.
+-- Applied to the live project (shkfwuogrldbqldpipxd). It was run outside the
+-- recorded history, so its history row was added by hand under this file's own
+-- version, 20261016000000 (statements left empty; this file is the source).
+-- The verification queries a human runs afterwards are at the end of this file.
 --
 -- The problem: entries written before attribution existed, or from the
 -- dashboard, have created_by = null. Nobody owns them, so the member they
