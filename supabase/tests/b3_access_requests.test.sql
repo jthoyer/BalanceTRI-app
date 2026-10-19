@@ -207,25 +207,27 @@ select t.ok(not t.listed('erin@example.com'), 'the address is no longer listed')
 -- ---------------------------------------------------------------------------
 select t.as_user('hank');
 select public.request_access('Hank Hill');
-select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Hank')$$, '42501');
+-- Insert under the account's own display name so the name guard passes and the
+-- write-access rule (42501) is what refuses it.
+select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', (select display_name from public.profiles where id = auth.uid()))$$, '42501');
 select t.fails($$insert into public.races (name, date) values ('Hank Race', '2027-02-02')$$, '42501');
 select t.ok(t.rows($$update public.entries set level = 'locked'$$) = 0, 'a pending account updates no entries');
 select t.ok(t.rows($$delete from public.entries$$) = 0, 'a pending account deletes no entries');
 select t.ok(t.rows($$update public.races set name = 'Hacked'$$) = 0, 'a pending account updates no races');
 reset role;
 select t.as_user('jo');
-select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Jo')$$, '42501');
+select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', (select display_name from public.profiles where id = auth.uid()))$$, '42501');
 reset role;
 select t.as_user('alice');
-select t.ok(t.rows($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Alice')$$) = 1, 'an existing member can still add an entry');
-select t.ok(t.rows($$update public.entries set level = 'locked' where name = 'Alice'$$) = 1, 'an existing member can still update an entry');
-select t.ok(t.rows($$delete from public.entries where name = 'Alice'$$) = 1, 'an existing member can still delete an entry');
+select t.ok(t.rows($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Alice Archer')$$) = 1, 'an existing member can still add an entry');
+select t.ok(t.rows($$update public.entries set level = 'locked' where name = 'Alice Archer'$$) = 1, 'an existing member can still update an entry');
+select t.ok(t.rows($$delete from public.entries where name = 'Alice Archer'$$) = 1, 'an existing member can still delete an entry');
 reset role;
 select t.ok((select count(*) from public.entries where race_id = '11111111-1111-1111-1111-111111111111') = 1, 'the seed entry is untouched');
 select t.ok((select name from public.races where id = '11111111-1111-1111-1111-111111111111') = 'Test Race', 'the seed race is untouched');
 -- An approved account can write at once.
 select t.as_user('carol');
-select t.ok(t.rows($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Carol')$$) = 1, 'an approved account can write');
+select t.ok(t.rows($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', (select display_name from public.profiles where id = auth.uid()))$$) = 1, 'an approved account can write');
 reset role;
 
 -- ---------------------------------------------------------------------------
@@ -302,7 +304,7 @@ insert into auth.users (id, email, email_confirmed_at) values (gen_random_uuid()
 update t.u set id = (select id from auth.users where email = 'ghost@example.com') where name = 'ghost';
 select t.as_user('ghost');
 select t.ok(not private.is_allow_listed(), 'AFTER G1: signing up with that address is not listed');
-select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', 'Ghost')$$, '42501');
+select t.fails($$insert into public.entries (race_id, name) values ('11111111-1111-1111-1111-111111111111', (select display_name from public.profiles where id = auth.uid()))$$, '42501');
 reset role;
 
 -- ---------------------------------------------------------------------------
@@ -372,7 +374,12 @@ insert into admin_calls values
   ('select public.admin_password_reset_begin(gen_random_uuid())'),
   ('select public.admin_password_reset_finish(gen_random_uuid())'),
   ('select public.admin_password_reset_abort(gen_random_uuid())'),
-  ('select public.admin_approve_requests(array[gen_random_uuid()])');
+  ('select public.admin_approve_requests(array[gen_random_uuid()])'),
+  ('select public.admin_rename_member(gen_random_uuid(), ''Test Name'')'),
+  ('select * from public.admin_link_candidates(gen_random_uuid())'),
+  ('select public.admin_link_entries(gen_random_uuid(), array[gen_random_uuid()])'),
+  ('select public.admin_unlink_entries(gen_random_uuid(), array[gen_random_uuid()])'),
+  ('select * from public.admin_orphan_match_counts()');
 grant select on admin_calls to anon, authenticated;
 select t.ok((select count(*) from admin_calls) = (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'admin\_%' and p.proname <> 'admin_status') + 1, 'every admin function is in the list (admin_requests appears twice)');
 
