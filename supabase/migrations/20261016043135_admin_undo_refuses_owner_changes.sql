@@ -1,9 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- admin_undo refuses to undo an owner change on an entry.
 --
--- NOT APPLIED to the live project. Apply with apply_migration (project
--- shkfwuogrldbqldpipxd), then rename this file to the version Supabase
--- recorded (list_migrations), as CLAUDE.md requires.
+-- Applied to the live project (shkfwuogrldbqldpipxd) as version 20261016043135.
 --
 -- The gap (accepted when Link entries shipped, 20261016000000): Link renames an
 -- entry and sets created_by. admin_undo restores every column of the old row
