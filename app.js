@@ -1407,6 +1407,9 @@ async function removeEntry(raceId, name) {
   if (!data || !data.length)
     throw await refusedWrite(new Error('This action is for approved members only.'));
 }
+// The column defaults to 'Location TBC' for races added without one. That is a
+// placeholder, not a place, so it is never shown.
+const placeOf = race => (race.location && race.location !== 'Location TBC' ? race.location : '');
 async function addEvent(raceId, event) {
   const race = races.find(r => r.id === raceId);
   const events = [...new Set([...(race?.events || []), event])];
@@ -1928,7 +1931,9 @@ function render() {
     ? sorted.filter(r => r.entries.some(e => e.name.toLocaleLowerCase().includes(query)))
     : sorted;
   const filter = $('#athleteFilter');
-  filter.value = state.filter;
+  // Typing already put this text there; writing it back moves the caret and
+  // breaks IME composition.
+  if (document.activeElement !== filter) filter.value = state.filter;
   $('#eventTypeFilter').value = state.eventTypeFilter;
   const active = [],
     tips = [];
@@ -1994,10 +1999,13 @@ function render() {
     // Approved members also see how many results are in; everyone else gets
     // the line they always had.
     const resultCount = isMember ? race.entries.filter(e => e.result).length : 0;
-    node.querySelector('.race-meta').textContent = past
+    const counts = past
       ? `${locked} raced` +
         (resultCount ? ` · ${resultCount} result${resultCount === 1 ? '' : 's'}` : '')
       : `${locked} locked in of ${race.committed}`;
+    node.querySelector('.race-meta').textContent = placeOf(race)
+      ? `${placeOf(race)} · ${counts}`
+      : counts;
     summary.href = racePath(race);
     summary.onclick = e => {
       // A real href is what makes "open in new tab" and "copy link address" work,
@@ -2914,7 +2922,7 @@ function renderNextRace() {
     day: 'numeric',
     month: 'short',
   });
-  $('#nextRaceMeta').textContent = race.location ? `${when} · ${race.location}` : when;
+  $('#nextRaceMeta').textContent = placeOf(race) ? `${when} · ${placeOf(race)}` : when;
   const label = days > 1 ? `${days} days to go` : count;
   card.setAttribute(
     'aria-label',
@@ -2953,9 +2961,11 @@ document.querySelectorAll('#raceForm,#editForm').forEach(f => {
   f.eventType.onchange = () => applyEventTypeFields(f);
   applyEventTypeFields(f);
 });
+let filterPersistTimer;
 $('#athleteFilter').oninput = e => {
   state.filter = e.target.value;
-  persist();
+  clearTimeout(filterPersistTimer);
+  filterPersistTimer = setTimeout(persist, 400);
   render();
 };
 $('#eventTypeFilter').onchange = e => {
