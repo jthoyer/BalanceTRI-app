@@ -458,7 +458,7 @@ function renderAccountMenu() {
   // self-XSS rather than one member reaching another. Same mistake either way,
   // and elt() sets it as text, so nothing is parsed as HTML.
   const who = elt('p', { class: 'account-menu-who' }, profile?.display_name || session.user.email);
-  const guide = elt('a', { class: 'account-menu-item', href: 'guides/' }, 'Guide');
+  const guide = elt('a', { class: 'account-menu-item', href: `${BASE_PATH}guides/` }, 'Guide');
   const changePassword = elt(
     'button',
     { type: 'button', class: 'account-menu-item', id: 'changePasswordButton' },
@@ -1557,6 +1557,13 @@ const BASE_PATH = computeBasePath(location.pathname);
 // A plain href (no click handler) so it's a real navigation to the app root —
 // clicking it from a race screen, or from the main page itself, reloads fresh.
 $('#brandLink').href = BASE_PATH;
+// The same goes for every other link in index.html that points at a sibling
+// page. A relative href resolves against the current URL, so on a race screen
+// "guides/" becomes /race/guides/ — which 404.html reads as a race called
+// "guides" — and the member lands back on the splash instead of the guide.
+document.querySelectorAll('a[href="."], a[href="guides/"]').forEach(a => {
+  a.href = BASE_PATH + (a.getAttribute('href') === '.' ? '' : 'guides/');
+});
 function slugFromPath(pathname) {
   const m = pathname.match(ROUTE_RE);
   if (!m) return null;
