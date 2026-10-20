@@ -1410,13 +1410,15 @@ async function removeEntry(raceId, name) {
 // The column defaults to 'Location TBC' for races added without one. That is a
 // placeholder, not a place, so it is never shown.
 const placeOf = race => (race.location && race.location !== 'Location TBC' ? race.location : '');
+// One append inside the database (add_race_event), not a read-modify-write of
+// the whole array: two members adding different distances at once both keep
+// theirs.
 async function addEvent(raceId, event) {
-  const race = races.find(r => r.id === raceId);
-  const events = [...new Set([...(race?.events || []), event])];
-  const { data, error } = await db.from('races').update({ events }).eq('id', raceId).select('id');
-  if (error) throw await friendlyWriteError(error.message);
-  if (!data || !data.length)
+  const { error } = await db.rpc('add_race_event', { p_race_id: raceId, p_event: event });
+  if (!error) return;
+  if (error.code === '42501')
     throw await refusedWrite(new Error('This action is for approved members only.'));
+  throw await friendlyWriteError(error.message);
 }
 // Only for a name already loaded into the form as the entry being edited
 // (state.form.editingName), via the Edit button or picking up your own
