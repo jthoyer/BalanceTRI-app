@@ -1643,7 +1643,7 @@ function linkControl(u, manage) {
       }
       const ok = await confirmDialog({
         title: `Unlink ${picked.length} ${picked.length === 1 ? 'entry' : 'entries'} from ${label}?`,
-        body: `${label} will no longer own ${picked.length === 1 ? 'it' : 'them'}. The names stay as they are (“${label}”), so by name ${label} can still write the results. Rename in the dashboard to detach fully.`,
+        body: `${label} will no longer own ${picked.length === 1 ? 'it' : 'them'}. The names stay as they are (“${label}”). Nobody owns ${picked.length === 1 ? 'it' : 'them'} then, so only an admin can change ${picked.length === 1 ? 'it' : 'them'} or write the results.`,
         confirmLabel: 'Unlink',
       });
       if (!ok) return;

@@ -1173,10 +1173,35 @@ showToast('Could not save: ' + err.message, 'error');</pre>
             </form>
             <div class="account-menu-wrap" style="margin-top: 12px">
               <div class="account-menu" style="position: static">
+                <button type="button" class="account-menu-item">Pick your races</button>
                 <button type="button" class="account-menu-item">Change password</button>
                 <button type="button" class="account-menu-item">Sign out</button>
               </div>
             </div>
+          </div>
+        </div>
+        <div class="guide-block">
+          <h3>Pick your races (a list of ticks in the auth sheet)</h3>
+          <p class="block-note">
+            A one-time step in the auth sheet (<code>openSheet('account')</code>), so it keeps the
+            sheet's focus trap, Escape and return of focus. A <code>fieldset</code> with a
+            <code>legend</code> holds one <code>.auth-sheet-checkbox</code> per race (the same tick
+            as the sign-in nudge's snooze box, 14px here, at least 44px tall). The list scrolls at
+            40vh so Save and Skip stay in view. Errors use <code>.auth-sheet-error</code> with
+            <code>role="alert"</code>. Race and member names are always set as text. Skip is a
+            <code>.secondary-button</code>; Save is the primary and stays disabled until one race is
+            ticked.
+          </p>
+          <div class="specimen demo-card-width">
+            <fieldset class="onboarding-races" style="border: 0; padding: 0; margin: 0">
+              <legend class="auth-sheet-hint">Upcoming races</legend>
+              <label class="auth-sheet-checkbox"
+                ><input type="checkbox" /><span>Alpha Run · 27 Oct 2026</span></label
+              >
+              <label class="auth-sheet-checkbox"
+                ><input type="checkbox" checked /><span>Bravo Swim · 15 Nov 2026</span></label
+              >
+            </fieldset>
           </div>
         </div>
         <div class="guide-block">

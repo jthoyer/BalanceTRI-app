@@ -154,7 +154,7 @@ function ownName() {
   return profile?.display_name || state.user || '';
 }
 function myEntry(race) {
-  return race.entries.find(e => e.name === ownName());
+  return race.entries.find(isOwnEntry);
 }
 // ---------------------------------------------------------------------------
 // Results on past races. Approved members only: a visitor, or an account that
@@ -204,18 +204,25 @@ function parsePlace(text) {
   const n = Number(t);
   return n >= 1 && n <= 100000 ? n : undefined;
 }
-// Is this entry the signed-in member's own? By who created it; for entries
-// from before created_by existed, by display name.
+// Is this entry the signed-in member's own? By who created it, and nothing
+// else. An entry nobody created (created_by null) is not anyone's, whatever
+// name it carries: only an admin can change it.
 function isOwnEntry(entry) {
-  if (!session) return false;
-  if (entry.created_by) return entry.created_by === session.user.id;
-  const mine = ownName().trim().toLowerCase();
-  return !!mine && entry.name.trim().toLowerCase() === mine;
+  return !!session && !!entry.created_by && entry.created_by === session.user.id;
+}
+// May this member change this commitment (edit, remove)? The database
+// decides (restrict_entry_writes_to_owners); this keeps the buttons off rows
+// it would refuse. The owner may. An admin may only with a two-factor
+// session (adminReady, from admin_status().ready), because the policy asks
+// for the same. Both need the allow-list.
+function canChangeEntry(entry) {
+  return !!session && isMember && (isOwnEntry(entry) || adminReady);
 }
 function canEditResult(entry) {
   if (!session || !isMember) return false;
-  // Admins may write any result; the server also wants their two-factor session.
-  return isAdmin || isOwnEntry(entry);
+  // An admin may write any result, but only with a two-factor session, which
+  // is what the database asks for (adminReady).
+  return adminReady || isOwnEntry(entry);
 }
 // False when the last load could not read the results table, so a failed read
 // never looks like "nobody has a result" (the reminder would nag everyone).
@@ -243,10 +250,9 @@ function draftFrom(entry) {
 // but saving, editing or removing a commitment requires being signed in
 // (requireSignIn, below, and the matching RLS policies on entries) AND being
 // approved: anyone can make an account (Join), and the club admin approves it
-// in the console. It's still the same honour system once approved: any member
-// can change the level and events on any entry they've opened via the
-// roster's Edit link (see saveEntry) — sign-in isn't tied to ownership, only
-// to being someone. Names are not editable: a new commitment carries the
+// in the console. Once approved, a member can change or remove only their own
+// commitments (entries.created_by); an admin with a two-factor session can
+// change any. Names are not editable: a new commitment carries the
 // member's profile display_name, and only an admin renames anyone (the
 // entries_name_guard_biu trigger enforces it). Email-code sign-in is gone from this page
 // (the console keeps it as the owner's fallback); a member who forgets their
@@ -269,9 +275,15 @@ let isMember = false;
 // the first signs a non-member out, the way the app always has; an approved
 // member is never signed out or locked out for lack of this function.
 let access = null;
-// isAdmin only decides whether the header shows a link to admin.html. The
-// admin functions check for themselves; see the add_admin_console migration.
+// isAdmin means "has an admin row": it decides whether the header shows a link
+// to admin.html. The admin functions
+// check for themselves; see the add_admin_console migration.
 let isAdmin = false;
+// adminReady means the database would treat this session as an admin right
+// now (admin_status().ready: a row, and two-factor passed when required).
+// Controls that change other members' commitments key on this, not on isAdmin,
+// so an admin on a password-only session is shown what the database allows.
+let adminReady = false;
 // How many access requests are waiting, for the Admin link. Only an admin with
 // a two-factor session gets a number back; anyone else, or an older database,
 // gets an error and no number is shown.
@@ -283,6 +295,7 @@ async function checkMembership() {
   if (!session) {
     isMember = false;
     isAdmin = false;
+    adminReady = false;
     access = null;
     return;
   }
@@ -295,6 +308,7 @@ async function checkMembership() {
   // says is approved.
   isMember = (!member.error && member.data === true) || status.data?.state === 'approved';
   isAdmin = !admin.error && admin.data?.admin === true;
+  adminReady = isAdmin && admin.data?.ready === true;
   if (!status.error && status.data?.state) access = status.data;
   else if (isMember) access = { state: 'approved' };
   else access = { state: status.error?.code === 'PGRST202' ? 'legacy' : 'unknown' };
@@ -459,6 +473,11 @@ function renderAccountMenu() {
   // and elt() sets it as text, so nothing is parsed as HTML.
   const who = elt('p', { class: 'account-menu-who' }, profile?.display_name || session.user.email);
   const guide = elt('a', { class: 'account-menu-item', href: `${BASE_PATH}guides/` }, 'Guide');
+  const pickRaces = elt(
+    'button',
+    { type: 'button', class: 'account-menu-item', id: 'pickRacesButton' },
+    'Pick your races',
+  );
   const changePassword = elt(
     'button',
     { type: 'button', class: 'account-menu-item', id: 'changePasswordButton' },
@@ -475,6 +494,7 @@ function renderAccountMenu() {
     who,
     guide,
     ...(isAdmin ? [adminItem()] : []),
+    ...(isMember ? [pickRaces] : []),
     changePassword,
     signOut,
   );
@@ -490,6 +510,13 @@ function renderAccountMenu() {
     closeAccountMenu();
     button.focus();
   });
+  pickRaces.onclick = () => {
+    closeAccountMenu();
+    // The menu item is about to be hidden; the Menu button is where focus
+    // should come back to when the screen closes.
+    button.focus();
+    showOnboarding();
+  };
   changePassword.onclick = () => {
     closeAccountMenu();
     showPasswordSheet('change');
@@ -637,16 +664,34 @@ async function passwordProblem(password) {
     return 'That password is too common. Try a few random words instead.';
   return null;
 }
+// The three alphabets a name may not mix, by fixed code point ranges. These
+// are the same ranges as private.clean_display_name (migration
+// restrict_entry_writes_to_owners); \p{Script=...} differs at the edges, so it
+// is not used. Spaces, punctuation, combining marks, CJK and the rest belong
+// to none of them. Keep the two lists identical.
+const SCRIPT_RANGES = [
+  /[A-Za-z\u00aa\u00ba\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u02af\u1e00-\u1eff\u2c60-\u2c7f\ua720-\ua7ff\uab30-\uab6f\uff21-\uff3a\uff41-\uff5a]/,
+  /[\u0370-\u03ff\u1f00-\u1fff]/,
+  /[\u0400-\u052f\u1c80-\u1c8f\u2de0-\u2dff\ua640-\ua69f]/,
+];
+const MIXED_SCRIPT_ERROR =
+  'Your name mixes letters from different alphabets, such as Latin and Cyrillic. Use one alphabet.';
 // Mirrors private.clean_display_name: collapse spaces, 2 to 40 characters,
 // letters (any language), spaces, apostrophes, hyphens and full stops, at
-// least one letter. Returns {name} or {error}.
+// least one letter, and one alphabet among Latin, Greek and Cyrillic.
+// Returns {name} or {error}.
 function cleanDisplayName(raw) {
   const name = raw.replace(/\s+/g, ' ').trim().normalize('NFC').replace(/͏/g, '').trim();
   const length = [...name].length;
   if (length < 2 || length > 40) return { error: 'Your name needs to be 2 to 40 characters.' };
   if (!/^(?:[\p{L}̀-ͯ]|[ '.’-])+$/u.test(name))
     return { error: 'Use letters, spaces, apostrophes, hyphens and full stops in your name.' };
+  // Letters that draw nothing (Hangul fillers, braille blank, Khmer inherent
+  // vowels). Same list as private.clean_display_name.
+  if (/[\u115f\u1160\u3164\uffa0\u2800\u17b4\u17b5]/.test(name))
+    return { error: 'Use letters, spaces, apostrophes, hyphens and full stops in your name.' };
   if (!/\p{L}/u.test(name)) return { error: 'Your name needs at least one letter.' };
+  if (SCRIPT_RANGES.filter(re => re.test(name)).length >= 2) return { error: MIXED_SCRIPT_ERROR };
   return { name };
 }
 function authErrorText(error, prefix) {
@@ -1057,6 +1102,7 @@ function focusAuthSheet() {
 // force: closes the locked step too, which nothing a member does may do.
 function closeAuthSheet({ force = false } = {}) {
   if (authSheetMode === 'locked' && !force) return;
+  if (onboardingSaving && !force) return;
   if (authSheetMode === 'nudge') {
     if (authSheetSnoozeWanted) {
       state.authDismissedUntil = Date.now() + 10 * 24 * 60 * 60 * 1000;
@@ -1321,6 +1367,7 @@ async function initAuth() {
   } = await db.auth.getSession();
   session = s;
   if (session) {
+    onboardingUserId = session.user.id;
     await loadProfile();
     await checkMembership();
   }
@@ -1338,6 +1385,13 @@ async function initAuth() {
     if (authBusy || _event === 'USER_UPDATED') return;
     if (session) {
       signOutNotice = null;
+      // Re-armed only for a different user than the one already seen: a real
+      // sign-in or an account switch. INITIAL_SESSION and TOKEN_REFRESHED
+      // carry the same user and must not bring the screen back mid-session.
+      if (session.user.id !== onboardingUserId) {
+        onboardingUserId = session.user.id;
+        onboardingDue = true;
+      }
       await loadProfile();
       await checkMembership();
       if (authSheetMode === 'nudge' || authSheetMode === 'gate') closeAuthSheet();
@@ -1345,7 +1399,9 @@ async function initAuth() {
       reactToAccess();
     } else {
       profile = null;
+      onboardingUserId = null;
       isMember = false;
+      adminReady = false;
       access = null;
       // Forget the name and the name search on sign-out, so the next person
       // on a shared device doesn't find them in localStorage.
@@ -1366,6 +1422,198 @@ async function initAuth() {
     reloadIfNamesChanged();
   });
 }
+// ---------------------------------------------------------------------------
+// Pick your races. A newly approved member with no commitments is offered the
+// upcoming races once, to commit to in one go (level "considering", no event;
+// they choose both on each race afterwards). It lives in the auth sheet, so it
+// is a labelled dialog with Escape, a focus trap and focus returned on close.
+// "Once" is per device: the flag is written when the screen is shown, so Skip,
+// close, Escape and a reload all count. The Menu item opens it again.
+// ---------------------------------------------------------------------------
+// True while Save is writing: Escape, the close button and a click outside
+// must not close the sheet then, or the outcome would land in a hidden sheet.
+let onboardingSaving = false;
+const onboardingKey = () => `balance-onboarding-${session.user.id}`;
+// Live races still ahead of today (Sydney). Today's are left out: on race day
+// the card shows results, so "choose an event on the race" would not work.
+// Balance Bolt races sign up on their own site. Races that already carry the
+// member's own entry are left out too.
+function onboardingRaces() {
+  const today = sydneyToday();
+  return races
+    .filter(
+      r => r.date > today && r.balanceBolt !== 'Y' && !r.boltColumn && !r.entries.some(isOwnEntry),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+// Opens by itself when every condition holds: see the spec's list. Called when
+// the races finish loading, which is the last thing to arrive.
+// onboardingDue: a page load or a sign-in has happened and the screen has not
+// yet had its one chance. Set by those two, spent the first time every
+// condition below about loaded data holds, so a later reload of the races
+// (after a save, a remove, a refresh) never opens it.
+let onboardingDue = true;
+// Who onboardingDue was last armed for (null when signed out).
+let onboardingUserId = null;
+function maybeOpenOnboarding() {
+  if (!onboardingDue || !session || !isMember || !profile?.display_name) return;
+  if (loadError || loadedFullNames !== true) return;
+  onboardingDue = false;
+  if (authSheetMode !== null || localStorage.getItem(onboardingKey())) return;
+  if (races.some(r => r.entries.some(isOwnEntry))) return;
+  if (!onboardingRaces().length) return;
+  showOnboarding();
+}
+function onboardingDate(date) {
+  return new Date(date + 'T12:00:00').toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+// One reason per failure, in plain English. err.code comes from addEntry.
+function onboardingReason(err) {
+  if (err.code === '23505') return 'already has your name';
+  if (err.code === '42501' || /approved members only/.test(err.message)) return 'was refused';
+  return 'could not be saved';
+}
+function showOnboarding() {
+  if (!session || !isMember || authSheetMode === 'locked') return;
+  localStorage.setItem(onboardingKey(), '1');
+  openSheet('account');
+  const host = $('#authSheetBody');
+  const name = profile?.display_name || ownName();
+  const header = () => [
+    elt('h2', {}, 'Pick your races'),
+    elt(
+      'p',
+      { class: 'auth-sheet-hint' },
+      `Commitments will use your name: ${name}. `,
+      elt('a', { href: `mailto:${CLUB_EMAIL}` }, 'Not you? Tell an admin'),
+    ),
+  ];
+  const close = () => closeAuthSheet({ force: true });
+  const showEmpty = () => {
+    const done = elt('button', { type: 'button', class: 'primary-button' }, 'Close');
+    done.onclick = close;
+    showStep(host, 'Pick your races', [
+      ...header(),
+      elt('p', { class: 'auth-sheet-hint' }, 'No upcoming races to add.'),
+      elt('div', { class: 'auth-sheet-actions' }, done),
+    ]);
+    done.focus();
+  };
+  // ticked: ids to start ticked (the failed ones, after a partial save).
+  // offered: the races to list. After a save it is worked out here, not read
+  // back from the races list, so a failed reload cannot lose the failures.
+  const showList = (ticked = new Set(), problem = '', offered = onboardingRaces()) => {
+    if (!offered.length) return showEmpty();
+    const boxes = offered.map(race => {
+      const input = elt('input', { type: 'checkbox', value: race.id });
+      input.checked = ticked.has(race.id);
+      const label = elt(
+        'label',
+        { class: 'auth-sheet-checkbox' },
+        input,
+        elt('span', {}, `${race.name} · ${onboardingDate(race.date)}`),
+      );
+      return { race, input, label };
+    });
+    const save = elt('button', { type: 'button', class: 'primary-button' }, 'Save');
+    const skip = elt('button', { type: 'button', class: 'secondary-button' }, 'Skip');
+    const error = elt('p', { class: 'auth-sheet-error', role: 'alert' }, problem);
+    error.classList.toggle('hidden', !problem);
+    const list = elt(
+      'fieldset',
+      { class: 'onboarding-races' },
+      elt('legend', { class: 'auth-sheet-hint' }, 'Upcoming races'),
+      ...boxes.map(b => b.label),
+    );
+    const sync = () => {
+      save.disabled = !boxes.some(b => b.input.checked);
+    };
+    boxes.forEach(b => (b.input.onchange = sync));
+    sync();
+    skip.onclick = close;
+    save.onclick = async () => {
+      const picked = boxes.filter(b => b.input.checked).map(b => b.race);
+      if (!picked.length) return;
+      // Focus moves to the list first: the buttons are about to be disabled,
+      // and a disabled button drops focus to the page behind the sheet.
+      list.tabIndex = -1;
+      list.focus();
+      setBusy(save, true, 'Save', 'Saving…');
+      skip.disabled = true;
+      onboardingSaving = true;
+      const saved = [];
+      const failed = [];
+      // One insert per race, in order. Never a batch: each succeeds or fails
+      // on its own, and the database checks each against the member's name.
+      for (const race of picked) {
+        try {
+          await addEntry(race.id, name, [], 'considering');
+          saved.push(race);
+        } catch (err) {
+          failed.push({ race, err });
+        }
+      }
+      try {
+        if (saved.length) await loadRaces();
+      } finally {
+        onboardingSaving = false;
+      }
+      // Standing may have changed mid-save (a refused write re-checks it).
+      if (!session || !isMember) return;
+      if (!failed.length) return showSaved(saved);
+      const text = failed.map(f => `${f.race.name} (${onboardingReason(f.err)})`).join(', ');
+      const savedIds = new Set(saved.map(r => r.id));
+      showList(
+        new Set(failed.map(f => f.race.id)),
+        `${saved.length ? `Saved: ${saved.map(r => r.name).join(', ')}. ` : ''}Not saved: ${text}. Press Save to try again.`,
+        offered.filter(r => !savedIds.has(r.id)),
+      );
+    };
+    showStep(host, 'Pick your races', [
+      ...header(),
+      elt(
+        'p',
+        { class: 'auth-sheet-hint' },
+        'Tick the races you plan to do. You can choose an event and a level on each race afterwards.',
+      ),
+      list,
+      error,
+      elt('div', { class: 'auth-sheet-actions' }, save, skip),
+    ]);
+    (problem ? error : boxes[0].input).focus();
+  };
+  const showSaved = saved => {
+    const done = elt('button', { type: 'button', class: 'primary-button' }, 'Done');
+    done.onclick = close;
+    const links = saved.map(race => {
+      const fresh = races.find(r => r.id === race.id) || race;
+      const a = elt('a', { href: racePath(fresh) }, fresh.name);
+      a.onclick = e => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        close();
+        openRaceScreen(fresh.id);
+      };
+      return elt('li', {}, a);
+    });
+    showStep(host, 'Pick your races', [
+      elt('h2', {}, 'Saved'),
+      elt(
+        'p',
+        { class: 'auth-sheet-hint', role: 'status' },
+        `You are down for ${saved.length === 1 ? 'this race' : 'these races'} as "considering". Open each race to choose an event and a level.`,
+      ),
+      elt('ul', { class: 'onboarding-saved' }, ...links),
+      elt('div', { class: 'auth-sheet-actions' }, done),
+    ]);
+    done.focus();
+  };
+  showList();
+}
 // Approval, sign-in or sign-out can change whether this viewer may see full
 // names. Reload the races when it no longer matches what's on screen.
 function reloadIfNamesChanged() {
@@ -1376,9 +1624,10 @@ function reloadIfNamesChanged() {
 // security" error, while an UPDATE/DELETE whose USING clause excludes every
 // row returns success with zero rows instead. Both mean the same thing here
 // — requireSignIn() already guarantees the caller is signed in by this
-// point, so a rejection can only mean their email isn't on the allow-list —
-// and both get the same message rather than raw Postgres text or looking
-// like nothing happened.
+// point, so a rejection means their email isn't on the allow-list, or (for
+// an entry's update or delete) the entry isn't theirs — and both get a plain
+// message rather than raw Postgres text or looking like nothing happened
+// (see refusedEntryWrite for the entry case).
 //
 // A refusal also means the member's standing may have changed (access removed
 // while the page was open), so each one re-reads it: a revoked member is told
@@ -1396,6 +1645,20 @@ async function friendlyWriteError(message) {
     ? refusedWrite(new Error('This action is for approved members only.'))
     : new Error(message);
 }
+// An update or delete on an entry that the database refused. For an approved
+// member it means the entry is not theirs (or is gone), so say that. The
+// re-check of standing still runs (refusedWrite), so a member whose access was
+// removed is told so and signed out instead. Also answers the row-level
+// security error some refusals come back as.
+const OWN_ENTRY_ONLY =
+  'You can only change your own commitment. Ask a club admin if it needs changing.';
+async function refusedEntryWrite() {
+  await refusedWrite(null);
+  return new Error(isMember ? OWN_ENTRY_ONLY : 'This action is for approved members only.');
+}
+async function entryWriteError(error) {
+  return /row-level security/i.test(error.message) ? refusedEntryWrite() : new Error(error.message);
+}
 async function removeEntry(raceId, name) {
   const { data, error } = await db
     .from('entries')
@@ -1403,9 +1666,8 @@ async function removeEntry(raceId, name) {
     .eq('race_id', raceId)
     .eq('name', name)
     .select('id');
-  if (error) throw await friendlyWriteError(error.message);
-  if (!data || !data.length)
-    throw await refusedWrite(new Error('This action is for approved members only.'));
+  if (error) throw await entryWriteError(error);
+  if (!data || !data.length) throw await refusedEntryWrite();
 }
 // The column defaults to 'Location TBC' for races added without one. That is a
 // placeholder, not a place, so it is never shown.
@@ -1424,8 +1686,8 @@ async function addEvent(raceId, event) {
 // (state.form.editingName), via the Edit button or picking up your own
 // existing entry — never for a first-time commitment, which is addEntry,
 // below. An UPDATE, not an upsert: if the entry was removed or renamed by an
-// admin meanwhile, this finds nothing and says so, rather than inserting a
-// new row under the old name.
+// admin meanwhile, or is not the member's to change, this finds nothing and
+// says so, rather than inserting a new row under the old name.
 async function saveEntry(raceId, name, events, level) {
   const { data, error } = await db
     .from('entries')
@@ -1433,27 +1695,27 @@ async function saveEntry(raceId, name, events, level) {
     .eq('race_id', raceId)
     .eq('name', name)
     .select('id');
-  if (error) throw await friendlyWriteError(error.message);
-  if (!data || !data.length)
-    throw await refusedWrite(
-      new Error(
-        `Could not find ${name} on this race any more. It may have just been changed. Refresh and try again. (This action is also for approved members only.)`,
-      ),
-    );
+  if (error) throw await entryWriteError(error);
+  if (!data || !data.length) throw await refusedEntryWrite();
 }
 // A first-time commitment (no entry was loaded into the form to begin with)
 // is an INSERT, not an upsert: typing a name already on the roster must be
 // refused, not silently take over that member's row and commitment level.
 // The unique (race_id, name) constraint does the refusing; an INSERT can't
 // upsert by definition, so this gets it for free the way saveEntry can't.
+// A thrown error carries the database's code, so a caller that lists many
+// races (Pick your races) can word each failure without showing raw text.
 async function addEntry(raceId, name, events, level) {
   const { error } = await db.from('entries').insert({ race_id: raceId, name, events, level });
   if (error) {
-    if (error.code === '23505')
-      throw new Error(
-        `${name} is already on this race. If that's you, use their "Edit" link on the roster instead of adding a new entry.`,
-      );
-    throw await friendlyWriteError(error.message);
+    const err =
+      error.code === '23505'
+        ? new Error(
+            `${name} is already on this race. If that's you, ask a club admin to link it to your account.`,
+          )
+        : await friendlyWriteError(error.message);
+    err.code = error.code;
+    throw err;
   }
 }
 // Results. One row per entry, so a save is an upsert on entry_id. RLS lets
@@ -1834,6 +2096,8 @@ async function loadRaces() {
         eventType: r.event_type || '',
         clubFocus: r.club_focus ? 'Y' : 'N',
         balanceBolt: r.event_type === 'Balance Bolt' ? 'Y' : 'N',
+        // The column itself, which Pick your races also honours.
+        boltColumn: r.balance_bolt === true,
         entries,
         committed: counts.committed,
         locked: counts.locked,
@@ -1856,10 +2120,12 @@ async function loadRaces() {
   if (!deepLinkResolved) {
     if (!loadError) deepLinkResolved = true;
     routeFromUrl();
+    maybeOpenOnboarding();
     return;
   }
   syncOpenRaceUrl();
   render();
+  maybeOpenOnboarding();
 }
 // Counts for everyone who isn't an approved member: race id -> { committed,
 // locked }. No names. public_race_counts() sends counts only. Until that
@@ -2122,12 +2388,18 @@ function buildRoster(host, eventKeys, eventGroups, levelLabel) {
       level.className = known ? `roster-level level-${entry.level}` : 'roster-level';
       level.textContent = levelLabel[entry.level] || entry.level;
       who.append(name, level);
-      const edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'roster-edit';
-      edit.textContent = 'Edit';
-      edit.setAttribute('aria-label', `Edit ${entry.name}'s commitment for this race`);
-      row.append(who, edit);
+      row.append(who);
+      // Only on rows this member may change. The id, not the position, says
+      // which entry a button opens: hidden buttons shift every position.
+      if (canChangeEntry(entry)) {
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'roster-edit';
+        edit.dataset.entryId = entry.id;
+        edit.textContent = 'Edit';
+        edit.setAttribute('aria-label', `Edit ${entry.name}'s commitment for this race`);
+        row.append(edit);
+      }
       group.append(row);
     });
     host.append(group);
@@ -2480,7 +2752,7 @@ function makeResultsDetails(race) {
       try {
         await addEntry(race.id, ownName(), [], 'locked');
         await loadRaces();
-        const fresh = races.find(r => r.id === race.id)?.entries.find(e => e.name === ownName());
+        const fresh = races.find(r => r.id === race.id)?.entries.find(isOwnEntry);
         if (fresh) {
           resultDraft = draftFrom(fresh);
           resultDraft.focus = true;
@@ -2581,11 +2853,12 @@ function makeDetails(race) {
   });
   const eventKeys = Object.keys(eventGroups).sort((a, b) => a.localeCompare(b));
   eventKeys.forEach(k => eventGroups[k].sort((a, b) => a.name.localeCompare(b.name)));
-  const orderedEntries = eventKeys.flatMap(k => eventGroups[k]);
   const levelLabel = Object.fromEntries(levels);
-  const editingEntry = state.form.editingName
+  // Remove only shows for an entry this member may change.
+  const openedEntry = state.form.editingName
     ? race.entries.find(e => e.name === state.form.editingName)
     : null;
+  const editingEntry = openedEntry && canChangeEntry(openedEntry) ? openedEntry : null;
   // Static shell, no interpolation. Everything that varies is a class toggle
   // or a node removed below, and everything carrying member-supplied text is
   // built with textContent. Entry names and event labels are typed by members
@@ -2635,10 +2908,11 @@ function makeDetails(race) {
     a.setAttribute('aria-label', `${race.name} website: ${websiteUrl}`);
     wrap.querySelector('.race-website-body').append(a);
   }
-  wrap.querySelectorAll('.roster-edit').forEach((btn, i) => {
+  wrap.querySelectorAll('.roster-edit').forEach(btn => {
     btn.onclick = () => {
       if (!requireSignIn('Sign in to edit this entry')) return;
-      const entry = orderedEntries[i];
+      const entry = race.entries.find(e => e.id === btn.dataset.entryId);
+      if (!entry) return;
       const opts = participationOptions();
       const known = [],
         extra = [];

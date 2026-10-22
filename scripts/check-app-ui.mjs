@@ -65,6 +65,7 @@ const fx = () => window.__fixtures;
 const res = v => Promise.resolve(v);
 let authCallback = null;
 const emit = (event) => authCallback && authCallback(event, window.__session);
+window.__emit = emit;
 const seq = (name, fallback) => {
   const list = fx().seq?.[name];
   return list && list.length ? list.shift() : fallback;
@@ -123,7 +124,7 @@ window.supabase = { createClient: () => ({
       window.__access = { ...window.__access, password_change_due: false };
       return res({ data: null, error: null });
     }
-    if (name === 'admin_status') return res({ data: { admin: false }, error: null });
+    if (name === 'admin_status') return res({ data: fx().adminStatus || { admin: false }, error: null });
     if (name === 'public_race_counts') {
       if (!fx().publicCounts) return res({ data: null, error: { code: 'PGRST202', message: 'not found' } });
       return res({ data: fx().publicCounts, error: null });
@@ -133,19 +134,47 @@ window.supabase = { createClient: () => ({
   },
   from: table => {
     let writing = false;
+    let payload = null;
+    let isNull = null;
     window.__reads = window.__reads || [];
     window.__reads.push(table);
     const q = {
-      insert: () => { writing = true; window.__calls.push(['write', table, 'insert']); return q; },
+      insert: p => { writing = true; payload = p; window.__calls.push(['write', table, 'insert', p]); return q; },
       update: () => { writing = true; window.__calls.push(['write', table, 'update']); return q; },
       delete: () => { writing = true; window.__calls.push(['write', table, 'delete']); return q; },
       upsert: p => { writing = true; window.__calls.push(['write', table, 'upsert', p]); return q; },
       select: cols => { window.__selects = [...(window.__selects || []), [table, cols]]; return q; },
-      is: () => q,
+      is: col => { isNull = col; return q; },
       eq: () => q,
       order: () => q,
-      single: () => res({ data: { display_name: window.__access?.display_name || 'Sam' }, error: null }),
-      then: (ok, bad) => res(writing ? (fx().writeResult || { data: [{ id: 1 }], error: null }) : table === 'results' && fx().resultsError ? { data: null, error: fx().resultsError } : { data: table === 'races' ? fx().races : table === 'results' ? fx().results || [] : [], error: null }).then(ok, bad),
+      single: () => res({ data: { display_name: fx().profileName ?? (window.__access?.display_name || 'Sam') }, error: null }),
+      then: (ok, bad) =>
+        (writing && fx().insertDelay ? new Promise(r => setTimeout(r, fx().insertDelay)) : res())
+          .then(() => outcome())
+          .then(ok, bad),
+    };
+    // What a write or a read answers. fx().insertFail maps a race id to
+    // { result, once } for an insert on that race; a successful insert is
+    // remembered, so the next read of races shows it.
+    const outcome = () => {
+      if (writing) {
+        const fail = payload && fx().insertFail && fx().insertFail[payload.race_id];
+        if (fail) {
+          if (fail.once) delete fx().insertFail[payload.race_id];
+          return fail.result;
+        }
+        const result = fx().writeResult || { data: [{ id: 1 }], error: null };
+        if (payload && !result.error) (window.__added ||= {})[payload.race_id] = { id: 'new-' + payload.race_id, name: payload.name, events: payload.events, level: payload.level, created_by: window.__session?.user.id };
+        return result;
+      }
+      if (table === 'results') return fx().resultsError ? { data: null, error: fx().resultsError } : { data: fx().results || [], error: null };
+      if (table === 'races') {
+        if (fx().racesError) return { data: null, error: fx().racesError };
+        // .is('deleted_at', null) is honoured, so a removed race is not listed.
+        const rows = (fx().races || []).filter(r => !isNull || r[isNull] == null);
+        return { data: rows.map(r => ({ ...r, entries: r.entries && [...r.entries, ...(window.__added?.[r.id] ? [window.__added[r.id]] : [])] })), error: null };
+      }
+      return { data: [], error: null };
     };
     return q;
   },
@@ -206,8 +235,15 @@ const check = (cond, msg) => {
     failures++;
   }
 };
-async function open(fx, { width = 1100, storage = {} } = {}) {
+// onboarding: 'seen' (the default) sets the "Pick your races" flag for the
+// stand-in user u1, so the screen stays out of scenarios that are about
+// something else; 'fresh' leaves it unset. now: a Date to pin the clock to
+// (Date.now and new Date(); timers keep running), for scenarios whose
+// fixtures hold dates.
+async function open(fx, { width = 1100, storage = {}, onboarding = 'seen', now = null } = {}) {
+  if (onboarding === 'seen') storage = { 'balance-onboarding-u1': '1', ...storage };
   const page = await browser.newPage({ viewport: { width, height: 900 } });
+  if (now) await page.clock.setFixedTime(now);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/vendor/supabase-js-*.js', r =>
@@ -1088,10 +1124,12 @@ console.log('14. Review round: reauthentication, refused writes, inert page, ret
     'signed-out buttons are the ordinary signed-out ones',
   );
   const writesBefore = (await called(page, 'write')).length;
-  await page.locator('#heroAddButton').click();
+  // Signed out, the Add a race button is hidden (since #109); the header's
+  // Sign in button stands in for it and opens the same sheet.
+  await page.locator('#signInButton').click();
   check(
     (await sheetOpen(page)) && (await called(page, 'write')).length === writesBefore,
-    'Add a race now opens the sign-in sheet and writes nothing',
+    'Sign in now opens the sign-in sheet and writes nothing',
   );
   await page.close();
 }
@@ -1693,6 +1731,11 @@ console.log('17. App feedback: the footer form (keyboard, errors, no lost text, 
       (await page.locator('.result-form').count()) === 0,
       'the form closes once the result is saved',
     );
+    // The app sets this focus in a setTimeout(0) after the render that shows
+    // the banner, so wait for it rather than read it in the same instant.
+    await page
+      .waitForFunction(() => document.activeElement.className.includes('result-edit'))
+      .catch(() => {});
     check(
       (await page.evaluate(() => document.activeElement.className)).includes('result-edit'),
       'focus returns to the row button',
@@ -2011,6 +2054,850 @@ console.log('17. App feedback: the footer form (keyboard, errors, no lost text, 
       path: `${process.env.SCREENSHOT_DIR || '/tmp'}/reminder-390.png`,
       fullPage: false,
     });
+    await page.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Owner-only commitments, "Pick your races", and mixed-alphabet names
+// (migration restrict_entry_writes_to_owners). Every scenario below opens its
+// own page, which is its own browser context: empty localStorage, a full load.
+// The "shown once" scenario reloads the same page on purpose, to test the
+// flag. The clock is pinned to 20 October 2026, 11:00 in Sydney.
+// ---------------------------------------------------------------------------
+{
+  console.log('\nowner-only commitments, Pick your races, mixed alphabets');
+  const NOW = new Date('2026-10-20T00:00:00Z');
+  const rc = (id, name, date, over = {}) => ({
+    id,
+    name,
+    date,
+    location: 'Sydney',
+    slug: `${id}-slug`,
+    events: ['Sprint'],
+    event_type: 'Triathlon',
+    club_focus: true,
+    entries: [],
+    ...over,
+  });
+  const ent = (id, name, over = {}) => ({
+    id,
+    name,
+    events: ['Sprint'],
+    level: 'considering',
+    created_by: 'u9',
+    ...over,
+  });
+  const fresh = (fx, o = {}) => open(fx, { onboarding: 'fresh', now: NOW, ...o });
+  const labels = page => page.locator('#authSheetBody .onboarding-races label').allInnerTexts();
+  const flag = page => page.evaluate(() => localStorage.getItem('balance-onboarding-u1'));
+  const member = signedIn(accessOf('approved'));
+  const ONB_RACES = [
+    rc('bravo', 'Bravo Swim', '2026-11-15'),
+    rc('alpha', 'Alpha Run', '2026-10-27'),
+    rc('today', 'Today Tri', '2026-10-20'),
+    rc('past', 'Past Duathlon', '2026-10-01'),
+    rc('bolt', 'Bolt Night', '2026-11-02', { event_type: 'Balance Bolt', balance_bolt: true }),
+    rc('boltcol', 'Bolt Column', '2026-11-03', { balance_bolt: true }),
+    rc('gone', 'Removed Race', '2026-11-04', { deleted_at: '2026-10-10T00:00:00Z' }),
+  ];
+  const sheetUp = page => page.locator('#authSheetBackdrop').isVisible();
+  const onbOpen = async page =>
+    (await sheetUp(page)) &&
+    (await page.locator('#authSheetBody h2').count()) > 0 &&
+    (await text(page, '#authSheetBody h2')) === 'Pick your races';
+  const insertsOf = async page =>
+    (await called(page, 'write')).filter(c => c[1] === 'entries' && c[2] === 'insert');
+  // True if the locator shows within 4 seconds, false if not (never throws).
+  const within = loc =>
+    loc.waitFor({ timeout: 4000 }).then(
+      () => true,
+      () => false,
+    );
+  const menuPick = async page => {
+    await page.locator('#accountMenuButton').click();
+    await page.locator('#pickRacesButton').click();
+  };
+
+  console.log('a. Pick your races opens by itself, with the right races (AC 13, 14, 21, 22)');
+  {
+    const { page, errors } = await fresh({ ...member, races: ONB_RACES });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    const got = await labels(page);
+    check(
+      got.length === 2 && got[0].startsWith('Alpha Run') && got[1].startsWith('Bravo Swim'),
+      'only Alpha Run and Bravo Swim, soonest first: ' + JSON.stringify(got),
+    );
+    check(
+      got[0].includes('27 Oct 2026') && got[1].includes('15 Nov 2026'),
+      'each is labelled with its date',
+    );
+    check(
+      !got.join('|').match(/Today|Past|Bolt|Removed/),
+      'today, past, Balance Bolt (by type and by column) and removed races are not offered',
+    );
+    check(
+      (await page.locator('#authSheetBody .onboarding-races input:checked').count()) === 0,
+      'none is ticked to start',
+    );
+    check(
+      await page.locator('#authSheetBody .primary-button').isDisabled(),
+      'Save is off until one is ticked',
+    );
+    check(
+      (await sheetText(page)).includes('Commitments will use your name: Sam Lee'),
+      'it says whose name commitments will carry',
+    );
+    const link = page.getByRole('link', { name: 'Not you? Tell an admin' });
+    check(
+      (await link.getAttribute('href')) === 'mailto:mail@balancetriclub.com',
+      'Not you? links to the club email',
+    );
+    const dialog = page.getByRole('dialog', { name: 'Pick your races' });
+    check((await dialog.count()) === 1, 'it is a dialog labelled Pick your races');
+    check(
+      await page.evaluate(() =>
+        document.querySelector('.auth-sheet').contains(document.activeElement),
+      ),
+      'focus is inside it',
+    );
+    check((await flag(page)) === '1', 'the flag is written when it is shown');
+    check((await insertsOf(page)).length === 0, 'showing it writes nothing');
+    await page.keyboard.press('Escape');
+    check(!(await sheetUp(page)), 'Escape closes it');
+    check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join('; ') : ''));
+    await page.close();
+  }
+
+  console.log('b. It stays shut when a condition fails (AC 13)');
+  {
+    const cases = [
+      ['a visitor', { ...SIGNED_OUT, races: ONB_RACES }, {}],
+      ['a pending account', { ...signedIn(accessOf('pending')), races: ONB_RACES }, {}],
+      [
+        'an account with no request',
+        { ...signedIn(accessOf('none')), races: ONB_RACES },
+        { nameStep: true },
+      ],
+      ['a revoked account', { ...signedIn(accessOf('revoked')), races: ONB_RACES }, {}],
+      ['a rejected account', { ...signedIn(accessOf('rejected')), races: ONB_RACES }, {}],
+      [
+        'a member who already has a commitment',
+        {
+          ...member,
+          races: [
+            ...ONB_RACES,
+            rc('mine', 'Mine Race', '2026-12-01', {
+              entries: [ent('m1', 'Sam Lee', { created_by: 'u1' })],
+            }),
+          ],
+        },
+        {},
+      ],
+      ['a member with no upcoming race', { ...member, races: [ONB_RACES[2], ONB_RACES[3]] }, {}],
+      [
+        'a member who has seen it',
+        { ...member, races: ONB_RACES },
+        { storage: { 'balance-onboarding-u1': '1' } },
+      ],
+      ['a member with no profile name', { ...member, profileName: '', races: ONB_RACES }, {}],
+      [
+        'a member whose races failed to load',
+        { ...member, racesError: { message: 'down' }, races: ONB_RACES },
+        {},
+      ],
+      [
+        'a member told to set a new password',
+        { ...signedIn(accessOf('approved', { password_change_due: true })), races: ONB_RACES },
+        { sheet: 'Set a new password' },
+      ],
+      [
+        'a member offered the password prompt',
+        { ...signedIn(accessOf('approved'), {}), races: ONB_RACES },
+        { sheet: 'Set a password' },
+      ],
+    ];
+    for (const [label, fx, o] of cases) {
+      const { page } = await fresh(fx, { storage: o.storage || {} });
+      await settle(page);
+      const heading = (await page.locator('#authSheetBody h2').count())
+        ? await text(page, '#authSheetBody h2')
+        : '';
+      check(heading !== 'Pick your races', `${label}: Pick your races does not open`);
+      if (o.sheet) check(heading === o.sheet, `${label}: the ${o.sheet} step is up instead`);
+      if (
+        label === 'a member told to set a new password' ||
+        label === 'a member offered the password prompt'
+      )
+        check((await flag(page)) === null, `${label}: and the flag is not written`);
+      await page.close();
+    }
+  }
+
+  console.log('c. Shown once per device: Skip, Escape and a plain reload all count (AC 15, 16)');
+  for (const how of ['Skip', 'Escape', 'reload']) {
+    const { page } = await fresh({ ...member, races: ONB_RACES });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    if (how === 'Skip') await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    if (how === 'Escape') await page.keyboard.press('Escape');
+    if (how === 'Skip')
+      check((await insertsOf(page)).length === 0, 'Skip writes nothing to entries');
+    // Same page, same context: localStorage survives; the init script that
+    // sets the fixtures runs again but seeds no flag.
+    await page.reload();
+    await page.waitForFunction(() => !document.querySelector('#raceLoading'));
+    await settle(page);
+    check(!(await onbOpen(page)), `after ${how} and a reload it does not open by itself`);
+    check((await flag(page)) === '1', `after ${how} the flag is still set`);
+    await page.close();
+  }
+
+  console.log('d. The Menu item reopens it (AC 17, 22)');
+  {
+    const seen = { 'balance-onboarding-u1': '1' };
+    const mine = rc('mine', 'Mine Race', '2026-12-01', {
+      entries: [ent('m1', 'Sam Lee', { created_by: 'u1' })],
+    });
+    const { page } = await fresh({ ...member, races: [...ONB_RACES, mine] }, { storage: seen });
+    await menuPick(page);
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    const got = await labels(page);
+    check(
+      got.length === 2 && !got.join('|').includes('Mine Race'),
+      'it opens regardless of the flag, and leaves out a race that already has my entry',
+    );
+    await page.keyboard.press('Escape');
+    check(!(await sheetUp(page)), 'Escape closes it');
+    check(
+      await page.evaluate(() => document.activeElement.id === 'accountMenuButton'),
+      'and focus returns to the Menu button',
+    );
+    await page.close();
+  }
+  {
+    const { page } = await fresh(
+      { ...member, races: [ONB_RACES[2], ONB_RACES[3]] },
+      { storage: { 'balance-onboarding-u1': '1' } },
+    );
+    await menuPick(page);
+    check(
+      (await sheetText(page)).includes('No upcoming races to add') &&
+        (await page.locator('#authSheetBody input[type=checkbox]').count()) === 0,
+      'with no eligible race it says so instead of showing an empty list',
+    );
+    await page.close();
+  }
+  {
+    const { page } = await fresh({ ...signedIn(accessOf('pending')), races: ONB_RACES });
+    await page.locator('#accountMenuButton').click();
+    check(
+      (await page.locator('#pickRacesButton').count()) === 0,
+      'a pending account has no Pick your races item',
+    );
+    await page.close();
+  }
+
+  console.log('e. Save sends one insert per ticked race (AC 18, 20)');
+  {
+    const { page } = await fresh({ ...member, races: ONB_RACES });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await page.getByRole('checkbox', { name: /Alpha Run/ }).check();
+    await page.getByRole('checkbox', { name: /Bravo Swim/ }).check();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.locator('#authSheetBody').getByRole('link', { name: 'Alpha Run' }).waitFor();
+    const writes = await called(page, 'write');
+    const inserts = await insertsOf(page);
+    check(
+      inserts.length === 2 && writes.length === 2,
+      'exactly two writes, both inserts into entries',
+    );
+    const shape = p => JSON.stringify(Object.entries(p).sort());
+    check(
+      inserts.every(
+        c =>
+          c[3].name === 'Sam Lee' &&
+          c[3].level === 'considering' &&
+          Array.isArray(c[3].events) &&
+          c[3].events.length === 0 &&
+          Object.keys(c[3]).sort().join() === 'events,level,name,race_id',
+      ),
+      'each carries exactly race_id, name, level considering and events []: ' +
+        inserts.map(c => shape(c[3])).join(' '),
+    );
+    check(
+      inserts
+        .map(c => c[3].race_id)
+        .sort()
+        .join() === 'alpha,bravo',
+      'one for each race ticked',
+    );
+    check((await rpcCalled(page, 'add_race_event')).length === 0, 'no add_race_event call');
+    const body = await sheetText(page);
+    check(
+      body.includes('choose an event and a level'),
+      'it says to open each race to choose an event and a level',
+    );
+    check(
+      (
+        await page
+          .locator('#authSheetBody')
+          .getByRole('link', { name: 'Alpha Run' })
+          .getAttribute('href')
+      ).endsWith('/race/alpha-slug') &&
+        (
+          await page
+            .locator('#authSheetBody')
+            .getByRole('link', { name: 'Bravo Swim' })
+            .getAttribute('href')
+        ).endsWith('/race/bravo-slug'),
+      'each saved race links to its race screen',
+    );
+    check(
+      (await page.evaluate(() => window.__reads.filter(t => t === 'races').length)) >= 2,
+      'the races were loaded again',
+    );
+    await page.locator('#authSheetBody').getByRole('link', { name: 'Alpha Run' }).click();
+    await page.locator('#raceScreenBody .details-card').waitFor();
+    check(
+      !(await sheetUp(page)) &&
+        (await page.locator('#raceScreenBody').innerText()).includes('Sam Lee'),
+      'the link opens the race, and its card shows the member',
+    );
+    await page.close();
+  }
+  {
+    const { page } = await fresh({ ...member, races: ONB_RACES });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    check(
+      await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(),
+      'Save with nothing ticked is disabled',
+    );
+    check((await insertsOf(page)).length === 0, 'and sends nothing');
+    await page.close();
+  }
+
+  console.log('f. A partly failed save names the failures and retries only those (AC 19)');
+  for (const [label, err, reason, banned] of [
+    [
+      'a duplicate',
+      {
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "entries_race_id_name_key"',
+      },
+      'already has your name',
+      /duplicate key|23505|constraint/,
+    ],
+    [
+      'a refusal',
+      { code: '42501', message: 'new row violates row-level security policy for table "entries"' },
+      'was refused',
+      /row-level security|policy|42501/,
+    ],
+    [
+      'a server error',
+      { code: 'XX000', message: 'internal boom at line 4' },
+      'could not be saved',
+      /boom|XX000/,
+    ],
+  ]) {
+    const { page } = await fresh({
+      ...member,
+      races: ONB_RACES,
+      insertFail: { bravo: { once: true, result: { data: null, error: err } } },
+    });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await page.getByRole('checkbox', { name: /Alpha Run/ }).check();
+    await page.getByRole('checkbox', { name: /Bravo Swim/ }).check();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.locator('#authSheetBody .auth-sheet-error:not(.hidden)').waitFor();
+    const msg = await text(page, '#authSheetBody .auth-sheet-error');
+    check(
+      msg.includes('Not saved: Bravo Swim') &&
+        msg.includes(reason) &&
+        msg.includes('Saved: Alpha Run.') &&
+        !msg.split('Not saved')[1].includes('Alpha Run'),
+      `${label}: one message names the failed race in plain English`,
+    );
+    check(!banned.test(await sheetText(page)), `${label}: no raw Postgres text is shown`);
+    const left = await labels(page);
+    check(
+      left.length === 1 && left[0].startsWith('Bravo Swim'),
+      `${label}: only the failed race is still offered`,
+    );
+    check(
+      await page.getByRole('checkbox', { name: /Bravo Swim/ }).isChecked(),
+      `${label}: and it is still ticked`,
+    );
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.locator('#authSheetBody').getByRole('link', { name: 'Bravo Swim' }).waitFor();
+    const inserts = await insertsOf(page);
+    check(
+      inserts.map(c => c[3].race_id).join() === 'alpha,bravo,bravo',
+      `${label}: the second Save sent only the failed race: ` +
+        inserts.map(c => c[3].race_id).join(),
+    );
+    await page.close();
+  }
+
+  console.log('g. Member-supplied text is text, never markup (AC 22)');
+  {
+    const evil = '<img src=x onerror="window.__xss=1">';
+    const { page } = await fresh({
+      ...signedIn(accessOf('approved', { display_name: evil })),
+      profileName: evil,
+      races: [rc('evil', evil, '2026-11-20')],
+    });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await settle(page);
+    check(
+      (await page.locator('#authSheetBody img').count()) === 0 &&
+        (await page.evaluate(() => window.__xss)) === undefined,
+      'a race name and a display name full of markup add no element and run nothing',
+    );
+    check((await sheetText(page)).includes(evil), 'and both are shown as typed');
+    await page.close();
+  }
+
+  console.log('h. Edit and Remove only where allowed; Edit opens the right entry (AC 23, 24, 25)');
+  {
+    const OWN = rc('own', 'Own Race', '2026-11-10', {
+      entries: [
+        ent('a', 'Alex Kim'),
+        ent('j', 'Jo Park', { created_by: 'u8' }),
+        ent('s', 'Sam Lee', { created_by: 'u1' }),
+        ent('z', 'Zed Ng', { created_by: 'u7' }),
+      ],
+    });
+    const openOwn = async (fx, race = OWN) => {
+      const r = await fresh(
+        { races: [race], ...fx },
+        { storage: { 'balance-onboarding-u1': '1' } },
+      );
+      await r.page.locator('.race-summary').first().click();
+      await r.page.locator('#raceScreenBody .details-card').waitFor();
+      return r;
+    };
+    const edits = page => page.locator('#raceScreenBody .roster-edit');
+    {
+      const { page } = await openOwn(member);
+      check((await edits(page).count()) === 1, 'a member gets Edit on one row only');
+      check(
+        (await edits(page).first().getAttribute('aria-label')).includes('Sam Lee'),
+        'and it is their own',
+      );
+      check(
+        (await page.locator('.remove-commit-button').count()) === 1,
+        'Remove commitment is there for their own entry',
+      );
+      await edits(page).first().click();
+      check(
+        (await page.locator('.name-input').inputValue()) === 'Sam Lee',
+        "their Edit loads their own entry, with others' rows before and after it",
+      );
+      await page.close();
+    }
+    {
+      const { page } = await openOwn({ ...member, adminStatus: { admin: true, ready: true } });
+      check(
+        (await edits(page).count()) === 4,
+        'an admin with a two-factor session gets Edit on every row',
+      );
+      await edits(page).nth(1).click();
+      check(
+        (await page.locator('.name-input').inputValue()) === 'Jo Park' &&
+          (await page.locator('.remove-commit-button').count()) === 1,
+        "clicking the 2nd of 4 rows opens that member's entry, with Remove",
+      );
+      await page.close();
+    }
+    {
+      const { page } = await openOwn({ ...member, adminStatus: { admin: true, ready: false } });
+      check(
+        (await edits(page).count()) === 1,
+        'an admin without two-factor is treated as a member here',
+      );
+      await page.locator('#accountMenuButton').click();
+      check(
+        (await page.getByRole('link', { name: 'Admin' }).count()) === 1,
+        'and still sees the Admin link',
+      );
+      await page.close();
+    }
+    {
+      // A commitment typed with the member's name, but nobody's: not theirs.
+      const UNOWNED = rc('un', 'Unowned Race', '2026-11-11', {
+        entries: [ent('x1', 'Sam Lee', { created_by: null })],
+      });
+      const { page } = await openOwn(member, UNOWNED);
+      check((await edits(page).count()) === 0, 'an unowned entry with my name has no Edit');
+      check((await page.locator('.remove-commit-button').count()) === 0, 'and no Remove');
+      check(
+        await page.locator('.commit-toggle-button').isVisible(),
+        'and I am still offered Add your commitment',
+      );
+      await page.close();
+    }
+    {
+      const PASTUN = rc('pu', 'Past Unowned', '2026-09-20', {
+        entries: [ent('x2', 'Sam Lee', { created_by: null, level: 'locked' })],
+      });
+      const { page } = await fresh(
+        { ...member, races: [PASTUN] },
+        {
+          storage: {
+            'balance-onboarding-u1': '1',
+            'balance-race-ui': JSON.stringify({
+              user: '',
+              filter: '',
+              form: {},
+              whenFilter: 'past',
+              viewFilter: 'all',
+            }),
+          },
+        },
+      );
+      await page.locator('.race-summary').first().click();
+      await page.locator('#raceScreenBody .details-card').waitFor();
+      check(
+        (await page.locator('.result-edit').count()) === 0,
+        'an unowned entry with my name has no result button',
+      );
+      await page.close();
+    }
+  }
+
+  console.log(
+    'i. A refused change reads plainly, and a revoked member is still signed out (AC 26, 27)',
+  );
+  {
+    const OWN = rc('own', 'Own Race', '2026-11-10', {
+      entries: [ent('s', 'Sam Lee', { created_by: 'u1' })],
+    });
+    const PLAIN = 'You can only change your own commitment. Ask a club admin if it needs changing.';
+    const tryOnce = async (fx, act) => {
+      const { page } = await fresh(
+        { ...member, races: [OWN], ...fx },
+        { storage: { 'balance-onboarding-u1': '1' } },
+      );
+      await page.locator('.race-summary').first().click();
+      await page.locator('#raceScreenBody .details-card').waitFor();
+      await page.locator('#raceScreenBody .roster-edit').first().click();
+      await act(page);
+      await settle(page);
+      return page;
+    };
+    const save = page => page.locator('.save-button').click();
+    const remove = async page => {
+      await page.locator('.remove-commit-button').click();
+      await page.locator('#confirmDialogConfirm').click();
+    };
+    const RLS = {
+      data: null,
+      error: { message: 'new row violates row-level security policy for table "entries"' },
+    };
+    for (const [label, wr, act] of [
+      ['a save that touches no row', { data: [], error: null }, save],
+      ['a save refused by row-level security', RLS, save],
+      ['a remove that touches no row', { data: [], error: null }, remove],
+      ['a remove refused by row-level security', RLS, remove],
+    ]) {
+      const page = await tryOnce({ writeResult: wr }, act);
+      const shown = await text(page, '#updateBannerText');
+      check(shown.includes(PLAIN), `${label}: the message is the plain one`);
+      check(
+        !/row-level|policy|approved members only/i.test(shown),
+        `${label}: no Postgres text, no "approved members only"`,
+      );
+      check(
+        (await called(page, 'signOut')).length === 0,
+        `${label}: an approved member stays signed in`,
+      );
+      await page.close();
+    }
+    {
+      const { page } = await fresh(
+        { ...member, races: [OWN], writeResult: RLS },
+        { storage: { 'balance-onboarding-u1': '1' } },
+      );
+      await page.locator('.race-summary').first().click();
+      await page.locator('#raceScreenBody .details-card').waitFor();
+      await page.locator('#raceScreenBody .roster-edit').first().click();
+      await page.evaluate(() => {
+        window.__access = { ...window.__access, state: 'revoked' };
+      });
+      await save(page);
+      await page.waitForFunction(() => window.__calls.some(c => c[0] === 'signOut'));
+      await settle(page);
+      check(
+        (await text(page, '#updateBannerText')).startsWith('Your access has been removed.'),
+        'a revoked member whose entry save is refused gets the removal message and is signed out',
+      );
+      await page.close();
+    }
+    {
+      // Adding a commitment under a name an unowned entry already holds.
+      const UN = rc('un', 'Unowned Race', '2026-11-11', {
+        entries: [ent('x1', 'Sam Lee', { created_by: null })],
+      });
+      const dup = { code: '23505', message: 'duplicate key value violates unique constraint' };
+      const { page } = await fresh(
+        { ...member, races: [UN], insertFail: { un: { result: { data: null, error: dup } } } },
+        { storage: { 'balance-onboarding-u1': '1' } },
+      );
+      await page.locator('.race-summary').first().click();
+      await page.locator('#raceScreenBody .details-card').waitFor();
+      await page.locator('.commit-toggle-button').click();
+      await page.locator('#raceScreenBody .event-choices .choice').first().click();
+      await page.locator('.save-button').click();
+      await settle(page);
+      const shown = await text(page, '#updateBannerText');
+      check(
+        shown.includes('is already on this race') &&
+          shown.includes('ask a club admin to link it') &&
+          !shown.includes('Edit'),
+        'a duplicate name says to ask a club admin to link it, not to use Edit: ' + shown,
+      );
+      await page.close();
+    }
+  }
+
+  console.log('l. A failed reload, a close during Save, and a later reload (M1, M2, D5)');
+  {
+    // M1: the races fail to reload after a partial save. The failure is still
+    // named and ticked, and the saved race is still confirmed.
+    const { page } = await fresh({
+      ...member,
+      races: ONB_RACES,
+      insertFail: {
+        bravo: { once: true, result: { data: null, error: { code: '23505', message: 'dup' } } },
+      },
+    });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await page.getByRole('checkbox', { name: /Alpha Run/ }).check();
+    await page.getByRole('checkbox', { name: /Bravo Swim/ }).check();
+    await page.evaluate(() => {
+      window.__fixtures.racesError = { message: 'down' };
+    });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    // Bounded waits: a regression shows as a FAIL line, not a timeout crash.
+    const shown = await within(page.locator('#authSheetBody .auth-sheet-error:not(.hidden)'));
+    check(shown, 'M1: after a partial save with the reload failed, a failure message is shown');
+    const msg = shown ? await text(page, '#authSheetBody .auth-sheet-error') : '';
+    check(
+      msg.includes('Saved: Alpha Run.') && msg.includes('Not saved: Bravo Swim'),
+      'M1: with the reload failed, the message still names what saved and what failed: ' + msg,
+    );
+    const left = await labels(page);
+    check(
+      left.length === 1 &&
+        left[0].startsWith('Bravo Swim') &&
+        (await page.getByRole('checkbox', { name: /Bravo Swim/ }).isChecked()),
+      'M1: and the failed race is still listed and ticked',
+    );
+    await page.close();
+  }
+  {
+    // M2: Escape, the close button and the backdrop do nothing while Save is writing.
+    const { page } = await fresh({ ...member, races: ONB_RACES, insertDelay: 700 });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await page.getByRole('checkbox', { name: /Alpha Run/ }).check();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('#authSheetBody button')].some(
+        b => b.textContent === 'Saving…',
+      ),
+    );
+    await page.keyboard.press('Escape');
+    const focusInside = await page.evaluate(() =>
+      document.querySelector('.auth-sheet').contains(document.activeElement),
+    );
+    // Clicked in the page, so a closed (hidden) sheet cannot stall the test.
+    await page.evaluate(() => document.querySelector('#authSheetClose').click());
+    await page.mouse.click(5, 5);
+    check(
+      await sheetUp(page),
+      'M2: Escape, the x and a click outside leave the sheet up while saving',
+    );
+    check(focusInside, 'M2: focus stays inside the sheet while saving (read before the clicks)');
+    check(
+      await within(page.locator('#authSheetBody').getByRole('link', { name: 'Alpha Run' })),
+      'M2: the saved race is confirmed with a link in the sheet',
+    );
+    check(
+      (await sheetUp(page)) && (await sheetText(page)).includes('choose an event and a level'),
+      'M2: the outcome lands in the visible sheet',
+    );
+    await page.keyboard.press('Escape');
+    check(!(await sheetUp(page)), 'M2: and Escape closes it again once the save is done');
+    await page.close();
+  }
+  {
+    // D5: not opened by a later reload. The password prompt keeps it from
+    // opening at load (flag unwritten); closing the prompt and reloading the
+    // races must not open it.
+    const { page } = await fresh({ ...signedIn(accessOf('approved'), {}), races: ONB_RACES });
+    await page.locator('#authSheetBody h2').waitFor();
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await page.evaluate(() => loadRaces());
+    await settle(page);
+    check(!(await onbOpen(page)), 'D5: a reload of the races after load does not open it');
+    check((await flag(page)) === null, 'D5: and the flag is still unwritten');
+    await page.close();
+  }
+  {
+    // D5, the other half: a sign-in opens it.
+    const { page } = await fresh({
+      ...SIGNED_OUT,
+      races: ONB_RACES,
+      signIn: { access: accessOf('approved'), metadata: { has_password: true } },
+    });
+    await page.locator('#authSheetSignInButton').click();
+    await page.locator('#auth-email').fill('sam@example.com');
+    await page.locator('#auth-password').fill('maple river swift cloud');
+    await page.locator('#authSheetBody button[type="submit"]').click();
+    await page.waitForFunction(
+      () => document.querySelector('#authSheetBody h2')?.textContent === 'Pick your races',
+    );
+    check(true, 'D5: signing in opens it');
+    await page.close();
+  }
+
+  console.log('m. Token refresh does not re-arm Pick your races; a new sign-in does (D9)');
+  {
+    const mine = rc('mine', 'Mine Race', '2026-12-01', {
+      entries: [ent('m1', 'Sam Lee', { created_by: 'u1' })],
+    });
+    const { page } = await fresh({ ...member, races: [mine, ONB_RACES[1]] });
+    await settle(page);
+    check(!(await onbOpen(page)), 'D9: not shown while the member has a commitment');
+    await page.evaluate(() => {
+      window.__emit('INITIAL_SESSION');
+      window.__emit('TOKEN_REFRESHED');
+    });
+    await settle(page);
+    await page.locator('.race-summary', { hasText: 'Mine Race' }).click();
+    await page.locator('#raceScreenBody .details-card').waitFor();
+    await page.locator('#raceScreenBody .roster-edit').first().click();
+    // Remove their last commitment; the reload then finds none.
+    await page.evaluate(() => {
+      window.__fixtures.races[0].entries = [];
+    });
+    await page.locator('.remove-commit-button').click();
+    await page.locator('#confirmDialogConfirm').click();
+    await settle(page);
+    await page.evaluate(() => window.__emit('TOKEN_REFRESHED'));
+    await settle(page);
+    check(
+      !(await onbOpen(page)) && (await flag(page)) === null,
+      'D9: after a token refresh, removing the last commitment does not open it',
+    );
+    // A real sign-out and a sign-in as someone else does.
+    await page.evaluate(() => {
+      window.__session = null;
+      window.__emit('SIGNED_OUT');
+    });
+    await page.evaluate(() => {
+      window.__session = {
+        user: { id: 'u2', email: 'two@example.com', user_metadata: { has_password: true } },
+        access_token: 't',
+      };
+      window.__access = {
+        state: 'approved',
+        display_name: 'Two Person',
+        password_change_due: false,
+        reset_expires_at: null,
+        reset_expired: false,
+      };
+      window.__emit('SIGNED_IN');
+    });
+    check(
+      await within(page.locator('#authSheetBody h2', { hasText: 'Pick your races' })),
+      'D9: a sign-in as a different user opens it',
+    );
+    await page.close();
+  }
+
+  console.log('k. Pick your races at 390px and 1100px: no sideways scroll, 44px targets');
+  for (const width of [390, 1100]) {
+    const { page } = await fresh({ ...member, races: ONB_RACES }, { width });
+    await page.locator('#authSheetBody .onboarding-races').waitFor();
+    await page.getByRole('checkbox', { name: /Alpha Run/ }).check();
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    check(!over, `${width}px: no sideways scroll`);
+    const small = await page.evaluate(() =>
+      [...document.querySelectorAll('#authSheetBody label, #authSheetBody button')]
+        .map(el => Math.round(el.getBoundingClientRect().height))
+        .filter(h => h < 44),
+    );
+    check(small.length === 0, `${width}px: every row and button is at least 44px tall`);
+    await page.screenshot({
+      path: `${process.env.SCREENSHOT_DIR || '/tmp'}/pick-your-races-${width}.png`,
+    });
+    await page.close();
+  }
+
+  console.log(
+    'j. Mixed alphabets are refused in the join form, and the rule matches the database (AC 28)',
+  );
+  {
+    const { page } = await open(SIGNED_OUT);
+    await openJoin(page);
+    await fillJoin(page, { name: 'Sаm Lee' });
+    await page.getByRole('button', { name: 'Join', exact: true }).click();
+    await page.waitForTimeout(100);
+    check(
+      (await joinError(page).innerText()) ===
+        'Your name mixes letters from different alphabets, such as Latin and Cyrillic. Use one alphabet.',
+      'a Latin name with one Cyrillic a is refused with the new message',
+    );
+    check(
+      (await called(page, 'signUp')).length === 0 &&
+        (await rpcCalled(page, 'request_access')).length === 0,
+      'and nothing reaches signUp or request_access',
+    );
+    const verdicts = await page.evaluate(
+      names => names.map(n => cleanDisplayName(n)),
+      [
+        'Sam Lee',
+        'Zoë',
+        'Zoë',
+        'José Núñez',
+        'O’Brien',
+        'Сергей',
+        'Γιώργος',
+        'Sam 山田',
+        'Anne-Marie St. John',
+      ],
+    );
+    check(
+      verdicts.every(v => v.name && !v.error),
+      'the single-script and neutral names all pass',
+    );
+    for (const [cp, ch] of [
+      ['U+115F', '\u115f'],
+      ['U+1160', '\u1160'],
+      ['U+3164', '\u3164'],
+      ['U+FFA0', '\uffa0'],
+      ['U+2800', '\u2800'],
+      ['U+17B4', '\u17b4'],
+      ['U+17B5', '\u17b5'],
+    ]) {
+      const out = await page.evaluate(n => cleanDisplayName(n), 'Alex Smith' + ch);
+      check(
+        !!out.error && out.error.startsWith('Use letters'),
+        `a name ending in the blank letter ${cp} is refused`,
+      );
+    }
+    const mixed = await page.evaluate(
+      names => names.map(n => cleanDisplayName(n).error),
+      ['Sam Γ', 'Γа', 'Sam Ж'],
+    );
+    check(
+      mixed.every(e => e && e.startsWith('Your name mixes letters')),
+      'Latin+Greek, Greek+Cyrillic and Latin+Cyrillic are refused',
+    );
     await page.close();
   }
 }

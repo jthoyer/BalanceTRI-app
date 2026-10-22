@@ -885,6 +885,35 @@
 .auth-sheet .sign-in-form {
   margin-top: 4px;
 }
+/* Pick your races: the upcoming races as a ticked list inside the sheet. It
+   scrolls on its own when there are many, so Save and Skip stay in view. */
+.auth-sheet .onboarding-races {
+  min-width: 0;
+  max-height: 40vh;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  overflow-y: auto;
+}
+.auth-sheet .onboarding-races legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.auth-sheet .onboarding-races .auth-sheet-checkbox {
+  font-size: 14px;
+}
+.auth-sheet .onboarding-saved {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.auth-sheet .onboarding-saved a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 /* A failed send-link/verify-code attempt, inline rather than a showToast()
    banner — the sheet's own opaque backdrop would hide that banner until
    the member closed the sheet, which defeats the point. */
