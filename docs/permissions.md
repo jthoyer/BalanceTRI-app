@@ -25,8 +25,8 @@ console warns about this and offers to add it.
 | Data | Visitor | Pending | Approved member | Admin |
 |---|---|---|---|---|
 | **races** | R live races only | R all rows (the app filters removed ones) | R all. W insert and update live races. No delete policy: removal is a soft delete | As member. Restore a removed race (`admin_restore_race`) |
-| **entries** (commitments) | - (counts only, see below) | - | R all. W insert, update, delete **any** entry. A new entry must carry your own display name. Only an admin changes a name | As member, plus rename, Link and Unlink |
-| **results** | - | - | R all. W only your own entry's result, and only for a past, non-Bolt, live race | W any entry's result on the same race rules |
+| **entries** (commitments) | - (counts only, see below) | - | R all. W insert; update and delete **own only** (`created_by` is you). A new entry must carry your own display name. Only an admin changes a name | W any, with two-factor and on the allow-list. Plus rename, Link and Unlink |
+| **results** | - | - | R all. W only your own entry's result (`created_by` is you), and only for a past, non-Bolt, live race | W any entry's result on the same race rules, with two-factor and on the allow-list |
 | **profiles** | - | R and update own row | R and update own row | As member. Rename others via `admin_rename_member` |
 | **allow-list** (`private.allowed_emails`) | - | - | - | Add, remove, check one address at a time |
 | **access requests** (`private.access_requests`) | - | Create and read own via `request_access()` and `my_access_status()` | Same | Read all, approve, reject, revoke |
@@ -53,29 +53,42 @@ hold no grant on it. They are reachable only through the functions below.
   except its own profile and the request functions.
 - **Confirmed email only.** `is_allow_listed()` reads `auth.users`, and only counts an
   address with `email_confirmed_at` set.
-- **Honour system on entries and races.** Any approved member may edit or remove any
-  entry or race. Only the name is locked (`guard_entry_name`). `created_by` is
-  write-once for API callers, admins included.
-- **Results belong to the entry's owner.** The owner is `created_by`. For an entry with
-  no owner, the owner is the member whose display name matches the entry name.
+- **Entries belong to their owner (pending apply).** Insert needs an approved member and
+  your own display name. Update and delete need you to be the entry's owner
+  (`created_by`), or an admin with a two-factor session who is also on the allow-list
+  (`restrict_entry_writes_to_owners` migration, via `private.can_change_entry()`, which
+  members may execute; `private.is_admin()` they may not). An entry with no owner is
+  admin-only. Only the name is locked (`guard_entry_name`). `created_by` is write-once
+  for API callers, admins included. This replaced an honour system, decided by the
+  owner on 22 October 2026, when every commitment and result was deleted so that every
+  entry has an owner. **Races** stay an honour system: any approved member may edit or
+  remove any race.
+- **Results belong to the entry's owner.** The owner is `created_by`, and only that. An
+  entry with no owner can be written by an admin alone.
+- **Display names use one alphabet, and no blank letters.** A name that mixes Latin, Greek
+  and Cyrillic letters, or holds a letter that draws nothing (Hangul fillers, braille
+  blank), is refused by `private.clean_display_name()` (same migration).
+- **Pick your races is app-only.** The one-time screen that offers upcoming races writes
+  through the same entries insert policy, one row per race. It adds no permission and no
+  server state (its "seen" flag is in the browser).
+- **Undoing a deleted entry keeps its owner.** `admin_undo` restores `created_by` from
+  the history row, so the member keeps the entry.
 - **Bulk guard.** An API request cannot change more than 5 rows of `entries`, `races`
   or `results` at once. The dashboard, service role and admin functions are exempt.
 - **Every change to `entries`, `races` and `results` is copied to `change_history`.**
 
-## Open owner questions
+## Owner questions, decided
 
-The code answers these today. The doc cannot say whether the answers are intended.
+1. **Entries: honour system or owner-only?** Decided 22 October 2026 by the owner:
+   owner-only. Update and delete are limited to the entry's owner and to admins with a
+   two-factor session. Needs the `restrict_entry_writes_to_owners` migration applied.
+2. **Results: who owns an entry with no owner?** Decided 22 October 2026 by the owner:
+   nobody. A name match is no longer enough. An admin writes the result, or Links the
+   entry to the member first (`admin_link_entries`).
 
-1. **Entries: honour system or owner-only?** Today an approved member can change or
-   delete anyone's commitment. `README.md` line 36 calls this the honour system. Is that
-   the decision, or should update and delete be limited to the owner and admins, as
-   results already are?
-2. **Results: who owns an entry with no owner?** Today the member whose display name
-   matches the entry name may write its result. Is a name match enough proof, or should
-   an admin Link the entry first (`admin_link_entries`)? `README.md` line 33 says
-   results are written by the owner or an admin, which reads stricter than the name match.
-
-Fill in the answers here, then change the code or the doc to match.
+The "Last checked" date above is not advanced: this record states the intended rules, and the
+live project has not been checked since the migration was written. Advance it after the
+migration is applied and `pg_policies` is read again.
 
 ## Not covered here
 
