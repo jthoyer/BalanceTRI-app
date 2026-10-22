@@ -28,7 +28,7 @@ console warns about this and offers to add it.
 |---|---|---|---|---|
 | **races** | R live races only | R all rows (the app filters removed ones) | R all. W insert and update live races. No delete policy: removal is a soft delete | As member. Restore a removed race (`admin_restore_race`) |
 | **entries** (commitments) | - (counts only, see below) | - | R all. W insert; update and delete **own only** (`created_by` is you). A new entry must carry your own display name. Only an admin changes a name | W any, with two-factor and on the allow-list. Plus rename, Link and Unlink |
-| **results** | - | - | R all. W only your own entry's result (`created_by` is you), and only for a past, non-Bolt, live race | W any entry's result on the same race rules, with two-factor and on the allow-list |
+| **results** | - | - | R all. W only your own entry's result (`created_by` is you), and only for a today's or past, non-Bolt, live race | W any entry's result on the same race rules, with two-factor and on the allow-list |
 | **profiles** | - | R and update own row | R and update own row | As member. Rename others via `admin_rename_member` |
 | **allow-list** (`private.allowed_emails`) | - | - | - | Add, remove, check one address at a time |
 | **access requests** (`private.access_requests`) | - | Create and read own via `request_access()` and `my_access_status()` | Same | Read all, approve, reject, revoke |
@@ -63,7 +63,8 @@ hold no grant on it. They are reachable only through the functions below.
   admin-only. Only the name is locked (`guard_entry_name`). `created_by` is write-once
   for API callers, admins included. This replaced an honour system, decided by the
   owner on 22 October 2026, when every commitment and result was deleted so that every
-  entry has an owner. **Races** stay an honour system: any approved member may edit or
+  entry had an owner. An entry can still become unowned: written from the dashboard,
+  unlinked by an admin, or left when its member's account is deleted. **Races** stay an honour system: any approved member may edit or
   remove any race.
 - **Results belong to the entry's owner.** The owner is `created_by`, and only that. An
   entry with no owner can be written by an admin alone.
@@ -74,7 +75,8 @@ hold no grant on it. They are reachable only through the functions below.
   through the same entries insert policy, one row per race. It adds no permission and no
   server state (its "seen" flag is in the browser).
 - **Undoing a deleted entry keeps its owner.** `admin_undo` restores `created_by` from
-  the history row, so the member keeps the entry.
+  the history row, so the member keeps the entry, or it comes back unowned if that
+  account is gone.
 - **Bulk guard.** An API request cannot change more than 5 rows of `entries`, `races`
   or `results` at once. The dashboard, service role and admin functions are exempt.
 - **Every change to `entries`, `races` and `results` is copied to `change_history`.**

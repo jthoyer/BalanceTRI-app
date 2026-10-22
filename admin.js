@@ -1482,8 +1482,8 @@ function renameControl(u, manage) {
 }
 
 // ----- Link entries (admin_link_candidates / admin_link_entries / admin_unlink_entries) -----
-// Entries with no owner (created_by null) predate attribution or came from the
-// dashboard. Linking attaches them to this account and renames them to its
+// Entries with no owner (created_by null) came from the dashboard, were
+// unlinked, or lost their owner when an account was deleted. Linking attaches them to this account and renames them to its
 // display name; Unlink clears the owner and leaves the name. The list is only
 // fetched when the button is pressed, so the console loads without the migration.
 const LINK_LIMIT = 50;
