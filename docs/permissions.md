@@ -4,7 +4,9 @@ This is the intent record. The next security audit checks the code and the live
 database against it. Where the two differ, one of them is wrong, and the owner decides which.
 
 Last checked against the live **Balance Tri Club** project (`shkfwuogrldbqldpipxd`) on
-2026-10-20, from `pg_policies`, table grants, function grants and trigger definitions.
+2026-10-22, from `pg_policies` and function definitions, after the owner-only migrations were
+applied. A rolled-back test as two approved members confirmed it: a member's update of
+another member's entry changed 0 rows, and of their own, 1.
 
 ## Roles
 
@@ -53,10 +55,10 @@ hold no grant on it. They are reachable only through the functions below.
   except its own profile and the request functions.
 - **Confirmed email only.** `is_allow_listed()` reads `auth.users`, and only counts an
   address with `email_confirmed_at` set.
-- **Entries belong to their owner (pending apply).** Insert needs an approved member and
+- **Entries belong to their owner.** Insert needs an approved member and
   your own display name. Update and delete need you to be the entry's owner
   (`created_by`), or an admin with a two-factor session who is also on the allow-list
-  (`restrict_entry_writes_to_owners` migration, via `private.can_change_entry()`, which
+  (`restrict_entry_writes_1` to `_5` migrations, via `private.can_change_entry()`, which
   members may execute; `private.is_admin()` they may not). An entry with no owner is
   admin-only. Only the name is locked (`guard_entry_name`). `created_by` is write-once
   for API callers, admins included. This replaced an honour system, decided by the
@@ -81,14 +83,10 @@ hold no grant on it. They are reachable only through the functions below.
 
 1. **Entries: honour system or owner-only?** Decided 22 October 2026 by the owner:
    owner-only. Update and delete are limited to the entry's owner and to admins with a
-   two-factor session. Needs the `restrict_entry_writes_to_owners` migration applied.
+   two-factor session. Live since 22 October 2026 (`restrict_entry_writes_1` to `_5`).
 2. **Results: who owns an entry with no owner?** Decided 22 October 2026 by the owner:
    nobody. A name match is no longer enough. An admin writes the result, or Links the
    entry to the member first (`admin_link_entries`).
-
-The "Last checked" date above is not advanced: this record states the intended rules, and the
-live project has not been checked since the migration was written. Advance it after the
-migration is applied and `pg_policies` is read again.
 
 ## Not covered here
 
