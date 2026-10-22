@@ -211,7 +211,7 @@ function isOwnEntry(entry) {
   return !!session && !!entry.created_by && entry.created_by === session.user.id;
 }
 // May this member change this commitment (edit, remove)? The database
-// decides (restrict_entry_writes_to_owners); this keeps the buttons off rows
+// decides (restrict_entry_writes_2_policies); this keeps the buttons off rows
 // it would refuse. The owner may. An admin may only with a two-factor
 // session (adminReady, from admin_status().ready), because the policy asks
 // for the same. Both need the allow-list.
@@ -666,7 +666,7 @@ async function passwordProblem(password) {
 }
 // The three alphabets a name may not mix, by fixed code point ranges. These
 // are the same ranges as private.clean_display_name (migration
-// restrict_entry_writes_to_owners); \p{Script=...} differs at the edges, so it
+// restrict_entry_writes_3_results_and_names); \p{Script=...} differs at the edges, so it
 // is not used. Spaces, punctuation, combining marks, CJK and the rest belong
 // to none of them. Keep the two lists identical.
 const SCRIPT_RANGES = [

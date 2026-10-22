@@ -2060,7 +2060,7 @@ console.log('17. App feedback: the footer form (keyboard, errors, no lost text, 
 
 // ---------------------------------------------------------------------------
 // Owner-only commitments, "Pick your races", and mixed-alphabet names
-// (migration restrict_entry_writes_to_owners). Every scenario below opens its
+// (migrations restrict_entry_writes_1 to _5). Every scenario below opens its
 // own page, which is its own browser context: empty localStorage, a full load.
 // The "shown once" scenario reloads the same page on purpose, to test the
 // flag. The clock is pinned to 20 October 2026, 11:00 in Sydney.

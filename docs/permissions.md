@@ -4,7 +4,9 @@ This is the intent record. The next security audit checks the code and the live
 database against it. Where the two differ, one of them is wrong, and the owner decides which.
 
 Last checked against the live **Balance Tri Club** project (`shkfwuogrldbqldpipxd`) on
-2026-10-20, from `pg_policies`, table grants, function grants and trigger definitions.
+2026-10-22, from `pg_policies` and function definitions, after the owner-only migrations were
+applied. A rolled-back test as two approved members confirmed it: a member's update of
+another member's entry changed 0 rows, and of their own, 1.
 
 ## Roles
 
@@ -26,7 +28,7 @@ console warns about this and offers to add it.
 |---|---|---|---|---|
 | **races** | R live races only | R all rows (the app filters removed ones) | R all. W insert and update live races. No delete policy: removal is a soft delete | As member. Restore a removed race (`admin_restore_race`) |
 | **entries** (commitments) | - (counts only, see below) | - | R all. W insert; update and delete **own only** (`created_by` is you). A new entry must carry your own display name. Only an admin changes a name | W any, with two-factor and on the allow-list. Plus rename, Link and Unlink |
-| **results** | - | - | R all. W only your own entry's result (`created_by` is you), and only for a past, non-Bolt, live race | W any entry's result on the same race rules, with two-factor and on the allow-list |
+| **results** | - | - | R all. W only your own entry's result (`created_by` is you), and only for a today's or past, non-Bolt, live race | W any entry's result on the same race rules, with two-factor and on the allow-list |
 | **profiles** | - | R and update own row | R and update own row | As member. Rename others via `admin_rename_member` |
 | **allow-list** (`private.allowed_emails`) | - | - | - | Add, remove, check one address at a time |
 | **access requests** (`private.access_requests`) | - | Create and read own via `request_access()` and `my_access_status()` | Same | Read all, approve, reject, revoke |
@@ -53,15 +55,16 @@ hold no grant on it. They are reachable only through the functions below.
   except its own profile and the request functions.
 - **Confirmed email only.** `is_allow_listed()` reads `auth.users`, and only counts an
   address with `email_confirmed_at` set.
-- **Entries belong to their owner (pending apply).** Insert needs an approved member and
+- **Entries belong to their owner.** Insert needs an approved member and
   your own display name. Update and delete need you to be the entry's owner
   (`created_by`), or an admin with a two-factor session who is also on the allow-list
-  (`restrict_entry_writes_to_owners` migration, via `private.can_change_entry()`, which
+  (`restrict_entry_writes_1` to `_5` migrations, via `private.can_change_entry()`, which
   members may execute; `private.is_admin()` they may not). An entry with no owner is
   admin-only. Only the name is locked (`guard_entry_name`). `created_by` is write-once
   for API callers, admins included. This replaced an honour system, decided by the
   owner on 22 October 2026, when every commitment and result was deleted so that every
-  entry has an owner. **Races** stay an honour system: any approved member may edit or
+  entry had an owner. An entry can still become unowned: written from the dashboard,
+  unlinked by an admin, or left when its member's account is deleted. **Races** stay an honour system: any approved member may edit or
   remove any race.
 - **Results belong to the entry's owner.** The owner is `created_by`, and only that. An
   entry with no owner can be written by an admin alone.
@@ -72,7 +75,8 @@ hold no grant on it. They are reachable only through the functions below.
   through the same entries insert policy, one row per race. It adds no permission and no
   server state (its "seen" flag is in the browser).
 - **Undoing a deleted entry keeps its owner.** `admin_undo` restores `created_by` from
-  the history row, so the member keeps the entry.
+  the history row, so the member keeps the entry, or it comes back unowned if that
+  account is gone.
 - **Bulk guard.** An API request cannot change more than 5 rows of `entries`, `races`
   or `results` at once. The dashboard, service role and admin functions are exempt.
 - **Every change to `entries`, `races` and `results` is copied to `change_history`.**
@@ -81,14 +85,10 @@ hold no grant on it. They are reachable only through the functions below.
 
 1. **Entries: honour system or owner-only?** Decided 22 October 2026 by the owner:
    owner-only. Update and delete are limited to the entry's owner and to admins with a
-   two-factor session. Needs the `restrict_entry_writes_to_owners` migration applied.
+   two-factor session. Live since 22 October 2026 (`restrict_entry_writes_1` to `_5`).
 2. **Results: who owns an entry with no owner?** Decided 22 October 2026 by the owner:
    nobody. A name match is no longer enough. An admin writes the result, or Links the
    entry to the member first (`admin_link_entries`).
-
-The "Last checked" date above is not advanced: this record states the intended rules, and the
-live project has not been checked since the migration was written. Advance it after the
-migration is applied and `pg_policies` is read again.
 
 ## Not covered here
 

@@ -1,4 +1,4 @@
--- Tests for migration 20261022060000_restrict_entry_writes_to_owners.sql:
+-- Tests for migrations 20261022194903 to 20261022195352 (restrict_entry_writes_1 to _5):
 -- owner-only update and delete on entries, results by created_by only, and
 -- mixed-script display names refused. Run with supabase/tests/run.sh.
 --
